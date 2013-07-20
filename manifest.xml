@@ -1,0 +1,15 @@
+<package>
+  <description brief="StrokelitudeROS">
+
+     StrokelitudeROS
+
+  </description>
+  <author>prey</author>
+  <license>BSD</license>
+  <review status="unreviewed" notes=""/>
+  <url>http://ros.org/wiki/StrokelitudeROS</url>
+  <depend package="cv_bridge"/>	
+
+</package>
+
+

@@ -1,0 +1,26 @@
+<launch>
+	<!-- ========================================================== -->
+	<!-- Configuration of the strokelitude                          -->
+	<!-- ========================================================== -->
+
+  <param name="strokelitude/bodyangle"                      type="int"      value="0" />
+  
+  <param name="strokelitude/wing/radius_outer"              type="int"      value="30" />
+  <param name="strokelitude/wing/radius_inner"              type="int"      value="10" />
+  <param name="strokelitude/wing/angle1"                    type="int"      value="-45" />
+  <param name="strokelitude/wing/angle2"                    type="int"      value="45" />
+  <param name="strokelitude/wing/nbins"                     type="int"      value="360" />
+  
+  <param name="strokelitude/wing/right/origin/x"            type="int"      value="0" />
+  <param name="strokelitude/wing/right/origin/y"            type="int"      value="0" />
+  
+  <param name="strokelitude/wing/left/origin/x"             type="int"      value="0" />
+  <param name="strokelitude/wing/left/origin/y"             type="int"      value="0" />
+  
+  <param name="strokelitude/wing/left/threshold"            type="double"   value="0.4" />
+  <param name="strokelitude/wing/right/threshold"           type="double"   value="0.4" />
+  
+  <param name="strokelitude/wing/left/flight_threshold"     type="double"   value="0.2" />
+  <param name="strokelitude/wing/right/flight_threshold"    type="double"   value="0.2" />
+    
+</launch>
