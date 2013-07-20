@@ -1,0 +1,6 @@
+*.pyc
+*~
+bin
+build
+*_gen
+*src
