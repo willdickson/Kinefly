@@ -1,0 +1,14 @@
+<launch>
+	<!-- ========================================================== -->
+	<!-- Launch everything needed for strokelitude.                 -->
+	<!-- ========================================================== -->
+
+
+    <include file="$(find StrokelitudeROS)/launch/params_strokelitude.launch" ns="strokelitude" />
+    <include file="$(find StrokelitudeROS)/launch/params_camera.launch"       ns="camera" />
+
+    <include file="$(find StrokelitudeROS)/launch/camera.launch" />
+    
+    <node name="strokelitude"           pkg="StrokelitudeROS"  type="cvgui_launchable.py"       />
+    
+</launch>
