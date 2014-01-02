@@ -125,7 +125,7 @@ class Wing(object):
                 if self.angle_per_pixel is not None:
                     self.assign_pixels_to_bins()
                 
-    def draw(self, cvimage ):
+    def draw(self, image ):
     
         if self.side == 'right':
             angle1 = (self.angle1 + self.bodyangle-180) % 360 
@@ -143,7 +143,7 @@ class Wing(object):
                 angle2 += 360
                 
         # inner circle
-        cv.Ellipse(     cvimage, 
+        cv2.ellipse(     image, 
                         self.ptHinge,  
                         ( self.radius_inner, self.radius_inner ),
                         180,
@@ -154,7 +154,7 @@ class Wing(object):
                         )
         
         # outer circle         
-        cv.Ellipse(     cvimage, 
+        cv2.ellipse(     image, 
                         self.ptHinge,  
                         ( self.radius_outer, self.radius_outer ),
                         180,
@@ -171,21 +171,21 @@ class Wing(object):
                 angle = flip_angle(angle)
             p1 = int(self.ptHinge[0] + np.cos( np.deg2rad(angle) )*self.radius_outer)
             p2 = int(self.ptHinge[1] + np.sin( np.deg2rad(angle) )*self.radius_outer)
-            cv.Line(cvimage, self.ptHinge, (p1,p2), self.numeric_color, 2)
+            cv2.line(image, self.ptHinge, (p1,p2), self.numeric_color, 2)
         if self.trailing_edge_angle is not None:
             angle = self.leading_edge_angle*self.sign+self.bodyangle
             if self.side == 'left':
                 angle = flip_angle(angle)
             p1 = int(self.ptHinge[0] + np.cos( np.deg2rad(angle) )*self.radius_outer)
             p2 = int(self.ptHinge[1] + np.sin( np.deg2rad(angle) )*self.radius_outer)
-            cv.Line(cvimage, self.ptHinge, (p1,p2), self.numeric_color, 2)
+            cv2.line(image, self.ptHinge, (p1,p2), self.numeric_color, 2)
 
                         
-    def calc_mask(self, npimage ):
+    def calc_mask(self, shape):
         # Calculate the angle at each pixel.
-        self.imgAngleInBodyFrame = np.zeros(npimage.shape)
-        for y in range(npimage.shape[0]):
-            for x in range(npimage.shape[1]):
+        self.imgAngleInBodyFrame = np.zeros(shape)
+        for y in range(shape[0]):
+            for x in range(shape[1]):
                 angle = get_angle(self.ptHinge, (x,y))
                 angle_rel_to_body = (angle-self.bodyangle) % 360 - 180
                 if self.side == 'left':
@@ -193,7 +193,7 @@ class Wing(object):
                 self.imgAngleInBodyFrame[y,x] = angle_rel_to_body*self.sign
                      
         # Create the wing mask.
-        self.imgMask = np.zeros(npimage.shape)
+        self.imgMask = np.zeros(shape)
         cv2.circle(self.imgMask,
                    self.ptHinge,
                    self.radius_outer, 
@@ -291,12 +291,12 @@ class Wing(object):
             self.leading_edge_angle  = leading_edge_angle
             self.trailing_edge_angle = trailing_edge_angle
                     
-    def calc_histogram(self, npimage):
+    def calc_histogram(self, image):
         if self.mask is not None:
-            npimage_raveled = np.ravel(npimage)/255.*self.mask
+            image_raveled = np.ravel(image)/255.*self.mask
             for b, indices in self.bin_indices.items():
                 if len(indices) > 0:
-                    self.histogram[b] = np.sum(npimage_raveled[indices]) / float(len(indices))
+                    self.histogram[b] = np.sum(image_raveled[indices]) / float(len(indices))
                 else:
                     self.histogram[b] = 0
             
@@ -359,10 +359,10 @@ class ImageDisplay:
         name                     = 'strokelitude/wba/' + 'LeftPlusRight'
         self.pubWingLeftPlusRight  = rospy.Publisher(name, Float32)
         name                     = 'strokelitude/wba/' + 'flight_status'
-        self.pubFlightStatus       = rospy.Publisher(name, Float32)
+        self.pubFlightStatus     = rospy.Publisher(name, Float32)
         
         # subscribe to images        
-        self.image_sub           = rospy.Subscriber('/camera/image_raw',Image,self.image_callback)
+        self.subImageRaw         = rospy.Subscriber('/camera/image_raw',Image,self.image_callback)
 
         # user callbacks
         cv.SetMouseCallback(self.display_name, self.mouse, param=None)
@@ -376,79 +376,73 @@ class ImageDisplay:
         self.wing_l.extract_parameters(config)
         
         
-    def image_callback(self,image):
+    def image_callback(self, rosimage):
         # Receive an image:
         try:
-            cv_image = np.uint8(cv.GetMat(self.cvbridge.imgmsg_to_cv(image, 'passthrough')))
+            imgCamera = np.uint8(cv.GetMat(self.cvbridge.imgmsg_to_cv(rosimage, 'passthrough')))
         except CvBridgeError, e:
             rospy.logwarn ('Exception converting background image from ROS to opencv:  %s' % e)
-            cv_image = None
+            imgCamera = None
             
-        # get correct image types
-        self.npimage = cv_image
-#         if (self.wing_r.imgMask is None):
-#             self.npimage = cv_image
-#         else:
-#             self.npimage = self.wing_r.imgMask.astype(np.uint8) * 255
-        
-        self.npimagecolor = cv2.cvtColor(self.npimage, cv.CV_GRAY2RGB)
-        cvimage = cv.fromarray(self.npimagecolor)
-            
-        left_pixel   = 10
-        bottom_pixel = self.npimagecolor.shape[0]-10 
-        right_pixel  = self.npimagecolor.shape[1]-10
-            
-        # draw body
-        if self.wing_r.ptHinge is not None and self.wing_l.ptHinge is not None:
-            cv.Line(cvimage, self.wing_r.ptHinge, self.wing_l.ptHinge, cv.Scalar(255,0,0,0), 2)
-            #body_center_x = int( (self.wing_r.ptHinge[0] + self.wing_l.ptHinge[0])/2. ) 
-            #body_center_y = int( (self.wing_r.ptHinge[1] + self.wing_l.ptHinge[1])/2. ) 
-        
-        # draw wings
-        if self.wing_r.ptHinge is not None:
-            self.wing_r.draw(cvimage)
-        if self.wing_l.ptHinge is not None:
-            self.wing_l.draw(cvimage)
-        
-        if not self.drawing_wings_is_active:
-            # calculate wing beat analyzer stats
-            self.wing_r.calc_histogram(self.npimage)
-            self.wing_l.calc_histogram(self.npimage)
-            
-            # publish difference in WBA
-            if self.wing_l.amp is not None and self.wing_r.amp is not None:
-                LeftMinusRight = self.wing_l.amp - self.wing_r.amp
-                self.pubWingLeftMinusRight.publish(LeftMinusRight)
-                s = 'L-R WBA: ' + str(LeftMinusRight)
-                cv2.putText(self.npimagecolor, s, (right_pixel-100, bottom_pixel), cv2.FONT_HERSHEY_SIMPLEX, 0.4, cv.Scalar(255,50,50,0) )
+        if (imgCamera is not None):
+            self.shapeImage = imgCamera.shape
+            imgOutput = cv2.cvtColor(imgCamera, cv.CV_GRAY2RGB)
                 
-            # publish sum of WBA
-            if self.wing_l.amp is not None and self.wing_r.amp is not None:
-                LeftPlusRight = self.wing_l.amp + self.wing_r.amp
-                self.pubWingLeftPlusRight.publish(LeftPlusRight)
-                s = 'L+R WBA: ' + str(LeftPlusRight)
-                cv2.putText(self.npimagecolor, s, (right_pixel-200, bottom_pixel), cv2.FONT_HERSHEY_SIMPLEX, 0.4, cv.Scalar(255,50,50,0) )
+            left_pixel   = 10
+            bottom_pixel = imgOutput.shape[0]-10 
+            right_pixel  = imgOutput.shape[1]-10
                 
-            # publish flight status
-            if self.wing_l.bFlying and self.wing_r.bFlying:
-                s = 'FLIGHT'
-                self.pubFlightStatus.publish(1)
-            else:
-                s = 'no flight'
-                self.pubFlightStatus.publish(0)
-            cv2.putText(self.npimagecolor, s, (right_pixel-300, bottom_pixel), cv2.FONT_HERSHEY_SIMPLEX, 0.4, cv.Scalar(255,50,255,0) )
+            # draw body
+            if self.wing_r.ptHinge is not None and self.wing_l.ptHinge is not None:
+                cv2.line(imgOutput, self.wing_r.ptHinge, self.wing_l.ptHinge, cv.Scalar(255,0,0,0), 2)
+                #body_center_x = int( (self.wing_r.ptHinge[0] + self.wing_l.ptHinge[0])/2. ) 
+                #body_center_y = int( (self.wing_r.ptHinge[1] + self.wing_l.ptHinge[1])/2. ) 
             
-        if self.wing_r.amp is not None:
-            s = 'WBA R: ' + str(self.wing_r.amp)
-            cv2.putText(self.npimagecolor, s, (left_pixel,bottom_pixel), cv2.FONT_HERSHEY_SIMPLEX, 0.4, self.wing_r.numeric_color)
-        if self.wing_l.amp is not None:
-            s = 'WBA L: ' + str(self.wing_l.amp)
-            cv2.putText(self.npimagecolor, s, (left_pixel+100, bottom_pixel), cv2.FONT_HERSHEY_SIMPLEX, 0.4, self.wing_l.numeric_color)
-        
-        
-        # display image
-        cv2.imshow("Display", self.npimagecolor)
-        cv2.waitKey(3)
+            # draw wings
+            if self.wing_r.ptHinge is not None:
+                self.wing_r.draw(imgOutput)
+            if self.wing_l.ptHinge is not None:
+                self.wing_l.draw(imgOutput)
+            
+            if not self.drawing_wings_is_active:
+                # calculate wing beat analyzer stats
+                self.wing_r.calc_histogram(imgCamera)
+                self.wing_l.calc_histogram(imgCamera)
+                
+                # publish difference in WBA
+                if self.wing_l.amp is not None and self.wing_r.amp is not None:
+                    LeftMinusRight = self.wing_l.amp - self.wing_r.amp
+                    self.pubWingLeftMinusRight.publish(LeftMinusRight)
+                    s = 'L-R WBA: ' + str(LeftMinusRight)
+                    cv2.putText(imgOutput, s, (right_pixel-100, bottom_pixel), cv2.FONT_HERSHEY_SIMPLEX, 0.4, cv.Scalar(255,50,50,0) )
+                    
+                # publish sum of WBA
+                if self.wing_l.amp is not None and self.wing_r.amp is not None:
+                    LeftPlusRight = self.wing_l.amp + self.wing_r.amp
+                    self.pubWingLeftPlusRight.publish(LeftPlusRight)
+                    s = 'L+R WBA: ' + str(LeftPlusRight)
+                    cv2.putText(imgOutput, s, (right_pixel-200, bottom_pixel), cv2.FONT_HERSHEY_SIMPLEX, 0.4, cv.Scalar(255,50,50,0) )
+                    
+                # publish flight status
+                if self.wing_l.bFlying and self.wing_r.bFlying:
+                    s = 'FLIGHT'
+                    self.pubFlightStatus.publish(1)
+                else:
+                    s = 'no flight'
+                    self.pubFlightStatus.publish(0)
+                cv2.putText(imgOutput, s, (right_pixel-300, bottom_pixel), cv2.FONT_HERSHEY_SIMPLEX, 0.4, cv.Scalar(255,50,255,0) )
+                
+            if self.wing_r.amp is not None:
+                s = 'WBA R: ' + str(self.wing_r.amp)
+                cv2.putText(imgOutput, s, (left_pixel,bottom_pixel), cv2.FONT_HERSHEY_SIMPLEX, 0.4, self.wing_r.numeric_color)
+            if self.wing_l.amp is not None:
+                s = 'WBA L: ' + str(self.wing_l.amp)
+                cv2.putText(imgOutput, s, (left_pixel+100, bottom_pixel), cv2.FONT_HERSHEY_SIMPLEX, 0.4, self.wing_l.numeric_color)
+            
+            
+            # display image
+            cv2.imshow("Display", imgOutput)
+            cv2.waitKey(3)
 
 
     def mouse(self, event, x, y, flags, param):
@@ -460,8 +454,8 @@ class ImageDisplay:
             rospy.logwarn('This may take a few minutes')
             rospy.logwarn('')
             self.get_configuration()
-            self.wing_r.calc_mask(self.npimage)
-            self.wing_l.calc_mask(self.npimage)
+            self.wing_r.calc_mask(self.shapeImage)
+            self.wing_l.calc_mask(self.shapeImage)
             
         # BODY : MBUTTON
         if event == cv.CV_EVENT_MBUTTONDOWN and not self.drawing_body_is_active:
