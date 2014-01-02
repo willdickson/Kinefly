@@ -12,13 +12,13 @@
     <param name="wing/angle2"                    type="int"      value="45" />
     <param name="wing/nbins"                     type="int"      value="360" />
   
-    <param name="wing/right/origin/x"            type="int"      value="0" />
-    <param name="wing/right/origin/y"            type="int"      value="0" />
+    <param name="wing/right/hinge/x"            type="int"      value="0" />
+    <param name="wing/right/hinge/y"            type="int"      value="0" />
     <param name="wing/right/threshold"           type="double"   value="0.4" />
     <param name="wing/right/flight_threshold"    type="double"   value="0.2" />
   
-    <param name="wing/left/origin/x"             type="int"      value="0" />
-    <param name="wing/left/origin/y"             type="int"      value="0" />
+    <param name="wing/left/hinge/x"             type="int"      value="0" />
+    <param name="wing/left/hinge/y"             type="int"      value="0" />
     <param name="wing/left/threshold"            type="double"   value="0.4" />
     <param name="wing/left/flight_threshold"     type="double"   value="0.2" />
 
