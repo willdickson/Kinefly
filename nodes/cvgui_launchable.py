@@ -22,19 +22,12 @@ from StrokelitudeROS.msg import float32list as float32list_msg
 from std_msgs.msg import *
 
 
+
 def get_angle_from_points(pt1, pt2):
     x = pt2[0] - pt1[0]
     y = pt2[1] - pt1[1]
     return np.rad2deg(np.arctan2(y,x))
 
-
-# remap +/- 180 to 0, and +/- 0 to +/- 180
-def flip_angle(angle):
-    if angle > 0:
-        return angle -180
-    else:
-        return angle +180
-#     return angle
 
 
 ##########################################################################
@@ -44,10 +37,8 @@ class Wing(object):
         
         if side == 'right':
             self.color ='red'
-            self.sign  = 1
         elif side == 'left':
             self.color ='green'
-            self.sign  = -1
         else:
             rospy.logwarn('Wing side must be ''right'' or ''left''.')
             
@@ -61,19 +52,18 @@ class Wing(object):
         self.ravelAngleInBodyFrame        = None
         self.intensityByAngle_angles      = None
         self.intensityByAngle_intensities = None
-        
-        # Bodyframe angles define the maximum wing extents, where zero degrees points orthogonal to body axis: 
-        # If body axis is north/south, then 0-deg is east for right wing, west for left wing.
-        self.angle1_bodyframe   = 0
-        self.angle2_bodyframe   = 0
-        
+
         self.extract_parameters(config)
         
-        self.angleTrailingEdge= None
-        self.angleLeadingEdge = None
-        self.amp                = None
-        self.msa                = None
-        self.bFlying            = False
+        
+        # Bodyframe angles have zero degrees point orthogonal to body axis: 
+        # If body axis is north/south, then 0-deg is east for right wing, west for left wing.
+        
+        self.angleTrailingEdge = None
+        self.angleLeadingEdge  = None
+        self.amp               = None
+        self.msa               = None
+        self.bFlying           = False
         
         # drawing parameters
         self.numeric_color_dict = { 'green'         : cv.Scalar(0,255,0,0), 
@@ -86,7 +76,8 @@ class Wing(object):
                                    }
         self.numeric_color      = self.numeric_color_dict[self.color]
         self.thickness_inner    = 1
-        self.thickness_outer    = 3
+        self.thickness_outer    = 2
+        self.thickness_wing     = 2
         
         # services, for live histograms
         name                = 'wing_histogram_' + side
@@ -112,68 +103,68 @@ class Wing(object):
         self.pubWingTrailing      = rospy.Publisher(name, Float32)
         
     
-    # get_angles_imageframe_from_bodyframe()
+    # get_angles_i_from_b()
     # Return angle1 and angle2 oriented to the image rather than the fly.
     # * corrected for left/right full-circle angle, i.e. east is 0-deg, west is 270-deg.
     # * corrected for wrapping at delta>180.
     #
-    def get_angles_imageframe_from_bodyframe(self, angle1_bodyframe, angle2_bodyframe):
-        if self.side == 'left':
-            angle1A_bodyframe = -angle2_bodyframe - 180
-            angle2A_bodyframe = -angle1_bodyframe - 180
-        else:
-            angle1A_bodyframe = angle1_bodyframe
-            angle2A_bodyframe = angle2_bodyframe
-
-        angle1_imageframe = self.transform_angle_imageframe_from_bodyframe(angle1A_bodyframe)
-        angle2_imageframe = self.transform_angle_imageframe_from_bodyframe(angle2A_bodyframe)
+    def get_angles_i_from_b(self, angle_lo_b, angle_hi_b):
+        angle_lo_i = self.transform_angle_i_from_b(angle_lo_b)
+        angle_hi_i = self.transform_angle_i_from_b(angle_hi_b)
         
-        if (angle2_imageframe-angle1_imageframe > 180):
-            angle2_imageframe -= 360
-        if (angle1_imageframe-angle2_imageframe > 180):
-            angle1_imageframe -= 360
+        if (angle_hi_i-angle_lo_i > 180):
+            angle_hi_i -= 360
+        if (angle_lo_i-angle_hi_i > 180):
+            angle_lo_i -= 360
             
-        return (angle1_imageframe, angle2_imageframe)
+        return (angle_lo_i, angle_hi_i)
     
     
-    # transform_angle_imageframe_from_bodyframe()
+    # transform_angle_i_from_b()
     # Transform an angle from the fly frame to the camera image frame.
     #
-    def transform_angle_imageframe_from_bodyframe(self, angle_bodyframe):
-        angle_imageframe  = angle_bodyframe + self.bodyangle 
+    def transform_angle_i_from_b(self, angle_b):
+        if self.side == 'right':
+            angle_i  = self.angleBody + angle_b
+        else: # left
+            angle_i  = self.angleBody + angle_b + 180
+             
 
-        return angle_imageframe
+        return angle_i
         
 
-    # transform_angle_bodyframe_from_imageframe()
+    # transform_angle_b_from_i()
     # Transform an angle from the camera image frame to the fly frame.
     #
-    def transform_angle_bodyframe_from_imageframe(self, angle_imageframe):
-        angle_bodyframe  = angle_imageframe - self.bodyangle 
+    def transform_angle_b_from_i(self, angle_i):
+        if self.side == 'right':
+            angle_b  = angle_i - self.angleBody
+        else:  
+            angle_b  = -(self.angleBody - angle_i + 180) 
 
-        return angle_bodyframe
+        return angle_b
         
 
-    # set_angles_bodyframe()
+    # set_angles_b()
     # Set the angles into the member vars.  Enforces the range [-180,+180].
     #
-    def set_angles_bodyframe(self, angle1_bodyframe, angle2_bodyframe):
-        self.angle1_bodyframe = (angle1_bodyframe+180) % 360 - 180
-        self.angle2_bodyframe = (angle2_bodyframe+180) % 360 - 180
+    def set_angles_b(self, angle_lo_b, angle_hi_b):
+        self.angle_lo_b = (angle_lo_b+180) % 360 - 180
+        self.angle_hi_b = (angle_hi_b+180) % 360 - 180
         
         
     # extract parameters from parameter server, given "strokelitude" parameter
     def extract_parameters(self, config):
         if config is not None:
-            self.ptHinge        = (config['wing'][self.side]['hinge']['x'], config['wing'][self.side]['hinge']['y'])
+            self.ptHinge        = np.array([config['wing'][self.side]['hinge']['x'], config['wing'][self.side]['hinge']['y']])
             
             self.radius_outer   = config['wing']['radius_outer']
             self.radius_inner   = config['wing']['radius_inner']
-            self.bodyangle      = config['bodyangle']
+            self.angleBody      = config['bodyangle']
             self.threshold      = config['wing'][self.side]['threshold']
             self.flight_threshold=config['wing'][self.side]['flight_threshold']
 
-            self.set_angles_bodyframe(config['wing']['angle1'], config['wing']['angle2'])
+            self.set_angles_b(config['wing']['angle_lo_b'], config['wing']['angle_hi_b'])
             
             
             if config['wing']['nbins'] != self.nbins:
@@ -188,26 +179,26 @@ class Wing(object):
     # Draw the wing envelope, and leading and trailing edges, onto the given image.
     #
     def draw(self, image):
-        (angle1_imageframe, angle2_imageframe) = self.get_angles_imageframe_from_bodyframe(self.angle1_bodyframe, self.angle2_bodyframe)
+        (angle_lo_i, angle_hi_i) = self.get_angles_i_from_b(self.angle_lo_b, self.angle_hi_b)
 
         # inner circle
         cv2.ellipse(image, 
-                    self.ptHinge,  
+                    tuple(self.ptHinge),  
                     (self.radius_inner, self.radius_inner),
                     0,
-                    angle1_imageframe,
-                    angle2_imageframe,
+                    angle_lo_i,
+                    angle_hi_i,
                     color=self.numeric_color,
                     thickness=self.thickness_inner,
                     )
         
         # outer circle         
         cv2.ellipse(image, 
-                    self.ptHinge,  
+                    tuple(self.ptHinge),  
                     (self.radius_outer, self.radius_outer),
                     0,
-                    angle1_imageframe,
-                    angle2_imageframe,
+                    angle_lo_i,
+                    angle_hi_i,
                     color=self.numeric_color,
                     thickness=self.thickness_outer,
                     )
@@ -215,17 +206,17 @@ class Wing(object):
         
         # wing leading and trailing edges
         if self.angleTrailingEdge is not None:
-            (angle_leading, angle_trailing) = self.get_angles_imageframe_from_bodyframe(self.angleLeadingEdge, self.angleTrailingEdge)
+            (angle_leading, angle_trailing) = self.get_angles_i_from_b(self.angleLeadingEdge, self.angleTrailingEdge)
 
 #             if (self.side=='left'):
 #                 rospy.logwarn('L,T: %s,   l,t: %s' % ((self.angleLeadingEdge, self.angleTrailingEdge), (angle_leading, angle_trailing)))
-            p1 = int(self.ptHinge[0] + np.cos( np.deg2rad(angle_trailing) )*self.radius_outer)
-            p2 = int(self.ptHinge[1] + np.sin( np.deg2rad(angle_trailing) )*self.radius_outer)
-            cv2.line(image, self.ptHinge, (p1,p2), self.numeric_color, 2)
+            x = int(self.ptHinge[0] + self.radius_outer * np.cos( np.deg2rad(angle_trailing) ))
+            y = int(self.ptHinge[1] + self.radius_outer * np.sin( np.deg2rad(angle_trailing) ))
+            cv2.line(image, tuple(self.ptHinge), (x,y), self.numeric_color, self.thickness_wing)
             
-            p1 = int(self.ptHinge[0] + np.cos( np.deg2rad(angle_leading) )*self.radius_outer)
-            p2 = int(self.ptHinge[1] + np.sin( np.deg2rad(angle_leading) )*self.radius_outer)
-            cv2.line(image, self.ptHinge, (p1,p2), self.numeric_color, 2)
+            x = int(self.ptHinge[0] + self.radius_outer * np.cos( np.deg2rad(angle_leading) ))
+            y = int(self.ptHinge[1] + self.radius_outer * np.sin( np.deg2rad(angle_leading) ))
+            cv2.line(image, tuple(self.ptHinge), (x,y), self.numeric_color, self.thickness_wing)
 
                         
     def calc_mask(self, shape):
@@ -233,13 +224,13 @@ class Wing(object):
         self.imgAngleInBodyFrame = np.zeros(shape)
         for y in range(shape[0]):
             for x in range(shape[1]):
-                angle_imageframe = get_angle_from_points(self.ptHinge, (x,y))
-                angle_bodyframe  = self.transform_angle_bodyframe_from_imageframe(angle_imageframe)
+                angle_i = get_angle_from_points(self.ptHinge, (x,y))
+                angle_b  = self.transform_angle_b_from_i(angle_i)
 
                 if self.side == 'left':
-                    angle_bodyframe = -angle_bodyframe - 180
+                    angle_b = -angle_b - 180
 
-                self.imgAngleInBodyFrame[y,x] = angle_bodyframe
+                self.imgAngleInBodyFrame[y,x] = angle_b
         
         self.imgAngleInBodyFrame = (self.imgAngleInBodyFrame+180) % 360 - 180
         self.ravelAngleInBodyFrame = np.ravel(self.imgAngleInBodyFrame)
@@ -247,22 +238,22 @@ class Wing(object):
                      
         # Create the wing mask.
         self.imgMask = np.zeros(shape)
-        (angle1_imageframe, angle2_imageframe) = self.get_angles_imageframe_from_bodyframe(self.angle1_bodyframe, self.angle2_bodyframe)
+        (angle_lo_i, angle_hi_i) = self.get_angles_i_from_b(self.angle_lo_b, self.angle_hi_b)
 
         cv2.ellipse(self.imgMask,
-                    self.ptHinge,
+                    tuple(self.ptHinge),
                     (self.radius_outer, self.radius_outer),
                     0,
-                    angle1_imageframe,
-                    angle2_imageframe,
+                    angle_lo_i,
+                    angle_hi_i,
                     1, 
                     cv.CV_FILLED)
         cv2.ellipse(self.imgMask,
-                    self.ptHinge,
+                    tuple(self.ptHinge),
                     (self.radius_inner, self.radius_inner),
                     0,
-                    angle1_imageframe,
-                    angle2_imageframe,
+                    angle_lo_i,
+                    angle_hi_i,
                     0, 
                     cv.CV_FILLED)
         
@@ -325,12 +316,12 @@ class Wing(object):
             self.intensityByAngle_intensities = intensities[iSorted]
 #             rospy.logwarn(self.intensityByAngle_intensities)
             
-            angleLo = np.min([self.angle1_bodyframe, self.angle2_bodyframe])
-            angleHi = np.max([self.angle1_bodyframe, self.angle2_bodyframe])
+            angle_lo_b = np.min([self.angle_lo_b, self.angle_hi_b])
+            angle_hi_b = np.max([self.angle_lo_b, self.angle_hi_b])
 
-            #rospy.logwarn('%s  anglesLo,Hi: %s, %s' % (self.side, angleLo, angleHi))
+            #rospy.logwarn('%s  anglesLo,Hi: %s, %s' % (self.side, angle_lo_b, angle_hi_b))
             
-            iValidAngles     = np.where((angleLo < self.intensityByAngle_angles) * (self.intensityByAngle_angles < angleHi))[0]
+            iValidAngles     = np.where((angle_lo_b < self.intensityByAngle_angles) * (self.intensityByAngle_angles < angle_hi_b))[0]
             self.angles      = self.intensityByAngle_angles[iValidAngles]
             self.intensities = self.intensityByAngle_intensities[iValidAngles]
             
@@ -352,7 +343,7 @@ class Wing(object):
 #                     rospy.logwarn('angles: %s' % self.angles)
 #                     rospy.logwarn('intensities: %s' % self.intensities)
                 
-                if (len(self.intensities)>0):
+                if (len(self.intensities)>1):
                     # auto rescale
                     self.intensities -= np.min(self.intensities)
                     self.intensities /= np.max(self.intensities)
@@ -423,7 +414,7 @@ class Wing(object):
             
             
     def serve_edges(self, request):
-        if self.angleTrailingEdge is not None:
+        if self.angleTrailingEdge is not None:            
             return float32listResponse([self.angleTrailingEdge, self.angleLeadingEdge])
             
             
@@ -443,11 +434,14 @@ class ImageDisplay:
         # initialize wings and body
         self.wing_r                 = Wing('right', config)
         self.wing_l                 = Wing('left', config)
-        self.bodyangle              = config['bodyangle']
+        self.angleBody              = config['bodyangle']
         self.bSettingHinges = False
         self.bSettingWings= False
         self.angletext              = 'none' # for debugging
 
+        self.controlpts = {}
+        self.update_control_points()
+        
         # initialize
         node_name                   = 'strokelitude'
         rospy.init_node(node_name, anonymous=True)
@@ -467,13 +461,13 @@ class ImageDisplay:
         self.subImageRaw         = rospy.Subscriber('/camera/image_raw',Image,self.image_callback)
 
         # user callbacks
-        cv.SetMouseCallback(self.display_name, self.mouse, param=None)
+        cv.SetMouseCallback(self.display_name, self.onMouse, param=None)
         
         
     def get_configuration(self, config=None):
         if config is None:
             config = rospy.get_param('strokelitude')
-        self.bodyangle = config['bodyangle']
+        self.angleBody = config['bodyangle']
         self.wing_r.extract_parameters(config)
         self.wing_l.extract_parameters(config)
         
@@ -496,7 +490,7 @@ class ImageDisplay:
                 
             # draw line from one hinge to the other.
             if (self.wing_r.ptHinge is not None) and (self.wing_l.ptHinge is not None):
-                cv2.line(imgOutput, self.wing_r.ptHinge, self.wing_l.ptHinge, cv.Scalar(255,0,0,0), 2)
+                cv2.line(imgOutput, tuple(self.wing_r.ptHinge), tuple(self.wing_l.ptHinge), cv.Scalar(255,0,0,0), 2)
                 #body_center_x = int( (self.wing_r.ptHinge[0] + self.wing_l.ptHinge[0])/2. ) 
                 #body_center_y = int( (self.wing_r.ptHinge[1] + self.wing_l.ptHinge[1])/2. ) 
             
@@ -551,122 +545,136 @@ class ImageDisplay:
 
             if (self.wing_r.amp is not None) and (self.wing_l.amp is not None):
                 self.pubMask.publish(self.cvbridge.cv_to_imgmsg(cv.fromarray(self.wing_r.imgMask + self.wing_l.imgMask), 'passthrough'))
+
             
+            # Draw the control points.
+            for controlname,controlpt in self.controlpts.iteritems():
+                cv2.circle(imgOutput, tuple(controlpt),  2, cv.Scalar(255,255,255,0), 2)         
+
+
             # display image
             cv2.imshow("Display", imgOutput)
             cv2.waitKey(1)
 
-#             # Some debugging stuff.
-#             angle1R_imageframe = self.wing_r.transform_angle_imageframe_from_bodyframe(self.wing_r.angle1_bodyframe)
-#             angle2R_imageframe = self.wing_r.transform_angle_imageframe_from_bodyframe(self.wing_r.angle2_bodyframe)
-#             angle1L_imageframe = self.wing_l.transform_angle_imageframe_from_bodyframe(self.wing_l.angle1_bodyframe)
-#             angle2L_imageframe = self.wing_l.transform_angle_imageframe_from_bodyframe(self.wing_l.angle2_bodyframe)
-#             rospy.logwarn('angle1,2Lb: %s,   angle1,2Rb: %s' % ((self.wing_l.angle1_bodyframe, self.wing_l.angle2_bodyframe), (self.wing_r.angle1_bodyframe, self.wing_r.angle2_bodyframe)))
-#             rospy.logwarn('angle1,2Li: %s,   angle1,2Ri: %s' % ((angle1L_imageframe, angle2L_imageframe), (angle1R_imageframe, angle2R_imageframe)))
-#             rospy.logwarn('bodyangle: %s, %s, %s' % (self.bodyangle, self.wing_l.bodyangle, self.wing_r.bodyangle))
 
+    # hit_test()
+    # Get the name of the nearest control point to the mouse point.
+    # ptMouse    = [x,y]
+    #
+    def hit_test(self, ptMouse):
+        names = self.controlpts.keys()
+        pts = np.array(self.controlpts.values())
 
-    def mouse(self, event, x, y, flags, param):
-        ptMouse = (x, y)
+        dx = np.subtract.outer(ptMouse[0], pts[:,0])
+        dy = np.subtract.outer(ptMouse[1], pts[:,1])
+        d = np.hypot(dx, dy)
+        controlname = names[np.argmin(d)]
         
-        # FETCH PARAMETERS : left button double click
-        if (event == cv.CV_EVENT_LBUTTONDBLCLK):
-            rospy.logwarn('Fetching parameters from parameter server.')
-            rospy.logwarn('')
-            self.get_configuration()
+        return controlname
+        
+        
+    # update_control_points()
+    # Update the dictionary of control point names and locations.
+    #
+    def update_control_points (self):
+        # Compute the various control points.
+        self.controlpts['hinge_l'] = self.wing_l.ptHinge
+        self.controlpts['hinge_r'] = self.wing_r.ptHinge
+        
+        (angle_lo_i, angle_hi_i) = self.wing_l.get_angles_i_from_b(self.wing_l.angle_lo_b, self.wing_l.angle_hi_b)
+        self.controlpts['hi_l'] = (self.wing_l.ptHinge + self.wing_l.radius_outer * np.array([np.cos(np.deg2rad(angle_hi_i)), 
+                                                                                              np.sin(np.deg2rad(angle_hi_i))])).astype(int)
+        self.controlpts['lo_l'] = (self.wing_l.ptHinge + self.wing_l.radius_outer * np.array([np.cos(np.deg2rad(angle_lo_i)), 
+                                                                                              np.sin(np.deg2rad(angle_lo_i))])).astype(int)
+
+        (angle_lo_i, angle_hi_i) = self.wing_r.get_angles_i_from_b(self.wing_r.angle_lo_b, self.wing_r.angle_hi_b)
+        self.controlpts['hi_r'] = (self.wing_r.ptHinge + self.wing_r.radius_outer * np.array([np.cos(np.deg2rad(angle_hi_i)), 
+                                                                                              np.sin(np.deg2rad(angle_hi_i))])).astype(int)
+        self.controlpts['lo_r'] = (self.wing_r.ptHinge + self.wing_r.radius_outer * np.array([np.cos(np.deg2rad(angle_lo_i)), 
+                                                                                              np.sin(np.deg2rad(angle_lo_i))])).astype(int)
+
+        angle_lo = self.wing_l.angle_lo_b
+        angle_hi = self.wing_l.angle_hi_b
+        if (angle_hi-angle_lo > 180):
+            angle_hi -= 360
+        if (angle_lo-angle_hi > 180):
+            angle_lo -= 360
+        angle = self.wing_l.angleBody + (angle_lo + angle_hi)/2 + 180
+        self.controlpts['inner_l'] = (self.wing_l.ptHinge + self.wing_l.radius_inner * np.array([np.cos(np.deg2rad(angle)), 
+                                                                                                 np.sin(np.deg2rad(angle))])).astype(int)
+
+        angle_lo = self.wing_r.angle_lo_b
+        angle_hi = self.wing_r.angle_hi_b
+        if (angle_hi-angle_lo > 180):
+            angle_hi -= 360
+        if (angle_lo-angle_hi > 180):
+            angle_lo -= 360
+        angle = self.wing_r.angleBody + (angle_lo + angle_hi)/2
+        self.controlpts['inner_r'] = (self.wing_r.ptHinge + self.wing_r.radius_inner * np.array([np.cos(np.deg2rad(angle)), 
+                                                                                                 np.sin(np.deg2rad(angle))])).astype(int)
+
+
+        
+    def onMouse(self, event, x, y, flags, param):
+        ptMouse = np.array([x, y])
+
+        # Keep track of the mouse button state.        
+        if (event==cv.CV_EVENT_LBUTTONDOWN):
+            self.controlselected = self.hit_test(ptMouse)
+        if (event==cv.CV_EVENT_LBUTTONUP):
+            self.controlselected = None
+#             self.get_configuration()
             self.wing_r.calc_mask(self.shapeImage)
             self.wing_l.calc_mask(self.shapeImage)
 
-            
-        # BODY : MBUTTON
-        if (event == cv.CV_EVENT_MBUTTONDOWN):
-            if (not self.bSettingHinges):
-                self.bSettingHinges = True
-                if (not flags & cv.CV_EVENT_FLAG_SHIFTKEY): 
-                    self.wing_r.ptHinge      = ptMouse
-                else: # <Shift> means do the left wing first.                                   
-                    self.wing_l.ptHinge      = ptMouse
-            else:
-                self.bSettingHinges = False
-                if (not flags & cv.CV_EVENT_FLAG_SHIFTKEY):
-                    self.wing_l.ptHinge      = ptMouse
-                else: # <Shift> means do the right wing second.
-                    self.wing_r.ptHinge      = ptMouse
-                    
-                self.bodyangle              = int(get_angle_from_points(self.wing_l.ptHinge, self.wing_r.ptHinge))
-                self.wing_r.bodyangle       = self.bodyangle
-                self.wing_l.bodyangle       = self.bodyangle
-                
-                rospy.set_param('strokelitude/wing/right/hinge/x', self.wing_r.ptHinge[0])
-                rospy.set_param('strokelitude/wing/right/hinge/y', self.wing_r.ptHinge[1])
-                rospy.set_param('strokelitude/wing/left/hinge/x', self.wing_l.ptHinge[0])
-                rospy.set_param('strokelitude/wing/left/hinge/y', self.wing_l.ptHinge[1])
-                rospy.set_param('strokelitude/bodyangle', self.bodyangle)
-            
-            
-        # During setting of hinge points, update the hinge points and bodyangle.
-        if (self.bSettingHinges):
-            if (flags & cv.CV_EVENT_FLAG_SHIFTKEY):
-                self.wing_r.ptHinge      = ptMouse
-            else:
-                self.wing_l.ptHinge      = ptMouse
 
-            self.bodyangle              = int(get_angle_from_points(self.wing_l.ptHinge, self.wing_r.ptHinge))
-            self.wing_r.bodyangle       = self.bodyangle
-            self.wing_l.bodyangle       = self.bodyangle
-            
-            
-        if (self.wing_r.ptHinge is not None) and (self.wing_l.ptHinge is not None):
-            if (flags & cv.CV_EVENT_FLAG_SHIFTKEY):
-                wing = self.wing_l
-            else:
-                wing = self.wing_r
-                
-            radius           = int(np.sqrt( (ptMouse[1] - wing.ptHinge[1])**2 + (ptMouse[0] - wing.ptHinge[0])**2 ))
-            angleMouse_imageframe = int(get_angle_from_points(wing.ptHinge, ptMouse))
-            angleMouse_bodyframe  = wing.transform_angle_bodyframe_from_imageframe(angleMouse_imageframe)
-                
-            if self.wing_l.ravelAngleInBodyFrame is not None:
-                self.angletext          = str(wing.imgAngleInBodyFrame[y,x])
-            
 
-        # WINGS : RBUTTON         
-        if (event == cv.CV_EVENT_RBUTTONDOWN) and (not self.bSettingWings):
-            self.bSettingWings= True
-            self.wing_r.set_angles_bodyframe(angleMouse_bodyframe, self.wing_r.angle2_bodyframe)
-            self.wing_l.set_angles_bodyframe(angleMouse_bodyframe, self.wing_l.angle2_bodyframe)
-            
-            if (flags & cv.CV_EVENT_FLAG_CTRLKEY):
-                self.wing_r.radius_inner    = radius
-                self.wing_l.radius_inner    = radius
-            else:          
-                self.wing_l.radius_outer    = radius
-                self.wing_r.radius_outer    = radius
-            
-            
-        elif (event == cv.CV_EVENT_RBUTTONDOWN) and (self.bSettingWings):
-            self.bSettingWings= False
-            self.wing_r.set_angles_bodyframe(self.wing_r.angle1_bodyframe, angleMouse_bodyframe)
-            self.wing_l.set_angles_bodyframe(self.wing_l.angle1_bodyframe, angleMouse_bodyframe)
-            
-            rospy.set_param('strokelitude/wing/angle1', self.wing_r.angle1_bodyframe)
-            rospy.set_param('strokelitude/wing/angle2', self.wing_r.angle2_bodyframe)
-            rospy.set_param('strokelitude/wing/radius_outer', self.wing_r.radius_outer)
-            rospy.set_param('strokelitude/wing/radius_inner', self.wing_r.radius_inner)
-            
+        # When the left button is down, adjust the control points.
+        if (flags & cv.CV_EVENT_FLAG_LBUTTON):
+            # Set the new point.             
+            if (self.controlselected=='hinge_l'): # Left hinge point.
+                self.wing_l.ptHinge   = ptMouse
+                self.angleBody        = int(get_angle_from_points(self.wing_l.ptHinge, self.wing_r.ptHinge))
+                self.wing_r.angleBody = self.angleBody
+                self.wing_l.angleBody = self.angleBody
+
+            elif (self.controlselected=='hinge_r'): # Right hinge point.
+                self.wing_r.ptHinge   = ptMouse
+                self.angleBody        = int(get_angle_from_points(self.wing_l.ptHinge, self.wing_r.ptHinge))
+                self.wing_r.angleBody = self.angleBody
+                self.wing_l.angleBody = self.angleBody
         
-        # During setting of wings, update the wing angles.
-        if (self.bSettingWings):
-            self.wing_r.set_angles_bodyframe(self.wing_r.angle1_bodyframe, angleMouse_bodyframe)
-            self.wing_l.set_angles_bodyframe(self.wing_l.angle1_bodyframe, angleMouse_bodyframe)
-
-
+            elif (self.controlselected=='hi_l'): # Left high angle.
+                pt = ptMouse - self.wing_l.ptHinge
+                self.wing_l.angle_hi_b = self.wing_l.transform_angle_b_from_i(np.rad2deg(np.arctan2(pt[1], pt[0])))
+                self.wing_l.radius_outer = max(self.wing_l.radius_inner+2, int(np.linalg.norm(self.wing_l.ptHinge - ptMouse)))
+                  
+            elif (self.controlselected=='hi_r'): # Right high angle.
+                pt = ptMouse - self.wing_r.ptHinge
+                self.wing_r.angle_hi_b = self.wing_r.transform_angle_b_from_i(np.rad2deg(np.arctan2(pt[1], pt[0])))
+                self.wing_r.radius_outer = max(self.wing_r.radius_inner+2, int(np.linalg.norm(self.wing_r.ptHinge - ptMouse)))
+                  
+            elif (self.controlselected=='lo_l'): # Left low angle.
+                pt = ptMouse - self.wing_l.ptHinge
+                self.wing_l.angle_lo_b = self.wing_l.transform_angle_b_from_i(np.rad2deg(np.arctan2(pt[1], pt[0])))
+                self.wing_l.radius_outer = max(self.wing_l.radius_inner+2, int(np.linalg.norm(self.wing_l.ptHinge - ptMouse)))
+                  
+            elif (self.controlselected=='lo_r'): # Right low angle.
+                pt = ptMouse - self.wing_r.ptHinge
+                self.wing_r.angle_lo_b = self.wing_r.transform_angle_b_from_i(np.rad2deg(np.arctan2(pt[1], pt[0])))
+                self.wing_r.radius_outer = max(self.wing_r.radius_inner+2, int(np.linalg.norm(self.wing_r.ptHinge - ptMouse)))
+                  
+            elif (self.controlselected=='inner_l'): # Left inner radius.
+                self.wing_l.radius_inner = min(int(np.linalg.norm(self.wing_l.ptHinge - ptMouse)), self.wing_l.radius_outer-2)
+                
+            elif (self.controlselected=='inner_r'): # Right inner radius.
+                self.wing_r.radius_inner = min(int(np.linalg.norm(self.wing_r.ptHinge - ptMouse)), self.wing_r.radius_outer-2)
+                
+            self.update_control_points()
+            
+                
     def run(self):
-        try:
-            rospy.spin()
-        except:
-            rospy.logwarn('Shutting down')
-        
+        rospy.spin()
         cv2.destroyAllWindows()
 
 
@@ -684,16 +692,8 @@ if __name__ == '__main__':
     rospy.logwarn('*    StrokelitudeROS: Camera based wingbeat analyzer software for ROS    *')
     rospy.logwarn('*        by Floris van Breugel, Steve Safarik, (c) 2013                  *')
     rospy.logwarn('*                                                                        *')
-    rospy.logwarn('*    Controls:                                                           *')
+    rospy.logwarn('*    Left click+drag to move any control points.                         *')
     rospy.logwarn('*                                                                        *')  
-    rospy.logwarn('*    Middle Mouse (single click): select wing hinge                      *')
-    rospy.logwarn('*        Default   : Right wing (green)                                  *')
-    rospy.logwarn('*        Shift key : Left wing (red)                                     *')
-    rospy.logwarn('*    Right Mouse (single click) : draw radius mask                       *')
-    rospy.logwarn('*        Default   : Right wing (green), Outer radius (thick)            *')
-    rospy.logwarn('*        Shift key : Left wing (red)                                     *')
-    rospy.logwarn('*        Ctrl  key : Inner radius (thin)                                 *')
-    rospy.logwarn('*    Left Mouse (double click)  : apply parameters, calculate WBA mask   *')
     rospy.logwarn('*                                                                        *') 
     rospy.logwarn('**************************************************************************')
     rospy.logwarn('')
