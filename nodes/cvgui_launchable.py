@@ -7,6 +7,7 @@ import sys
 
 import time
 import numpy as np
+import os
 import cv
 import cv2
 
@@ -19,7 +20,7 @@ from optparse import OptionParser
 
 from StrokelitudeROS.srv import *
 from StrokelitudeROS.msg import float32list as float32list_msg
-from std_msgs.msg import *
+from std_msgs.msg import Float32, String
 
 
 
@@ -376,7 +377,7 @@ class Wing(object):
     # Calculate and return the best pixel intensity threshold to use for wing angle detection.
     #                    
     def get_threshold(self):
-        iMin = np.argmin(np.diff(self.intensitiesValid))
+        iMin = np.argmax(np.diff(self.intensitiesValid))
         threshold = self.intensitiesValid[iMin]
         angle = self.binsValid[iMin]
         
@@ -421,15 +422,23 @@ class Wing(object):
 ###############################################################
 class ImageDisplay:
 
+    class struct:
+        pass
+    
     def __init__(self):
+        # initialize
+        rospy.init_node('strokelitude', anonymous=True)
+
         # initialize display
         self.display_name = "Display"
         cv.NamedWindow(self.display_name,1)
         self.cvbridge = CvBridge()
+        self.bKeepRunning = True
         
         # Get parameters from parameter server
         self.params = rospy.get_param('strokelitude')
-        defaults = {'nbins': 50,
+        defaults = {'filenameBackground':'~/strokelitude.png',
+                    'nbins': 50,
                     'black_on_white':True,
                     'flight_threshold':0.2,
                     'right':{'hinge':{'x':300,
@@ -448,7 +457,12 @@ class ImageDisplay:
                             'angle_lo':-45
                             }
                     }
-        self.SetDictWithPreserve(self.params, defaults)
+        self.set_dict_with_preserve(self.params, defaults)
+        
+        
+        # Background image.
+        self.filenameBackground = os.path.expanduser(self.params['filenameBackground'])
+        self.imgBackground  = cv2.imread(self.filenameBackground, cv.CV_LOAD_IMAGE_GRAYSCALE)
         
         
         # initialize wings and body
@@ -461,9 +475,6 @@ class ImageDisplay:
         self.controlpts = {}
         self.update_control_points()
 
-        # initialize
-        rospy.init_node('strokelitude', anonymous=True)
-
         # publishers
         self.pubWingLeftMinusRight = rospy.Publisher('strokelitude/wba/LeftMinusRight', Float32)
         self.pubWingLeftPlusRight  = rospy.Publisher('strokelitude/wba/LeftPlusRight', Float32)
@@ -471,15 +482,49 @@ class ImageDisplay:
         self.pubMask               = rospy.Publisher('strokelitude/wba/image_mask', Image)
         self.pubTestR              = rospy.Publisher('strokelitude/wba/image_test_r', Image)
         self.pubTestL              = rospy.Publisher('strokelitude/wba/image_test_l', Image)
+        self.pubCommand            = rospy.Publisher('strokelitude/command', String)
 
-        # subscribe to images        
-        self.subImageRaw           = rospy.Subscriber('/camera/image_raw',Image,self.image_callback)
+        # subscribe.        
+        self.subImageRaw           = rospy.Subscriber('/camera/image_raw', Image, self.image_callback)
+        self.subCommand            = rospy.Subscriber('strokelitude/command', String, self.command_callback)
+
+
+        self.ui = self.struct()
+        self.ui.colorWhite = cv.Scalar(255,255,255,0)
+        self.ui.colorBlack = cv.Scalar(0,0,0,0)
+        self.ui.colorHilight = cv.Scalar(192,192,192,0)
+        self.ui.colorBtn = cv.Scalar(128,128,0,0)
+        self.ui.colorText = cv.Scalar(255,255,255,0)
+
+        self.ui.btnExit = self.struct()
+        self.ui.btnExit.rect = (10, 10, 40, 20)
+        self.ui.btnExit.state = 'up'
+        self.ui.btnExit.text = 'exit'
+
+        self.ui.btnBg = self.struct()
+        self.ui.btnBg.rect = (50, 10, 30, 20)
+        self.ui.btnBg.state = 'up'
+        self.ui.btnBg.text = 'bg'
 
         # user callbacks
         cv.SetMouseCallback(self.display_name, self.onMouse, param=None)
         
         
-    # SetDict(self, dTarget, dSource, bPreserve)
+    # command_callback()
+    # Execute any commands sent over the command topic.
+    #
+    def command_callback(self, command):
+        self.command = command.data
+        
+        if (self.command == 'save_background'):
+            self.save_background()
+            
+        if (self.command == 'exit'):
+            rospy.signal_shutdown('User requested exit.')
+        
+    
+        
+    # set_dict(self, dTarget, dSource, bPreserve)
     # Takes a target dictionary, and enters values from the source dictionary, overwriting or not, as asked.
     # For example,
     #    dT={'a':1, 'b':2}
@@ -492,7 +537,7 @@ class ImageDisplay:
     #    Set(dT, dS, False)
     #    dT is {'a':0, 'b':2, 'c':0}
     #
-    def SetDict(self, dTarget, dSource, bPreserve):
+    def set_dict(self, dTarget, dSource, bPreserve):
         for k,v in dSource.iteritems():
             bKeyExists = (k in dTarget)
             if (not bKeyExists) and type(v)==type({}):
@@ -501,14 +546,14 @@ class ImageDisplay:
                 dTarget[k] = v
                     
             if type(v)==type({}):
-                self.SetDict(dTarget[k], v, bPreserve)
+                self.set_dict(dTarget[k], v, bPreserve)
     
     
-    def SetDictWithPreserve(self, dTarget, dSource):
-        self.SetDict(dTarget, dSource, True)
+    def set_dict_with_preserve(self, dTarget, dSource):
+        self.set_dict(dTarget, dSource, True)
     
-    def SetDictWithOverwrite(self, dTarget, dSource):
-        self.SetDict(dTarget, dSource, False)
+    def set_dict_with_overwrite(self, dTarget, dSource):
+        self.set_dict(dTarget, dSource, False)
 
 
     def create_masks(self):
@@ -521,18 +566,80 @@ class ImageDisplay:
         self.wing_l.assign_pixels_to_bins()
         rospy.logwarn('Creating wing masks... done.')
 
+
+    # Draw user-interface elements on the image.
+    def draw_ui(self, image):
+        self.draw_button(image, self.ui.btnBg.rect,   self.ui.btnBg.text,   self.ui.btnBg.state)
+        self.draw_button(image, self.ui.btnExit.rect, self.ui.btnExit.text, self.ui.btnExit.state)
         
+    
+    # draw_button()
+    # Draw a 3D shaded button with text.
+    # rect is (left, top, width, height), increasing y goes down.
+    def draw_button(self, image, rect, text, state='up'):
+        ptLT = (rect[0],         rect[1])
+        ptRT = (rect[0]+rect[2], rect[1])
+        ptLB = (rect[0],         rect[1]+rect[3])
+        ptRB = (rect[0]+rect[2], rect[1]+rect[3])
+
+        ptLT0 = (rect[0]-1,         rect[1]-1)
+        ptRT0 = (rect[0]+rect[2]+1, rect[1]-1)
+        ptLB0 = (rect[0]-1,         rect[1]+rect[3]+1)
+        ptRB0 = (rect[0]+rect[2]+1, rect[1]+rect[3]+1)
+
+        ptLT1 = (rect[0]+1,         rect[1]+1)
+        ptRT1 = (rect[0]+rect[2]-1, rect[1]+1)
+        ptLB1 = (rect[0]+1,         rect[1]+rect[3]-1)
+        ptRB1 = (rect[0]+rect[2]-1, rect[1]+rect[3]-1)
+
+        ptLT2 = (rect[0]+2,         rect[1]+2)
+        ptRT2 = (rect[0]+rect[2]-1, rect[1]+2)
+        ptLB2 = (rect[0]+2,         rect[1]+rect[3]-1)
+        ptRB2 = (rect[0]+rect[2]-1, rect[1]+rect[3]-1)
+
+
+        if (state=='up'):
+            colorOuter = self.ui.colorWhite
+            colorInner = self.ui.colorBlack
+            colorHilight = self.ui.colorHilight
+            colorFill = self.ui.colorBtn
+            colorText = self.ui.colorText
+            ptText = (int(rect[0]+rect[2]/4), int(rect[1]+3*rect[3]/4))
+        else:
+            colorOuter = self.ui.colorWhite
+            colorInner = self.ui.colorBlack
+            colorHilight = self.ui.colorBlack
+            colorFill = self.ui.colorBtn
+            colorText = self.ui.colorText
+            ptText = (int(rect[0]+rect[2]/4+2), int(rect[1]+3*rect[3]/4+2))
+            
+        cv2.rectangle(image, ptLT0, ptRB0, colorOuter, 1)
+        cv2.rectangle(image, ptLT, ptRB, colorInner, 1)
+        cv2.line(image, ptLT1, ptRT1, colorHilight)
+        cv2.line(image, ptLT1, ptLB1, colorHilight)
+        cv2.rectangle(image, ptLT2, ptRB2, colorFill, cv.CV_FILLED)
+
+        cv2.putText(image, text, ptText, cv.CV_FONT_HERSHEY_SIMPLEX, 0.4, colorText)
+        
+                
     def image_callback(self, rosimage):
         # Receive an image:
         try:
-            imgCamera = np.uint8(cv.GetMat(self.cvbridge.imgmsg_to_cv(rosimage, 'passthrough')))
+            self.imgCamera = np.uint8(cv.GetMat(self.cvbridge.imgmsg_to_cv(rosimage, 'passthrough')))
         except CvBridgeError, e:
             rospy.logwarn ('Exception converting background image from ROS to opencv:  %s' % e)
-            imgCamera = None
+            self.imgCamera = None
             
-        if (imgCamera is not None):
-            self.shapeImage = imgCamera.shape # (height,width)
-            imgOutput = cv2.cvtColor(imgCamera, cv.CV_GRAY2RGB)
+        if (self.imgCamera is not None):
+            # Background subtraction.
+            if (self.imgBackground is not None):
+                imgForeground = cv2.absdiff(self.imgCamera, self.imgBackground)
+            else:
+                imgForeground = self.imgCamera
+                
+                
+            self.shapeImage = self.imgCamera.shape # (height,width)
+            imgOutput = cv2.cvtColor(imgForeground, cv.CV_GRAY2RGB)
 
             if (not self.bInitWings):
                 self.create_masks()
@@ -552,14 +659,17 @@ class ImageDisplay:
             if self.wing_l.get_hinge() is not None:
                 self.wing_l.draw(imgOutput)
             
+            self.draw_ui(imgOutput)
+            
+            
             if not self.bSettingControls:
                 # calculate wing beat analyzer stats
-                self.wing_r.updateIntensities(imgCamera)
+                self.wing_r.updateIntensities(imgForeground)
                 self.wing_r.calc_wing_edges()
                 self.wing_r.publish_wing_contrast()
                 self.wing_r.publish_wing_edges()
                 
-                self.wing_l.updateIntensities(imgCamera)
+                self.wing_l.updateIntensities(imgForeground)
                 self.wing_l.calc_wing_edges()
                 self.wing_l.publish_wing_contrast()
                 self.wing_l.publish_wing_edges()
@@ -614,20 +724,35 @@ class ImageDisplay:
             cv2.waitKey(1)
 
 
+    # save_background()
+    # Save the current camera image as the background.
+    #
+    def save_background(self):
+        self.imgBackground = self.imgCamera
+        rospy.logwarn ('Saving new background image %s' % self.filenameBackground)
+        cv2.imwrite(self.filenameBackground, self.imgBackground)
+    
+    
     # hit_test()
     # Get the name of the nearest control point to the mouse point.
     # ptMouse    = [x,y]
     #
     def hit_test(self, ptMouse):
-        names = self.controlpts.keys()
-        pts = np.array(self.controlpts.values())
-
-        dx = np.subtract.outer(ptMouse[0], pts[:,0])
-        dy = np.subtract.outer(ptMouse[1], pts[:,1])
-        d = np.hypot(dx, dy)
-        controlname = names[np.argmin(d)]
+        # Check for button press.
+        if (self.ui.btnBg.rect[0] <= ptMouse[0] <= self.ui.btnBg.rect[0]+self.ui.btnBg.rect[2]) and (self.ui.btnBg.rect[1] <= ptMouse[1] <= self.ui.btnBg.rect[1]+self.ui.btnBg.rect[3]):
+            nameNearest = 'btn_bg'
+        elif (self.ui.btnExit.rect[0] <= ptMouse[0] <= self.ui.btnExit.rect[0]+self.ui.btnExit.rect[2]) and (self.ui.btnExit.rect[1] <= ptMouse[1] <= self.ui.btnExit.rect[1]+self.ui.btnExit.rect[3]):
+            nameNearest = 'btn_exit'
+        else: # Find the nearest control point.
+            names = self.controlpts.keys()
+            pts = np.array(self.controlpts.values())
+    
+            dx = np.subtract.outer(ptMouse[0], pts[:,0])
+            dy = np.subtract.outer(ptMouse[1], pts[:,1])
+            d = np.hypot(dx, dy)
+            nameNearest = names[np.argmin(d)]
         
-        return controlname
+        return nameNearest
         
         
     # update_control_points()
@@ -668,17 +793,41 @@ class ImageDisplay:
         return max(min(x,hi),lo)
     
 
+    # onMouse()
+    # Handle mouse events.
+    #
     def onMouse(self, event, x, y, flags, param):
         ptMouse = np.array([x, y])
 
-        # Keep track of the mouse button state.        
+        # Keep track of which UI element is selected.
         if (event==cv.CV_EVENT_LBUTTONDOWN):
             self.controlselected = self.hit_test(ptMouse)
-        if (event==cv.CV_EVENT_LBUTTONUP):
-            self.controlselected = None
-            self.create_masks()
-            rospy.set_param('strokelitude', self.params)
 
+        if (event==cv.CV_EVENT_LBUTTONUP):
+            if self.controlselected=='btn_bg':
+                # If the mouse is on the button at mouseup, then do the action.
+                if (self.hit_test(ptMouse)=='btn_bg'): 
+                    self.pubCommand.publish('save_background')
+            elif self.controlselected=='btn_exit':
+                # If the mouse is on the button at mouseup, then do the action.
+                if (self.hit_test(ptMouse)=='btn_exit'): 
+                    self.pubCommand.publish('exit')
+            else:
+                self.create_masks()
+                rospy.set_param('strokelitude', self.params)
+                
+            self.controlselected = None
+
+
+        if (self.controlselected=='btn_bg'):
+            self.ui.btnBg.state = 'down'
+        else:
+            self.ui.btnBg.state = 'up'
+
+        if (self.controlselected=='btn_exit'):
+            self.ui.btnExit.state = 'down'
+        else:
+            self.ui.btnExit.state = 'up'
 
 
         # When the left button is down, adjust the control points.
