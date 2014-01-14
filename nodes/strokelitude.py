@@ -50,7 +50,7 @@ class Wing(object):
         self.imgTest               = None
         self.imgMasks              = None
         self.ravelMask             = None
-        self.ravelAngleInBodyFrame = None
+        self.ravel_angle_b = None
 
         self.bins                  = None
         self.intensities           = None
@@ -87,27 +87,27 @@ class Wing(object):
         self.set_params(params)
 
         # services, for live histograms
-        name                = 'wing_histogram_' + side
-        self.service_histogram  = rospy.Service(name, float32list, self.serve_histogram)
-        name                = 'wing_bins_' + side
-        self.service_bins       = rospy.Service(name, float32list, self.serve_bins)
-        name                = 'wing_edges_' + side
-        self.service_edges       = rospy.Service(name, float32list, self.serve_edges)
+        name                   = 'wing_histogram_' + side
+        self.service_histogram = rospy.Service(name, float32list, self.serve_histogram)
+        name                   = 'wing_bins_' + side
+        self.service_bins      = rospy.Service(name, float32list, self.serve_bins)
+        name                   = 'wing_edges_' + side
+        self.service_edges     = rospy.Service(name, float32list, self.serve_edges)
         
         
         # publishers
-        name                = 'strokelitude/wba/' + self.side + '/sum'
-        self.pubWingSum           = rospy.Publisher(name, Float32)
-        name                = 'strokelitude/wba/' + self.side + '/contrast'
-        self.pubWingContrast      = rospy.Publisher(name, Float32)
-        name                = 'strokelitude/wba/' + self.side + '/amplitude'
-        self.pubWingAmp           = rospy.Publisher(name, Float32)
-        name                = 'strokelitude/wba/' + self.side + '/mean_stroke_angle'
-        self.pubWingMsa           = rospy.Publisher(name, Float32)
-        name                = 'strokelitude/wba/' + self.side + '/leading_edge'
-        self.pubWingLeading       = rospy.Publisher(name, Float32)
-        name                = 'strokelitude/wba/' + self.side + '/trailing_edge'
-        self.pubWingTrailing      = rospy.Publisher(name, Float32)
+        name                 = 'strokelitude/' + self.side + '/sum'
+        self.pubWingSum      = rospy.Publisher(name, Float32)
+        name                 = 'strokelitude/' + self.side + '/contrast'
+        self.pubWingContrast = rospy.Publisher(name, Float32)
+        name                 = 'strokelitude/' + self.side + '/amplitude'
+        self.pubWingAmp      = rospy.Publisher(name, Float32)
+        name                 = 'strokelitude/' + self.side + '/mean_stroke_angle'
+        self.pubWingMsa      = rospy.Publisher(name, Float32)
+        name                 = 'strokelitude/' + self.side + '/leading_edge'
+        self.pubWingLeading  = rospy.Publisher(name, Float32)
+        name                 = 'strokelitude/' + self.side + '/trailing_edge'
+        self.pubWingTrailing = rospy.Publisher(name, Float32)
         
     
     # get_angles_i_from_b()
@@ -216,53 +216,37 @@ class Wing(object):
     # The slow way.  But it give nice smooth pixels.                        
     def create_angle_mask1(self, shape):
         # Calculate the angle at each pixel.
-        self.imgAngleInBodyFrame = np.zeros(shape)
+        self.img_angle_b = np.zeros(shape)
         for y in range(shape[0]):
             for x in range(shape[1]):
                 angle_i = get_angle_from_points(self.ptHinge, (x,y))
                 angle_b  = self.transform_angle_b_from_i(angle_i)
 
-                self.imgAngleInBodyFrame[y,x] = angle_b
+                self.img_angle_b[y,x] = angle_b
         
-        self.imgAngleInBodyFrame = (self.imgAngleInBodyFrame+180) % 360 - 180
-        self.ravelAngleInBodyFrame = np.ravel(self.imgAngleInBodyFrame)
-#        rospy.logwarn('%s: angles on range [%s, %s]' % (self.side, self.imgAngleInBodyFrame.min(), self.imgAngleInBodyFrame.max()))
+        self.img_angle_b = (self.img_angle_b+180) % 360 - 180
+        self.ravel_angle_b = np.ravel(self.img_angle_b)
+#        rospy.logwarn('%s: angles on range [%s, %s]' % (self.side, self.img_angle_b.min(), self.img_angle_b.max()))
                    
 
     # create_angle_mask2()
     # Create an image where each pixel value is the angle from the hinge.                    
-    # The fast way.  But the ellipse drawing has glitches when the ellipse is partially offscreen left or right.
+    # The fast way.
     def create_angle_mask2(self, shape):
-        (angle_lo_i, angle_hi_i) = self.get_angles_i_from_b(self.params[self.side]['angle_lo'], self.params[self.side]['angle_hi'])
-        degPerBin = (angle_hi_i-angle_lo_i)/self.params['nbins']
+        # Set up matrices of x and y coordinates.
+        x = np.tile(np.array([range(shape[1])])   - self.ptHinge[0], (shape[0], 1))
+        y = np.tile(np.array([range(shape[0])]).T - self.ptHinge[1], (1, shape[1]))
         
-        angle_i = angle_lo_i
-        self.imgAngleInBodyFrame = np.zeros(shape)
+        # Calc their angles.
+        angle_i = np.rad2deg(np.arctan2(y,x))
+        self.img_angle_b  = self.transform_angle_b_from_i(angle_i)
 
-        # Draw a wedge for each bin.
-        for k in range(self.params['nbins']):
-            cv2.ellipse(self.imgAngleInBodyFrame,
-                        tuple(self.ptHinge),
-                        (self.params[self.side]['radius_outer'], self.params[self.side]['radius_outer']),
-                        0,
-                        angle_i,
-                        angle_i+degPerBin,
-                        float(self.transform_angle_b_from_i(angle_i)), 
-                        cv.CV_FILLED)
-            cv2.ellipse(self.imgAngleInBodyFrame,
-                        tuple(self.ptHinge),
-                        (self.params[self.side]['radius_inner'], self.params[self.side]['radius_inner']),
-                        0,
-                        angle_i-10,
-                        angle_i+degPerBin+10,
-                        0, 
-                        cv.CV_FILLED)
+        self.ravel_angle_b = np.ravel(self.img_angle_b)
+                   
 
-            angle_i += degPerBin
-            
-        self.ravelAngleInBodyFrame = np.ravel(self.imgAngleInBodyFrame)
-
-        
+    # create_stroke_mask()
+    # Create a mask of valid wingstroke areas.
+    #
     def create_stroke_mask(self, shape):
         # Create the wing mask.
         self.imgMask = np.zeros(shape)
@@ -297,13 +281,13 @@ class Wing(object):
         self.intensities = np.zeros(len(self.bins))
 
         # Put each pixel into an appropriate bin.            
-        for iPixel, angle in enumerate(self.ravelAngleInBodyFrame):
+        for iPixel, angle in enumerate(self.ravel_angle_b):
             if self.ravelMask[iPixel]:
                 iBest = np.argmin(np.abs(self.bins - angle))
                 self.pixels[iBest].append(iPixel)
                 
-        self.imgTest = self.imgAngleInBodyFrame #- np.min(self.imgAngleInBodyFrame)
-        #self.imgTest /= np.max(self.imgAngleInBodyFrame)
+        self.imgTest = self.img_angle_b #- np.min(self.img_angle_b)
+        #self.imgTest /= np.max(self.img_angle_b)
                 
     '''   
     def publish_wing_sum(self):
@@ -337,11 +321,11 @@ class Wing(object):
             self.intensitiesValid = self.intensities[iValid]
 
                         
-    # calc_wing_edges()
+    # calc_edge_stats()
     # Calculate the leading and trailing edge angles,
     # and the amplitude & mean stroke angle.
     #                       
-    def calc_wing_edges(self):                
+    def calc_edge_stats(self):                
         if self.intensities is not None:
             self.angleLeadingEdge = None
             self.angleTrailingEdge = None
@@ -350,38 +334,51 @@ class Wing(object):
             
             if self.bFlying:
                 if (len(self.intensitiesValid)>1):
-                    (angle, threshold) = self.get_threshold()
-                    iEdges = np.where(self.intensitiesValid < threshold)[0]
-                    
-#                     if (self.side=='right'):
-#                         rospy.logwarn('threshold = %s, %s' % (angle, threshold))
-                    
-                    if (len(iEdges)>0):
-                        iLeading = iEdges[0]
-                        iTrailing = iEdges[-1]
-                
-                        self.angleLeadingEdge = float(self.binsValid[iLeading])
-                        self.angleTrailingEdge = float(self.binsValid[iTrailing])
-                
-                        self.amp = np.abs(self.angleLeadingEdge - self.angleTrailingEdge)
-                        self.msa = np.mean([self.angleLeadingEdge, self.angleTrailingEdge])
+                    (self.angleLeadingEdge, self.angleTrailingEdge) = self.get_edges()
+
+                    self.amp = np.abs(self.angleLeadingEdge - self.angleTrailingEdge)
+                    self.msa = np.mean([self.angleLeadingEdge, self.angleTrailingEdge])
             
             else: # not flying
                 self.angleLeadingEdge = -180.
                 self.angleTrailingEdge = -180.
-                self.amp = 0
-                self.msa = 0
+                self.amp = 0.
+                self.msa = 0.
 
 
-    # get_threshold()
-    # Calculate and return the best pixel intensity threshold to use for wing angle detection.
-    #                    
-    def get_threshold(self):
-        iMin = np.argmax(np.diff(self.intensitiesValid))
-        threshold = self.intensitiesValid[iMin]
-        angle = self.binsValid[iMin]
+    def filter_median(self, data):
+        data2 = copy.copy(data)
+        q = 1
+        for i in range(q,len(data)-q):
+            data2[i] = np.median(data[i-q:i+q]) # Median filter of window.
+
+        return data2
         
-        return (angle, threshold)
+        
+    # get_edges()
+    # Get the angles of the two wing edges.
+    #                    
+    def get_edges(self):
+        intensities = self.intensitiesValid
+        diff = self.filter_median(np.diff(intensities))
+            
+        iPeak = np.argmax(intensities)
+        iMax = np.argmax(diff)
+        iMin = np.argmin(diff)
+        (iMajor,iMinor) = (iMax,iMin) if (np.abs(diff[iMax]) > np.abs(diff[iMin])) else (iMin,iMax) # Major and minor edges.
+
+        iEdge1 = iMajor
+        
+        # The minor edge must be at least 3/4 the strength of the major edge to be used, else use the end of the array.
+        if (3*np.abs(diff[iMajor])/4 < np.abs(diff[iMinor])):
+            iEdge2 = iMinor
+        else:
+            iEdge2 = -1
+        
+        angle1 = float(self.binsValid[iEdge1])
+        angle2 = float(self.binsValid[iEdge2])
+        
+        return (angle1, angle2)
         
 
     def publish_wing_contrast(self):
@@ -411,13 +408,94 @@ class Wing(object):
     def serve_histogram(self, request):
         if self.intensitiesValid is not None:
             #return float32listResponse(self.intensities)
-            return float32listResponse(np.diff(self.intensitiesValid))
+            #return float32listResponse(np.diff(self.intensitiesValid))
+            return float32listResponse(self.filter_median(np.diff(self.intensitiesValid)))
+        
             
     def serve_edges(self, request):
         if self.angleTrailingEdge is not None:            
             return float32listResponse([self.angleTrailingEdge, self.angleLeadingEdge])
             
             
+            
+class button:
+    def __init__(self, name=None, rect=(0,0,0,0)):
+        self.name = name
+        self.rect = rect
+        self.state = 'up'
+
+        self.colorWhite = cv.Scalar(255,255,255,0)
+        self.colorBlack = cv.Scalar(0,0,0,0)
+        self.colorBtn = cv.Scalar(128,128,128,0)
+        self.colorHilight = cv.Scalar(192,192,192,0)
+        self.colorLolight = cv.Scalar(64,64,64,0)
+        self.colorText = cv.Scalar(255,255,255,0)
+
+        self.ptLT = (self.rect[0],                 self.rect[1])
+        self.ptRT = (self.rect[0]+self.rect[2],    self.rect[1])
+        self.ptLB = (self.rect[0],                 self.rect[1]+self.rect[3])
+        self.ptRB = (self.rect[0]+self.rect[2],    self.rect[1]+self.rect[3])
+
+        self.ptLT0 = (self.rect[0]-1,              self.rect[1]-1)
+        self.ptRT0 = (self.rect[0]+self.rect[2]+1, self.rect[1]-1)
+        self.ptLB0 = (self.rect[0]-1,              self.rect[1]+self.rect[3]+1)
+        self.ptRB0 = (self.rect[0]+self.rect[2]+1, self.rect[1]+self.rect[3]+1)
+
+        self.ptLT1 = (self.rect[0]+1,              self.rect[1]+1)
+        self.ptRT1 = (self.rect[0]+self.rect[2]-1, self.rect[1]+1)
+        self.ptLB1 = (self.rect[0]+1,              self.rect[1]+self.rect[3]-1)
+        self.ptRB1 = (self.rect[0]+self.rect[2]-1, self.rect[1]+self.rect[3]-1)
+
+        self.ptLT2 = (self.rect[0]+2,              self.rect[1]+2)
+        self.ptRT2 = (self.rect[0]+self.rect[2]-2, self.rect[1]+2)
+        self.ptLB2 = (self.rect[0]+2,              self.rect[1]+self.rect[3]-2)
+        self.ptRB2 = (self.rect[0]+self.rect[2]-2, self.rect[1]+self.rect[3]-2)
+        
+        (sizeText,rv) = cv2.getTextSize(self.name, cv.CV_FONT_HERSHEY_SIMPLEX, 0.4, 1)
+        self.ptText0 = (int(self.rect[0]+self.rect[2]/2-sizeText[0]/2), int(self.rect[1]+self.rect[3]/2+sizeText[1]/2))
+        
+
+    def hit_test(self, ptMouse):
+        if (self.rect[0] <= ptMouse[0] <= self.rect[0]+self.rect[2]) and (self.rect[1] <= ptMouse[1] <= self.rect[1]+self.rect[3]):
+            return True
+        else:
+            return False
+        
+        
+    # draw_button()
+    # Draw a 3D shaded button with text.
+    # rect is (left, top, width, height), increasing y goes down.
+    def draw(self, image):
+
+        if (self.state=='up'):
+            colorOuter = self.colorWhite
+            colorInner = self.colorBlack
+            colorHilight = self.colorHilight
+            colorLolight = self.colorLolight
+            colorFill = self.colorBtn
+            colorText = self.colorText
+            ptText = (self.ptText0[0], self.ptText0[1])
+        else:
+            colorOuter = self.colorWhite
+            colorInner = self.colorBlack
+            colorHilight = self.colorLolight
+            colorLolight = self.colorHilight
+            colorFill = self.colorBtn
+            colorText = self.colorText
+            ptText = (self.ptText0[0]+2, self.ptText0[1]+2)
+            
+        cv2.rectangle(image, self.ptLT0, self.ptRB0, colorOuter, 1)
+        cv2.rectangle(image, self.ptLT, self.ptRB, colorInner, 1)
+        cv2.line(image, self.ptRT1, self.ptRB1, colorLolight)
+        cv2.line(image, self.ptLB1, self.ptRB1, colorLolight)
+        cv2.line(image, self.ptLT1, self.ptRT1, colorHilight)
+        cv2.line(image, self.ptLT1, self.ptLB1, colorHilight)
+        cv2.rectangle(image, self.ptLT2, self.ptRB2, colorFill, cv.CV_FILLED)
+
+        cv2.putText(image, self.name, ptText, cv.CV_FONT_HERSHEY_SIMPLEX, 0.4, colorText)
+        
+                
+    
             
 ###############################################################
 class ImageDisplay:
@@ -470,18 +548,19 @@ class ImageDisplay:
         self.wing_l                 = Wing('left', self.params)
         self.bInitWings = False
         self.bSettingControls= False
-
+        self.bConstrainMaskToImage = False
+        
         self.controlselected = None
         self.controlpts = {}
         self.update_control_points()
 
         # publishers
-        self.pubWingLeftMinusRight = rospy.Publisher('strokelitude/wba/LeftMinusRight', Float32)
-        self.pubWingLeftPlusRight  = rospy.Publisher('strokelitude/wba/LeftPlusRight', Float32)
-        self.pubFlightStatus       = rospy.Publisher('strokelitude/wba/flight_status', Float32)
-        self.pubMask               = rospy.Publisher('strokelitude/wba/image_mask', Image)
-        self.pubTestR              = rospy.Publisher('strokelitude/wba/image_test_r', Image)
-        self.pubTestL              = rospy.Publisher('strokelitude/wba/image_test_l', Image)
+        self.pubWingLeftMinusRight = rospy.Publisher('strokelitude/LeftMinusRight', Float32)
+        self.pubWingLeftPlusRight  = rospy.Publisher('strokelitude/LeftPlusRight', Float32)
+        self.pubFlightStatus       = rospy.Publisher('strokelitude/flight_status', Float32)
+        self.pubMask               = rospy.Publisher('strokelitude/image_mask', Image)
+        self.pubTestR              = rospy.Publisher('strokelitude/image_test_r', Image)
+        self.pubTestL              = rospy.Publisher('strokelitude/image_test_l', Image)
         self.pubCommand            = rospy.Publisher('strokelitude/command', String)
 
         # subscribe.        
@@ -489,22 +568,14 @@ class ImageDisplay:
         self.subCommand            = rospy.Subscriber('strokelitude/command', String, self.command_callback)
 
 
-        self.ui = self.struct()
-        self.ui.colorWhite = cv.Scalar(255,255,255,0)
-        self.ui.colorBlack = cv.Scalar(0,0,0,0)
-        self.ui.colorHilight = cv.Scalar(192,192,192,0)
-        self.ui.colorBtn = cv.Scalar(128,128,0,0)
-        self.ui.colorText = cv.Scalar(255,255,255,0)
-
-        self.ui.btnExit = self.struct()
-        self.ui.btnExit.rect = (10, 10, 40, 20)
-        self.ui.btnExit.state = 'up'
-        self.ui.btnExit.text = 'exit'
-
-        self.ui.btnBg = self.struct()
-        self.ui.btnBg.rect = (50, 10, 30, 20)
-        self.ui.btnBg.state = 'up'
-        self.ui.btnBg.text = 'bg'
+        # UI button specs.
+        self.buttons = []
+        self.buttons.append(button(name='exit', 
+                                   rect=(10, 10, 40, 20) # (l,t,w,h)
+                                   ))
+        self.buttons.append(button(name='save bg', 
+                                   rect=(52, 10, 75, 20) # (l,t,w,h)
+                                   ))
 
         # user callbacks
         cv.SetMouseCallback(self.display_name, self.onMouse, param=None)
@@ -559,69 +630,20 @@ class ImageDisplay:
     def create_masks(self):
         rospy.logwarn('Creating wing masks...')
         self.wing_r.create_stroke_mask(self.shapeImage)
-        self.wing_r.create_angle_mask1(self.shapeImage)
+        self.wing_r.create_angle_mask2(self.shapeImage)
         self.wing_r.assign_pixels_to_bins()
         self.wing_l.create_stroke_mask(self.shapeImage)
-        self.wing_l.create_angle_mask1(self.shapeImage)
+        self.wing_l.create_angle_mask2(self.shapeImage)
         self.wing_l.assign_pixels_to_bins()
         rospy.logwarn('Creating wing masks... done.')
 
 
     # Draw user-interface elements on the image.
     def draw_ui(self, image):
-        self.draw_button(image, self.ui.btnBg.rect,   self.ui.btnBg.text,   self.ui.btnBg.state)
-        self.draw_button(image, self.ui.btnExit.rect, self.ui.btnExit.text, self.ui.btnExit.state)
+        for i in range(len(self.buttons)):
+            self.buttons[i].draw(image)
         
     
-    # draw_button()
-    # Draw a 3D shaded button with text.
-    # rect is (left, top, width, height), increasing y goes down.
-    def draw_button(self, image, rect, text, state='up'):
-        ptLT = (rect[0],         rect[1])
-        ptRT = (rect[0]+rect[2], rect[1])
-        ptLB = (rect[0],         rect[1]+rect[3])
-        ptRB = (rect[0]+rect[2], rect[1]+rect[3])
-
-        ptLT0 = (rect[0]-1,         rect[1]-1)
-        ptRT0 = (rect[0]+rect[2]+1, rect[1]-1)
-        ptLB0 = (rect[0]-1,         rect[1]+rect[3]+1)
-        ptRB0 = (rect[0]+rect[2]+1, rect[1]+rect[3]+1)
-
-        ptLT1 = (rect[0]+1,         rect[1]+1)
-        ptRT1 = (rect[0]+rect[2]-1, rect[1]+1)
-        ptLB1 = (rect[0]+1,         rect[1]+rect[3]-1)
-        ptRB1 = (rect[0]+rect[2]-1, rect[1]+rect[3]-1)
-
-        ptLT2 = (rect[0]+2,         rect[1]+2)
-        ptRT2 = (rect[0]+rect[2]-1, rect[1]+2)
-        ptLB2 = (rect[0]+2,         rect[1]+rect[3]-1)
-        ptRB2 = (rect[0]+rect[2]-1, rect[1]+rect[3]-1)
-
-
-        if (state=='up'):
-            colorOuter = self.ui.colorWhite
-            colorInner = self.ui.colorBlack
-            colorHilight = self.ui.colorHilight
-            colorFill = self.ui.colorBtn
-            colorText = self.ui.colorText
-            ptText = (int(rect[0]+rect[2]/4), int(rect[1]+3*rect[3]/4))
-        else:
-            colorOuter = self.ui.colorWhite
-            colorInner = self.ui.colorBlack
-            colorHilight = self.ui.colorBlack
-            colorFill = self.ui.colorBtn
-            colorText = self.ui.colorText
-            ptText = (int(rect[0]+rect[2]/4+2), int(rect[1]+3*rect[3]/4+2))
-            
-        cv2.rectangle(image, ptLT0, ptRB0, colorOuter, 1)
-        cv2.rectangle(image, ptLT, ptRB, colorInner, 1)
-        cv2.line(image, ptLT1, ptRT1, colorHilight)
-        cv2.line(image, ptLT1, ptLB1, colorHilight)
-        cv2.rectangle(image, ptLT2, ptRB2, colorFill, cv.CV_FILLED)
-
-        cv2.putText(image, text, ptText, cv.CV_FONT_HERSHEY_SIMPLEX, 0.4, colorText)
-        
-                
     def image_callback(self, rosimage):
         # Receive an image:
         try:
@@ -665,12 +687,12 @@ class ImageDisplay:
             if not self.bSettingControls:
                 # calculate wing beat analyzer stats
                 self.wing_r.updateIntensities(imgForeground)
-                self.wing_r.calc_wing_edges()
+                self.wing_r.calc_edge_stats()
                 self.wing_r.publish_wing_contrast()
                 self.wing_r.publish_wing_edges()
                 
                 self.wing_l.updateIntensities(imgForeground)
-                self.wing_l.calc_wing_edges()
+                self.wing_l.calc_edge_stats()
                 self.wing_l.publish_wing_contrast()
                 self.wing_l.publish_wing_edges()
                 
@@ -739,10 +761,13 @@ class ImageDisplay:
     #
     def hit_test(self, ptMouse):
         # Check for button press.
-        if (self.ui.btnBg.rect[0] <= ptMouse[0] <= self.ui.btnBg.rect[0]+self.ui.btnBg.rect[2]) and (self.ui.btnBg.rect[1] <= ptMouse[1] <= self.ui.btnBg.rect[1]+self.ui.btnBg.rect[3]):
-            nameNearest = 'btn_bg'
-        elif (self.ui.btnExit.rect[0] <= ptMouse[0] <= self.ui.btnExit.rect[0]+self.ui.btnExit.rect[2]) and (self.ui.btnExit.rect[1] <= ptMouse[1] <= self.ui.btnExit.rect[1]+self.ui.btnExit.rect[3]):
-            nameNearest = 'btn_exit'
+        iPressed = None
+        for iButton in range(len(self.buttons)):
+            if (self.buttons[iButton].hit_test(ptMouse)):
+                iPressed = iButton
+            
+        if (iPressed is not None):
+            nameNearest = self.buttons[iPressed].name
         else: # Find the nearest control point.
             names = self.controlpts.keys()
             pts = np.array(self.controlpts.values())
@@ -804,13 +829,13 @@ class ImageDisplay:
             self.controlselected = self.hit_test(ptMouse)
 
         if (event==cv.CV_EVENT_LBUTTONUP):
-            if self.controlselected=='btn_bg':
+            if self.controlselected=='save bg':
                 # If the mouse is on the button at mouseup, then do the action.
-                if (self.hit_test(ptMouse)=='btn_bg'): 
+                if (self.hit_test(ptMouse)=='save bg'): 
                     self.pubCommand.publish('save_background')
-            elif self.controlselected=='btn_exit':
+            elif self.controlselected=='exit':
                 # If the mouse is on the button at mouseup, then do the action.
-                if (self.hit_test(ptMouse)=='btn_exit'): 
+                if (self.hit_test(ptMouse)=='exit'): 
                     self.pubCommand.publish('exit')
             else:
                 self.create_masks()
@@ -819,15 +844,12 @@ class ImageDisplay:
             self.controlselected = None
 
 
-        if (self.controlselected=='btn_bg'):
-            self.ui.btnBg.state = 'down'
-        else:
-            self.ui.btnBg.state = 'up'
+        for iButton in range(len(self.buttons)):
+            if (self.controlselected==self.buttons[iButton].name):
+                self.buttons[iButton].state = 'down'
+            else:
+                self.buttons[iButton].state = 'up'
 
-        if (self.controlselected=='btn_exit'):
-            self.ui.btnExit.state = 'down'
-        else:
-            self.ui.btnExit.state = 'up'
 
 
         # When the left button is down, adjust the control points.
@@ -836,48 +858,68 @@ class ImageDisplay:
             
             # Set the new point.             
             if (self.controlselected=='hinge_l'): # Left hinge point.
-                self.params['left']['hinge']['x'] = int(self.clip(ptMouse[0], 0+self.params['left']['radius_outer'], self.shapeImage[1]-self.params['left']['radius_outer'])) # Keep the mask onscreen left & right.
+                if (self.bConstrainMaskToImage):
+                    self.params['left']['hinge']['x'] = int(self.clip(ptMouse[0], 0+self.params['left']['radius_outer'], self.shapeImage[1]-self.params['left']['radius_outer'])) # Keep the mask onscreen left & right.
+                else:
+                    self.params['left']['hinge']['x'] = int(ptMouse[0])
                 self.params['left']['hinge']['y'] = int(ptMouse[1])
 
+
             elif (self.controlselected=='hinge_r'): # Right hinge point.
-                self.params['right']['hinge']['x'] = int(self.clip(ptMouse[0], 0+self.params['right']['radius_outer'], self.shapeImage[1]-self.params['right']['radius_outer'])) # Keep the mask onscreen left & right.
+                if (self.bConstrainMaskToImage):
+                    self.params['right']['hinge']['x'] = int(self.clip(ptMouse[0], 0+self.params['right']['radius_outer'], self.shapeImage[1]-self.params['right']['radius_outer'])) # Keep the mask onscreen left & right.
+                else:
+                    self.params['right']['hinge']['x'] = int(ptMouse[0])
                 self.params['right']['hinge']['y'] = int(ptMouse[1])
+
         
             elif (self.controlselected=='hi_l'): # Left high angle.
                 pt = ptMouse - self.wing_l.get_hinge()
                 self.params['left']['angle_hi'] = int(self.wing_l.transform_angle_b_from_i(np.rad2deg(np.arctan2(pt[1], pt[0]))))
-                #radius = int(max(self.wing_l.params['left']['radius_inner']+2, int(np.linalg.norm(self.wing_l.get_hinge() - ptMouse)))) # Outer radius > inner radius.
-                self.params['left']['radius_outer'] = int(self.clip(np.linalg.norm(self.wing_l.get_hinge() - ptMouse), 
-                                                                    self.wing_l.params['left']['radius_inner']+2,               # Outer radius > inner radius.
-                                                                    min(self.shapeImage[1]-self.params['left']['hinge']['x'],   # Outer radius < right edge
-                                                                        0+self.params['left']['hinge']['x'])))                  # Outer radius > left edge
+                if (self.bConstrainMaskToImage):
+                    self.params['left']['radius_outer'] = int(self.clip(np.linalg.norm(self.wing_l.get_hinge() - ptMouse), 
+                                                                        self.wing_l.params['left']['radius_inner']+2,               # Outer radius > inner radius.
+                                                                        min(self.shapeImage[1]-self.params['left']['hinge']['x'],   # Outer radius < right edge
+                                                                            0+self.params['left']['hinge']['x'])))                  # Outer radius > left edge
+                else:
+                    self.params['left']['radius_outer'] = int(max(self.wing_l.params['left']['radius_inner']+2, int(np.linalg.norm(self.wing_l.get_hinge() - ptMouse)))) # Outer radius > inner radius.
+                  
                   
             elif (self.controlselected=='hi_r'): # Right high angle.
                 pt = ptMouse - self.wing_r.get_hinge()
                 self.params['right']['angle_hi'] = int(self.wing_r.transform_angle_b_from_i(np.rad2deg(np.arctan2(pt[1], pt[0]))))
-                #self.params['right']['radius_outer'] = int(max(self.wing_r.params['right']['radius_inner']+2, int(np.linalg.norm(self.wing_r.get_hinge() - ptMouse))))
-                self.params['right']['radius_outer'] = int(self.clip(np.linalg.norm(self.wing_r.get_hinge() - ptMouse), 
-                                                                    self.wing_l.params['right']['radius_inner']+2,               # Outer radius > inner radius.
-                                                                    min(self.shapeImage[1]-self.params['right']['hinge']['x'],   # Outer radius < right edge
-                                                                        0+self.params['right']['hinge']['x'])))                  # Outer radius > left edge
+                if (self.bConstrainMaskToImage):
+                    self.params['right']['radius_outer'] = int(self.clip(np.linalg.norm(self.wing_r.get_hinge() - ptMouse), 
+                                                                        self.wing_l.params['right']['radius_inner']+2,               # Outer radius > inner radius.
+                                                                        min(self.shapeImage[1]-self.params['right']['hinge']['x'],   # Outer radius < right edge
+                                                                            0+self.params['right']['hinge']['x'])))                  # Outer radius > left edge
+                else:
+                    self.params['right']['radius_outer'] = int(max(self.wing_r.params['right']['radius_inner']+2, int(np.linalg.norm(self.wing_r.get_hinge() - ptMouse))))
+                  
                   
             elif (self.controlselected=='lo_l'): # Left low angle.
                 pt = ptMouse - self.wing_l.get_hinge()
                 self.params['left']['angle_lo'] = int(self.wing_l.transform_angle_b_from_i(np.rad2deg(np.arctan2(pt[1], pt[0]))))
-                #self.params['left']['radius_outer'] = int(max(self.wing_l.params['left']['radius_inner']+2, int(np.linalg.norm(self.wing_l.get_hinge() - ptMouse))))
-                self.params['left']['radius_outer'] = int(self.clip(np.linalg.norm(self.wing_l.get_hinge() - ptMouse), 
-                                                                    self.wing_l.params['left']['radius_inner']+2,               # Outer radius > inner radius.
-                                                                    min(self.shapeImage[1]-self.params['left']['hinge']['x'],   # Outer radius < right edge
-                                                                        0+self.params['left']['hinge']['x'])))                  # Outer radius > left edge
+                if (self.bConstrainMaskToImage):
+                    self.params['left']['radius_outer'] = int(self.clip(np.linalg.norm(self.wing_l.get_hinge() - ptMouse), 
+                                                                        self.wing_l.params['left']['radius_inner']+2,               # Outer radius > inner radius.
+                                                                        min(self.shapeImage[1]-self.params['left']['hinge']['x'],   # Outer radius < right edge
+                                                                            0+self.params['left']['hinge']['x'])))                  # Outer radius > left edge
+                else:
+                    self.params['left']['radius_outer'] = int(max(self.wing_l.params['left']['radius_inner']+2, int(np.linalg.norm(self.wing_l.get_hinge() - ptMouse))))
+                  
                   
             elif (self.controlselected=='lo_r'): # Right low angle.
                 pt = ptMouse - self.wing_r.get_hinge()
                 self.params['right']['angle_lo'] = int(self.wing_r.transform_angle_b_from_i(np.rad2deg(np.arctan2(pt[1], pt[0]))))
-                #self.params['right']['radius_outer'] = int(max(self.wing_r.params['right']['radius_inner']+2, int(np.linalg.norm(self.wing_r.get_hinge() - ptMouse))))
-                self.params['right']['radius_outer'] = int(self.clip(np.linalg.norm(self.wing_r.get_hinge() - ptMouse), 
-                                                                    self.wing_l.params['right']['radius_inner']+2,               # Outer radius > inner radius.
-                                                                    min(self.shapeImage[1]-self.params['right']['hinge']['x'],   # Outer radius < right edge
-                                                                        0+self.params['right']['hinge']['x'])))                  # Outer radius > left edge
+                if (self.bConstrainMaskToImage):
+                    self.params['right']['radius_outer'] = int(self.clip(np.linalg.norm(self.wing_r.get_hinge() - ptMouse), 
+                                                                        self.wing_l.params['right']['radius_inner']+2,               # Outer radius > inner radius.
+                                                                        min(self.shapeImage[1]-self.params['right']['hinge']['x'],   # Outer radius < right edge
+                                                                            0+self.params['right']['hinge']['x'])))                  # Outer radius > left edge
+                else:
+                    self.params['right']['radius_outer'] = int(max(self.wing_r.params['right']['radius_inner']+2, int(np.linalg.norm(self.wing_r.get_hinge() - ptMouse))))
+                  
                   
             elif (self.controlselected=='inner_l'): # Left inner radius.
                 self.params['left']['radius_inner'] = int(min(int(np.linalg.norm(self.wing_l.get_hinge() - ptMouse)), self.wing_l.params['left']['radius_outer']-2))

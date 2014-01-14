@@ -14,14 +14,14 @@
     <param name="right/hinge/x"             type="int"      value="415" />
     <param name="right/hinge/y"             type="int"      value="300" />
     <param name="right/radius_outer"        type="int"      value="200" />
-    <param name="right/radius_inner"        type="int"      value="100" />
+    <param name="right/radius_inner"        type="int"      value="135" />
     <param name="right/angle_hi"            type="int"      value="45" /> 
     <param name="right/angle_lo"            type="int"      value="-100" />
 
     <param name="left/hinge/x"              type="int"      value="324" />
     <param name="left/hinge/y"              type="int"      value="311" />
     <param name="left/radius_outer"         type="int"      value="200" />
-    <param name="left/radius_inner"         type="int"      value="100" />
+    <param name="left/radius_inner"         type="int"      value="135" />
     <param name="left/angle_hi"             type="int"      value="45" /> 
     <param name="left/angle_lo"             type="int"      value="-100" />
 
