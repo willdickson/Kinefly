@@ -5,10 +5,11 @@
 
 
     <param name="filenameBackground"        type="string"   value="~/strokelitude.png" />
+    <param name="image_topic"               type="string"   value="/camera/image_raw" />
+
     <param name="nbins"                     type="int"      value="361" />
-  
-    <param name="flight_threshold"          type="double"   value="0.05" />
-  
+    <param name="invert"                    type="bool"     value="false" />
+    <param name="flight_threshold"          type="double"   value="0.01" />
   
     <param name="right/hinge/x"             type="int"      value="415" />
     <param name="right/hinge/y"             type="int"      value="300" />

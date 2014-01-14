@@ -7,12 +7,18 @@
     <include file="$(find StrokelitudeROS)/launch/params_strokelitude.launch" ns="strokelitude" />
     <include file="$(find StrokelitudeROS)/launch/params_camera.launch"       ns="camera" />
 
-    <!-- 
+
+    <!-- Camera or Prerecorded.
     <include file="$(find StrokelitudeROS)/launch/camera.launch" />
     -->
     <node name="playbag" pkg="rosbag" type="play" args="--clock --delay=1 --loop --rate=1 /home/ssafarik/strokelitude_fly.bag" required="true" /> 
+
+
+    <!-- Viewers for test images. 
     <node name="view_test_r"        pkg="image_view"       type="image_view"  ns="camera"  args="image:=/strokelitude/image_test_r" />
     <node name="view_test_l"        pkg="image_view"       type="image_view"  ns="camera"  args="image:=/strokelitude/image_test_l" />
+    -->
+
     
     <node name="strokelitude"       pkg="StrokelitudeROS"  type="strokelitude.py" required="true"      />
     

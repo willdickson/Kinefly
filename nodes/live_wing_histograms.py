@@ -64,16 +64,16 @@ class Live_Plotter:
         
         self.line_right, = plt.plot(self.bins_right, data_right, '.', color=colorRight)
         self.line_left, = plt.plot(self.bins_left, data_left, '.', color=colorLeft)
-        self.line_lo, = plt.plot([self.limits_right[0], self.limits_right[0]], [0,.1], color='black', linewidth=2)
-        self.line_hi, = plt.plot([self.limits_right[1], self.limits_right[1]], [0,.1], color='black', linewidth=2)
+        self.line_lo, = plt.plot([self.limits_right[0], self.limits_right[0]], [0,1], color='black', linewidth=2)
+        self.line_hi, = plt.plot([self.limits_right[1], self.limits_right[1]], [0,1], color='black', linewidth=2)
         
-        self.line_trailing_right, = plt.plot([self.edges_right[0], self.edges_right[0]], [0,.1], color=colorRight, linewidth=2)
-        self.line_leading_right, = plt.plot([self.edges_right[1], self.edges_right[1]], [0,.1], color=colorRight, linewidth=2)
+        self.line_trailing_right, = plt.plot([self.edges_right[0], self.edges_right[0]], [0,1], color=colorRight, linewidth=2)
+        self.line_leading_right, = plt.plot([self.edges_right[1], self.edges_right[1]], [0,1], color=colorRight, linewidth=2)
         
-        self.line_trailing_left, = plt.plot([self.edges_left[0], self.edges_right[0]], [0,.1], color=colorLeft, linewidth=2)
-        self.line_leading_left, = plt.plot([self.edges_left[1], self.edges_left[1]], [0,.1], color=colorLeft, linewidth=2)
+        self.line_trailing_left, = plt.plot([self.edges_left[0], self.edges_right[0]], [0,1], color=colorLeft, linewidth=2)
+        self.line_leading_left, = plt.plot([self.edges_left[1], self.edges_left[1]], [0,1], color=colorLeft, linewidth=2)
         
-        plt.ylim(0, 0.2)
+        plt.ylim(0, 1)
         #plt.autoscale(True)
                 
         self.image_animation = animation.FuncAnimation(self.fig, self.update_line, self.bins_right, init_func=self.init_plot, interval=50, blit=True)
@@ -101,14 +101,14 @@ class Live_Plotter:
                 self.line_right.set_data(self.bins_right, data_right)
             if data_left is not None:
                 self.line_left.set_data(self.bins_left, data_left)
-            self.line_lo.set_data([self.limits_right[0], self.limits_right[0]], [0,0.1])
-            self.line_hi.set_data([self.limits_right[1], self.limits_right[1]], [0,0.1])
+            self.line_lo.set_data([self.limits_right[0], self.limits_right[0]], [0,1])
+            self.line_hi.set_data([self.limits_right[1], self.limits_right[1]], [0,1])
             
-            self.line_trailing_right.set_data([self.edges_right[0], self.edges_right[0]], [0,0.1])
-            self.line_leading_right.set_data([self.edges_right[1], self.edges_right[1]], [0,0.1])
+            self.line_trailing_right.set_data([self.edges_right[0], self.edges_right[0]], [0,1])
+            self.line_leading_right.set_data([self.edges_right[1], self.edges_right[1]], [0,1])
             
-            self.line_trailing_left.set_data([self.edges_left[0], self.edges_left[0]], [0,0.1])
-            self.line_leading_left.set_data([self.edges_left[1], self.edges_left[1]], [0,0.1])
+            self.line_trailing_left.set_data([self.edges_left[0], self.edges_left[0]], [0,1])
+            self.line_leading_left.set_data([self.edges_left[1], self.edges_left[1]], [0,1])
         except:
             pass
             
