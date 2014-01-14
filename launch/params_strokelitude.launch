@@ -7,8 +7,7 @@
     <param name="filenameBackground"        type="string"   value="~/strokelitude.png" />
     <param name="nbins"                     type="int"      value="361" />
   
-    <param name="black_on_white"            type="bool"     value="true" />
-    <param name="flight_threshold"          type="double"   value="0.2" />
+    <param name="flight_threshold"          type="double"   value="0.05" />
   
   
     <param name="right/hinge/x"             type="int"      value="415" />

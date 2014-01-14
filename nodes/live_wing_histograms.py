@@ -73,7 +73,7 @@ class Live_Plotter:
         self.line_trailing_left, = plt.plot([self.edges_left[0], self.edges_right[0]], [0,.1], color=colorLeft, linewidth=2)
         self.line_leading_left, = plt.plot([self.edges_left[1], self.edges_left[1]], [0,.1], color=colorLeft, linewidth=2)
         
-        plt.ylim(-0.1, 0.1)
+        plt.ylim(0, 0.2)
         #plt.autoscale(True)
                 
         self.image_animation = animation.FuncAnimation(self.fig, self.update_line, self.bins_right, init_func=self.init_plot, interval=50, blit=True)

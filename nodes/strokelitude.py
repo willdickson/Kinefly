@@ -402,14 +402,14 @@ class Wing(object):
                     
     def serve_bins(self, request):
         if self.binsValid is not None:
-            #return float32listResponse(self.bins)
-            return float32listResponse(self.binsValid[:-1])
+            return float32listResponse(self.bins)
+            #return float32listResponse(self.binsValid[:-1])
             
     def serve_histogram(self, request):
         if self.intensitiesValid is not None:
-            #return float32listResponse(self.intensities)
+            return float32listResponse(self.intensities)
             #return float32listResponse(np.diff(self.intensitiesValid))
-            return float32listResponse(self.filter_median(np.diff(self.intensitiesValid)))
+            #return float32listResponse(self.filter_median(np.diff(self.intensitiesValid)))
         
             
     def serve_edges(self, request):
@@ -418,7 +418,7 @@ class Wing(object):
             
             
             
-class button:
+class Button:
     def __init__(self, name=None, rect=(0,0,0,0)):
         self.name = name
         self.rect = rect
@@ -511,14 +511,12 @@ class ImageDisplay:
         self.display_name = "Display"
         cv.NamedWindow(self.display_name,1)
         self.cvbridge = CvBridge()
-        self.bKeepRunning = True
         
         # Get parameters from parameter server
         self.params = rospy.get_param('strokelitude')
         defaults = {'filenameBackground':'~/strokelitude.png',
-                    'nbins': 50,
-                    'black_on_white':True,
-                    'flight_threshold':0.2,
+                    'nbins': 361,
+                    'flight_threshold':0.1,
                     'right':{'hinge':{'x':300,
                                       'y':100},
                              'radius_outer':30,
@@ -550,9 +548,10 @@ class ImageDisplay:
         self.bSettingControls= False
         self.bConstrainMaskToImage = False
         
-        self.controlselected = None
-        self.controlpts = {}
-        self.update_control_points()
+        self.nameSelected = None
+        self.typeSelected = None
+        self.handlepts = {}
+        self.update_handle_points()
 
         # publishers
         self.pubWingLeftMinusRight = rospy.Publisher('strokelitude/LeftMinusRight', Float32)
@@ -570,10 +569,10 @@ class ImageDisplay:
 
         # UI button specs.
         self.buttons = []
-        self.buttons.append(button(name='exit', 
+        self.buttons.append(Button(name='exit', 
                                    rect=(10, 10, 40, 20) # (l,t,w,h)
                                    ))
-        self.buttons.append(button(name='save bg', 
+        self.buttons.append(Button(name='save bg', 
                                    rect=(52, 10, 75, 20) # (l,t,w,h)
                                    ))
 
@@ -736,9 +735,9 @@ class ImageDisplay:
                     self.pubTestL.publish(self.cvbridge.cv_to_imgmsg(cv.fromarray(self.wing_l.imgTest), 'passthrough'))
 
             
-            # Draw the control points.
-            for controlname,controlpt in self.controlpts.iteritems():
-                cv2.circle(imgOutput, tuple(controlpt),  2, cv.Scalar(255,255,255,0), 2)         
+            # Draw the handle points.
+            for handlename,handlept in self.handlepts.iteritems():
+                cv2.circle(imgOutput, tuple(handlept),  2, cv.Scalar(255,255,255,0), 2)         
 
 
             # display image
@@ -756,10 +755,12 @@ class ImageDisplay:
     
     
     # hit_test()
-    # Get the name of the nearest control point to the mouse point.
+    # Get the name of the nearest handle point to the mouse point.
     # ptMouse    = [x,y]
+    # Returns the name and type of item the mouse has hit.
     #
     def hit_test(self, ptMouse):
+        
         # Check for button press.
         iPressed = None
         for iButton in range(len(self.buttons)):
@@ -768,49 +769,51 @@ class ImageDisplay:
             
         if (iPressed is not None):
             nameNearest = self.buttons[iPressed].name
-        else: # Find the nearest control point.
-            names = self.controlpts.keys()
-            pts = np.array(self.controlpts.values())
+            type = 'button'
+        else: # Find the nearest handle point.
+            names = self.handlepts.keys()
+            pts = np.array(self.handlepts.values())
     
             dx = np.subtract.outer(ptMouse[0], pts[:,0])
             dy = np.subtract.outer(ptMouse[1], pts[:,1])
             d = np.hypot(dx, dy)
             nameNearest = names[np.argmin(d)]
+            type = 'handle'
+    
+        return (nameNearest, type)
         
-        return nameNearest
         
-        
-    # update_control_points()
-    # Update the dictionary of control point names and locations.
-    # Compute the various control points.
+    # update_handle_points()
+    # Update the dictionary of handle point names and locations.
+    # Compute the various handle points.
     #
-    def update_control_points (self):
+    def update_handle_points (self):
         # Hinge Points.
-        self.controlpts['hinge_l'] = self.wing_l.get_hinge()
-        self.controlpts['hinge_r'] = self.wing_r.get_hinge()
+        self.handlepts['hinge_l'] = self.wing_l.get_hinge()
+        self.handlepts['hinge_r'] = self.wing_r.get_hinge()
         
         # Left High & Low Angles.
         (angle_lo_i, angle_hi_i) = self.wing_l.get_angles_i_from_b(self.wing_l.params['left']['angle_lo'], self.wing_l.params['left']['angle_hi'])
-        self.controlpts['hi_l'] = (self.wing_l.get_hinge() + self.wing_l.params['left']['radius_outer'] * np.array([np.cos(np.deg2rad(angle_hi_i)), 
+        self.handlepts['hi_l'] = (self.wing_l.get_hinge() + self.wing_l.params['left']['radius_outer'] * np.array([np.cos(np.deg2rad(angle_hi_i)), 
                                                                                                                     np.sin(np.deg2rad(angle_hi_i))])).astype(int)
-        self.controlpts['lo_l'] = (self.wing_l.get_hinge() + self.wing_l.params['left']['radius_outer'] * np.array([np.cos(np.deg2rad(angle_lo_i)), 
+        self.handlepts['lo_l'] = (self.wing_l.get_hinge() + self.wing_l.params['left']['radius_outer'] * np.array([np.cos(np.deg2rad(angle_lo_i)), 
                                                                                                                     np.sin(np.deg2rad(angle_lo_i))])).astype(int)
 
         # Left Inner Radius.
         angle = (angle_hi_i - angle_lo_i)/2 + angle_lo_i 
-        self.controlpts['inner_l'] = (self.wing_l.get_hinge() + self.wing_l.params['left']['radius_inner'] * np.array([np.cos(np.deg2rad(angle)), 
+        self.handlepts['inner_l'] = (self.wing_l.get_hinge() + self.wing_l.params['left']['radius_inner'] * np.array([np.cos(np.deg2rad(angle)), 
                                                                                                                        np.sin(np.deg2rad(angle))])).astype(int)
 
         # Right High & Low Angles.
         (angle_lo_i, angle_hi_i) = self.wing_r.get_angles_i_from_b(self.wing_r.params['right']['angle_lo'], self.wing_r.params['right']['angle_hi'])
-        self.controlpts['hi_r'] = (self.wing_r.get_hinge() + self.wing_r.params['right']['radius_outer'] * np.array([np.cos(np.deg2rad(angle_hi_i)), 
+        self.handlepts['hi_r'] = (self.wing_r.get_hinge() + self.wing_r.params['right']['radius_outer'] * np.array([np.cos(np.deg2rad(angle_hi_i)), 
                                                                                                                      np.sin(np.deg2rad(angle_hi_i))])).astype(int)
-        self.controlpts['lo_r'] = (self.wing_r.get_hinge() + self.wing_r.params['right']['radius_outer'] * np.array([np.cos(np.deg2rad(angle_lo_i)), 
+        self.handlepts['lo_r'] = (self.wing_r.get_hinge() + self.wing_r.params['right']['radius_outer'] * np.array([np.cos(np.deg2rad(angle_lo_i)), 
                                                                                                                      np.sin(np.deg2rad(angle_lo_i))])).astype(int)
 
         # Right Inner Radius.
         angle = (angle_hi_i - angle_lo_i)/2 + angle_lo_i 
-        self.controlpts['inner_r'] = (self.wing_r.get_hinge() + self.wing_r.params['right']['radius_inner'] * np.array([np.cos(np.deg2rad(angle)), 
+        self.handlepts['inner_r'] = (self.wing_r.get_hinge() + self.wing_r.params['right']['radius_inner'] * np.array([np.cos(np.deg2rad(angle)), 
                                                                                                                         np.sin(np.deg2rad(angle))])).astype(int)
 
     
@@ -826,38 +829,50 @@ class ImageDisplay:
 
         # Keep track of which UI element is selected.
         if (event==cv.CV_EVENT_LBUTTONDOWN):
-            self.controlselected = self.hit_test(ptMouse)
+            (self.nameSelected, self.typeSelected) = self.hit_test(ptMouse)
+            self.typeSelectedLDown = self.typeSelected
+
+        # Check mouse hit whenever a button is selected, so we can lift button when mouseoff.
+        if (self.typeSelected=='button'):
+            (self.nameSelected, self.typeSelected) = self.hit_test(ptMouse)
+
 
         if (event==cv.CV_EVENT_LBUTTONUP):
-            if self.controlselected=='save bg':
-                # If the mouse is on the button at mouseup, then do the action.
-                if (self.hit_test(ptMouse)=='save bg'): 
-                    self.pubCommand.publish('save_background')
-            elif self.controlselected=='exit':
-                # If the mouse is on the button at mouseup, then do the action.
-                if (self.hit_test(ptMouse)=='exit'): 
-                    self.pubCommand.publish('exit')
-            else:
+            if (self.typeSelected=='button'):
+                if self.nameSelected=='save bg':
+                    # If the mouse is on the button at mouseup, then do the action.
+                    (self.nameSelected, self.typeSelected) = self.hit_test(ptMouse)
+                    if (self.nameSelected=='save bg'): 
+                        self.pubCommand.publish('save_background')
+                elif self.nameSelected=='exit':
+                    # If the mouse is on the button at mouseup, then do the action.
+                    (self.nameSelected, self.typeSelected) = self.hit_test(ptMouse)
+                    if (self.nameSelected=='exit'): 
+                        self.pubCommand.publish('exit')
+                        
+            elif (self.typeSelected=='handle') and (self.typeSelectedLDown=='handle'):
                 self.create_masks()
                 rospy.set_param('strokelitude', self.params)
                 
-            self.controlselected = None
+            self.nameSelected = None
+            self.typeSelected = None
+            self.typeSelectedLDown = None
 
 
+        # Set selected button to 'down', others to 'up'.
         for iButton in range(len(self.buttons)):
-            if (self.controlselected==self.buttons[iButton].name):
+            if (self.nameSelected==self.buttons[iButton].name):
                 self.buttons[iButton].state = 'down'
             else:
                 self.buttons[iButton].state = 'up'
 
 
-
-        # When the left button is down, adjust the control points.
-        if (flags & cv.CV_EVENT_FLAG_LBUTTON):
+        # When a handle is selected, adjust the handle points.
+        if (self.typeSelected=='handle'):#(flags & cv.CV_EVENT_FLAG_LBUTTON):
             self.bSettingControls = True
             
             # Set the new point.             
-            if (self.controlselected=='hinge_l'): # Left hinge point.
+            if (self.nameSelected=='hinge_l'): # Left hinge point.
                 if (self.bConstrainMaskToImage):
                     self.params['left']['hinge']['x'] = int(self.clip(ptMouse[0], 0+self.params['left']['radius_outer'], self.shapeImage[1]-self.params['left']['radius_outer'])) # Keep the mask onscreen left & right.
                 else:
@@ -865,7 +880,7 @@ class ImageDisplay:
                 self.params['left']['hinge']['y'] = int(ptMouse[1])
 
 
-            elif (self.controlselected=='hinge_r'): # Right hinge point.
+            elif (self.nameSelected=='hinge_r'): # Right hinge point.
                 if (self.bConstrainMaskToImage):
                     self.params['right']['hinge']['x'] = int(self.clip(ptMouse[0], 0+self.params['right']['radius_outer'], self.shapeImage[1]-self.params['right']['radius_outer'])) # Keep the mask onscreen left & right.
                 else:
@@ -873,7 +888,7 @@ class ImageDisplay:
                 self.params['right']['hinge']['y'] = int(ptMouse[1])
 
         
-            elif (self.controlselected=='hi_l'): # Left high angle.
+            elif (self.nameSelected=='hi_l'): # Left high angle.
                 pt = ptMouse - self.wing_l.get_hinge()
                 self.params['left']['angle_hi'] = int(self.wing_l.transform_angle_b_from_i(np.rad2deg(np.arctan2(pt[1], pt[0]))))
                 if (self.bConstrainMaskToImage):
@@ -885,7 +900,7 @@ class ImageDisplay:
                     self.params['left']['radius_outer'] = int(max(self.wing_l.params['left']['radius_inner']+2, int(np.linalg.norm(self.wing_l.get_hinge() - ptMouse)))) # Outer radius > inner radius.
                   
                   
-            elif (self.controlselected=='hi_r'): # Right high angle.
+            elif (self.nameSelected=='hi_r'): # Right high angle.
                 pt = ptMouse - self.wing_r.get_hinge()
                 self.params['right']['angle_hi'] = int(self.wing_r.transform_angle_b_from_i(np.rad2deg(np.arctan2(pt[1], pt[0]))))
                 if (self.bConstrainMaskToImage):
@@ -897,7 +912,7 @@ class ImageDisplay:
                     self.params['right']['radius_outer'] = int(max(self.wing_r.params['right']['radius_inner']+2, int(np.linalg.norm(self.wing_r.get_hinge() - ptMouse))))
                   
                   
-            elif (self.controlselected=='lo_l'): # Left low angle.
+            elif (self.nameSelected=='lo_l'): # Left low angle.
                 pt = ptMouse - self.wing_l.get_hinge()
                 self.params['left']['angle_lo'] = int(self.wing_l.transform_angle_b_from_i(np.rad2deg(np.arctan2(pt[1], pt[0]))))
                 if (self.bConstrainMaskToImage):
@@ -909,7 +924,7 @@ class ImageDisplay:
                     self.params['left']['radius_outer'] = int(max(self.wing_l.params['left']['radius_inner']+2, int(np.linalg.norm(self.wing_l.get_hinge() - ptMouse))))
                   
                   
-            elif (self.controlselected=='lo_r'): # Right low angle.
+            elif (self.nameSelected=='lo_r'): # Right low angle.
                 pt = ptMouse - self.wing_r.get_hinge()
                 self.params['right']['angle_lo'] = int(self.wing_r.transform_angle_b_from_i(np.rad2deg(np.arctan2(pt[1], pt[0]))))
                 if (self.bConstrainMaskToImage):
@@ -921,15 +936,15 @@ class ImageDisplay:
                     self.params['right']['radius_outer'] = int(max(self.wing_r.params['right']['radius_inner']+2, int(np.linalg.norm(self.wing_r.get_hinge() - ptMouse))))
                   
                   
-            elif (self.controlselected=='inner_l'): # Left inner radius.
+            elif (self.nameSelected=='inner_l'): # Left inner radius.
                 self.params['left']['radius_inner'] = int(min(int(np.linalg.norm(self.wing_l.get_hinge() - ptMouse)), self.wing_l.params['left']['radius_outer']-2))
                 
-            elif (self.controlselected=='inner_r'): # Right inner radius.
+            elif (self.nameSelected=='inner_r'): # Right inner radius.
                 self.params['right']['radius_inner'] = int(min(int(np.linalg.norm(self.wing_r.get_hinge() - ptMouse)), self.wing_r.params['right']['radius_outer']-2))
                 
             self.wing_l.set_params(self.params)
             self.wing_r.set_params(self.params)
-            self.update_control_points()
+            self.update_handle_points()
         else:
             self.bSettingControls = False
             
@@ -954,7 +969,7 @@ if __name__ == '__main__':
     rospy.logwarn('*    StrokelitudeROS: Camera based wingbeat analyzer software for ROS    *')
     rospy.logwarn('*        by Floris van Breugel, Steve Safarik, (c) 2013                  *')
     rospy.logwarn('*                                                                        *')
-    rospy.logwarn('*    Left click+drag to move any control points.                         *')
+    rospy.logwarn('*    Left click+drag to move any handle points.                         *')
     rospy.logwarn('*                                                                        *')  
     rospy.logwarn('*                                                                        *') 
     rospy.logwarn('**************************************************************************')
