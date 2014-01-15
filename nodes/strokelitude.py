@@ -10,6 +10,7 @@ import numpy as np
 import os
 import sys
 import time
+import dynamic_reconfigure.server
 
 from cv_bridge import CvBridge, CvBridgeError
 from optparse import OptionParser
@@ -17,6 +18,7 @@ from sensor_msgs.msg import Image
 from std_msgs.msg import Float32, String
 from StrokelitudeROS.srv import *
 from StrokelitudeROS.msg import float32list as float32list_msg
+from StrokelitudeROS.cfg import strokelitudeConfig
 
 
 
@@ -494,8 +496,9 @@ class MainWindow:
         self.params = rospy.get_param('strokelitude')
         defaults = {'filenameBackground':'~/strokelitude.png',
                     'image_topic':'/camera/image_raw',
-                    'nbins': 361,
-                    'invert': False,
+                    'use_gui':True,
+                    'nbins':361,
+                    'invert':False,
                     'flight_threshold':0.1,
                     'right':{'hinge':{'x':300,
                                       'y':100},
@@ -515,7 +518,7 @@ class MainWindow:
                     }
         self.set_dict_with_preserve(self.params, defaults)
         
-        
+
         # Background image.
         self.filenameBackground = os.path.expanduser(self.params['filenameBackground'])
         self.imgBackground  = cv2.imread(self.filenameBackground, cv.CV_LOAD_IMAGE_GRAYSCALE)
@@ -525,7 +528,6 @@ class MainWindow:
         self.wing_r                 = Wing('right', self.params)
         self.wing_l                 = Wing('left', self.params)
         self.bInitWings = False
-        self.bSettingControls= False
         self.bConstrainMaskToImage = False
         
         self.ptBody1 = None
@@ -572,7 +574,16 @@ class MainWindow:
         # user callbacks
         cv.SetMouseCallback(self.window_name, self.onMouse, param=None)
         
+        self.reconfigure = dynamic_reconfigure.server.Server(strokelitudeConfig, self.reconfigure_callback)
         
+        
+    def reconfigure_callback(self, config, level):
+        self.set_dict_with_overwrite(self.params, config)
+        self.wing_l.set_params(self.params)
+        self.wing_r.set_params(self.params)
+        rospy.logwarn(config)
+        return config
+
     # command_callback()
     # Execute any commands sent over the command topic.
     #
@@ -663,43 +674,46 @@ class MainWindow:
                 
                 
             self.shapeImage = self.imgCamera.shape # (height,width)
-            imgOutput = cv2.cvtColor(imgForeground, cv.CV_GRAY2RGB)
+            
+            if (self.params['use_gui']):
+                imgOutput = cv2.cvtColor(imgForeground, cv.CV_GRAY2RGB)
 
             if (not self.bInitWings):
                 self.create_masks()
                 self.bInitWings = True
                                 
-            x_left   = 10
-            y_bottom = imgOutput.shape[0]-10 
-            x_right  = imgOutput.shape[1]-10
+            if (self.params['use_gui']):
+                x_left   = 10
+                y_bottom = imgOutput.shape[0]-10 
+                x_right  = imgOutput.shape[1]-10
+                    
+                # Draw line to indicate the body.
+                if (self.ptBody1 is not None) and (self.ptBody2 is not None):
+                    cv2.line(imgOutput, self.ptBody1, self.ptBody2, cv.Scalar(255,0,0,0), 2)
                 
-            # Draw line to indicate the body.
-            if (self.ptBody1 is not None) and (self.ptBody2 is not None):
-                cv2.line(imgOutput, self.ptBody1, self.ptBody2, cv.Scalar(255,0,0,0), 2)
-            
-            # Draw wings
-            if self.wing_r.get_hinge() is not None:
-                self.wing_r.draw(imgOutput)
-            if self.wing_l.get_hinge() is not None:
-                self.wing_l.draw(imgOutput)
-            
-            self.draw_buttons(imgOutput)
-            self.draw_handles(imgOutput)
-            
-            
-            if not self.bSettingControls:
-                self.wing_r.update_intensities(imgForeground)
-                self.wing_r.update_edge_stats()
-                self.wing_r.update_wing_contrast()
-                self.wing_r.update_flight_status()
-                self.wing_r.publish_wingdata()
+                # Draw wings
+                if self.wing_r.get_hinge() is not None:
+                    self.wing_r.draw(imgOutput)
+                if self.wing_l.get_hinge() is not None:
+                    self.wing_l.draw(imgOutput)
                 
-                self.wing_l.update_intensities(imgForeground)
-                self.wing_l.update_edge_stats()
-                self.wing_l.update_wing_contrast()
-                self.wing_l.update_flight_status()
-                self.wing_l.publish_wingdata()
-                
+                self.draw_buttons(imgOutput)
+                self.draw_handles(imgOutput)
+            
+            
+            self.wing_r.update_intensities(imgForeground)
+            self.wing_r.update_edge_stats()
+            self.wing_r.update_wing_contrast()
+            self.wing_r.update_flight_status()
+            self.wing_r.publish_wingdata()
+            
+            self.wing_l.update_intensities(imgForeground)
+            self.wing_l.update_edge_stats()
+            self.wing_l.update_wing_contrast()
+            self.wing_l.update_flight_status()
+            self.wing_l.publish_wingdata()
+            
+            if (self.params['use_gui']):
                 x = x_left
 
                 if (self.wing_l.angle_amplitude is not None):
@@ -746,19 +760,20 @@ class MainWindow:
                 cv2.putText(imgOutput, s, (x, y_bottom), self.fontface, self.scaleText, cv.Scalar(255,64,255,0) )
                 w_text = 70
                 x += w_text+self.w_gap
-                
+            
 
-                #if (self.wing_r.imgMask is not None) and (self.wing_l.imgMask is not None):
-                #    self.pubMask.publish(self.cvbridge.cv_to_imgmsg(cv.fromarray(self.wing_r.imgMask + self.wing_l.imgMask), 'passthrough'))
-                #if (self.wing_r.imgTest is not None):
-                #    self.pubTestR.publish(self.cvbridge.cv_to_imgmsg(cv.fromarray(self.wing_r.imgTest), 'passthrough'))
-                #if (self.wing_l.imgTest is not None):
-                #    self.pubTestL.publish(self.cvbridge.cv_to_imgmsg(cv.fromarray(self.wing_l.imgTest), 'passthrough'))
+            #if (self.wing_r.imgMask is not None) and (self.wing_l.imgMask is not None):
+            #    self.pubMask.publish(self.cvbridge.cv_to_imgmsg(cv.fromarray(self.wing_r.imgMask + self.wing_l.imgMask), 'passthrough'))
+            #if (self.wing_r.imgTest is not None):
+            #    self.pubTestR.publish(self.cvbridge.cv_to_imgmsg(cv.fromarray(self.wing_r.imgTest), 'passthrough'))
+            #if (self.wing_l.imgTest is not None):
+            #    self.pubTestL.publish(self.cvbridge.cv_to_imgmsg(cv.fromarray(self.wing_l.imgTest), 'passthrough'))
 
             
             # display image
-            cv2.imshow(self.window_name, imgOutput)
-            cv2.waitKey(1)
+            if (self.params['use_gui']):
+                cv2.imshow(self.window_name, imgOutput)
+                cv2.waitKey(1)
 
 
     # save_background()
@@ -884,10 +899,10 @@ class MainWindow:
                         
                     elif (self.nameSelected == self.nameSelectedNow == 'invert'):
                         self.pubCommand.publish('invert')
+        # end if (self.typeSelected=='button'):
+        
                         
         elif (self.typeSelected=='handle'):
-            self.bSettingControls = False#True
-            
             # Adjust the handle points.
             # Left hinge point.
             if (self.nameSelected=='hinge_l'): 
@@ -979,8 +994,7 @@ class MainWindow:
                 self.create_masks()
                 rospy.set_param('strokelitude', self.params)
             
-        else:
-            self.bSettingControls = False
+        # end if (self.typeSelected=='handle'):
             
 
         if (event==cv.CV_EVENT_LBUTTONUP):
