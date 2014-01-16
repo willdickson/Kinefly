@@ -11,7 +11,8 @@
 
     <param name="nbins"                     type="int"      value="361" />
     <param name="invert"                    type="bool"     value="false" />
-    <param name="flight_threshold"          type="double"   value="0.01" />
+    <param name="mirror"                    type="bool"     value="true" />
+    <param name="contrast_threshold"        type="double"   value="0.01" />
   
     <param name="right/hinge/x"             type="int"      value="415" />
     <param name="right/hinge/y"             type="int"      value="300" />
