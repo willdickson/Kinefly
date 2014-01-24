@@ -1100,7 +1100,13 @@ class MainWindow:
         if (self.imgCamera is not None):
             # Background subtraction.
             if (self.imgBackground is not None):
-                imgForeground = cv2.absdiff(self.imgCamera, self.imgBackground)
+                try:
+                    imgForeground = cv2.absdiff(self.imgCamera, self.imgBackground)
+                except:
+                    imgForeground = self.imgCamera
+                    self.imgBackground = None
+                    rospy.logwarn('Please take a fresh background image.  The existing one is the wrong size or has some other problem.')
+                    
             else:
                 imgForeground = self.imgCamera
                 
