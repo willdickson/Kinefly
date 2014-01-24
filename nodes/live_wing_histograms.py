@@ -51,10 +51,10 @@ class Live_Plotter:
         self.fig = plt.figure()
         self.bins_right = self.get_wing_bins_right(1).data
         self.bins_left = self.get_wing_bins_left(1).data
-        self.limits_right = [-180, 180]
-        self.limits_left = [-180, 180]
-        self.edges_right = [-180, 180]
-        self.edges_left = [-180, 180]
+        self.limits_right = [-np.pi, np.pi]
+        self.limits_left = [-np.pi, np.pi]
+        self.edges_right = [-np.pi, np.pi]
+        self.edges_left = [-np.pi, np.pi]
         
         data_right = np.random.random(len(self.bins_right))
         data_left = np.random.random(len(self.bins_left))
