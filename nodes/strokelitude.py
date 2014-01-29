@@ -62,9 +62,11 @@ def clip(x, lo, hi):
 ###############################################################################
 ###############################################################################
 class Button:
-    def __init__(self, name=None, text=None, rect=(0,0,0,0)):
+    def __init__(self, name=None, text=None, pt=None, rect=None, scaleText=0.4):
         self.name = name
+        self.pt = pt
         self.rect = rect
+        self.scaleText = scaleText
         self.state = 'up'
         self.set_text(text)
 
@@ -94,6 +96,11 @@ class Button:
         self.ptRT2 = (self.rect[0]+self.rect[2]-2, self.rect[1]+2)
         self.ptLB2 = (self.rect[0]+2,              self.rect[1]+self.rect[3]-2)
         self.ptRB2 = (self.rect[0]+self.rect[2]-2, self.rect[1]+self.rect[3]-2)
+
+        self.left   = self.ptLT0[0]
+        self.top    = self.ptLT0[1]
+        self.right  = self.ptRB0[0]
+        self.bottom = self.ptRB0[1]
         
 
 
@@ -106,15 +113,27 @@ class Button:
 
     def set_text(self, text):
         self.text = text
-        (sizeText,rv) = cv2.getTextSize(self.text, cv2.FONT_HERSHEY_SIMPLEX, 0.4, 1)
-        self.ptText = (int(self.rect[0]+self.rect[2]/2-sizeText[0]/2), int(self.rect[1]+self.rect[3]/2+sizeText[1]/2))
+        (self.sizeText,rv) = cv2.getTextSize(self.text, cv2.FONT_HERSHEY_SIMPLEX, self.scaleText, 1)
+        if (self.rect is not None):
+            pass
+        elif (self.pt is not None):
+            self.rect = [0,0,0,0]
+            self.rect[0] = self.pt[0]
+            self.rect[1] = self.pt[1]
+            self.rect[2] = self.sizeText[0] + 6
+            self.rect[3] = self.sizeText[1] + 6
+        else:
+            rospy.logwarn('Error creating Button().')
+
+        self.ptCenter = (int(self.rect[0]+self.rect[2]/2), int(self.rect[1]+self.rect[3]/2))
+        self.ptText = (self.ptCenter[0] - int(self.sizeText[0]/2) - 1, 
+                       self.ptCenter[1] + int(self.sizeText[1]/2) - 1)
 
                 
     # draw_button()
     # Draw a 3D shaded button with text.
     # rect is (left, top, width, height), increasing y goes down.
     def draw(self, image):
-
         if (self.state=='up'):
             colorOuter = self.colorWhite
             colorInner = self.colorBlack
@@ -140,7 +159,7 @@ class Button:
         cv2.line(image, self.ptLT1, self.ptLB1, colorHilight)
         cv2.rectangle(image, self.ptLT2, self.ptRB2, colorFill, cv.CV_FILLED)
 
-        cv2.putText(image, self.text, ptText0, cv2.FONT_HERSHEY_SIMPLEX, 0.4, colorText)
+        cv2.putText(image, self.text, ptText0, cv2.FONT_HERSHEY_SIMPLEX, self.scaleText, colorText)
         
 # end class Button                
     
@@ -483,8 +502,8 @@ class Wing(object):
         self.pixelmax         = 255.
         self.bgra             = bgra_dict[color]
         self.thickness_inner  = 1
-        self.thickness_outer  = 2
-        self.thickness_wing   = 2
+        self.thickness_outer  = 1
+        self.thickness_wing   = 1
         
         self.handles = {'hinge':Handle(np.array([0,0])),
                         'hi':Handle(np.array([0,0])),
@@ -884,6 +903,7 @@ class MainWindow:
         defaults = {'filenameBackground':'~/strokelitude.png',
                     'image_topic':'/camera/image_raw',
                     'use_gui':True,
+                    'scale_image':1.0,
                     'invertcolor':False,
                     'flipedge':False,
                     'symmetric':True,
@@ -903,15 +923,24 @@ class MainWindow:
                             'radius_inner':10,
                             'angle_hi':0.7854, 
                             'angle_lo':-0.7854
-                            }
+                            },
+                    'head':{'x':300,
+                            'y':150,
+                            'radius_minor':50,
+                            'radius_major':50},
+                    'abdomen':{'x':300,
+                            'y':250,
+                            'radius_minor':60,
+                            'radius_major':70},
                     }
         self.set_dict_with_preserve(self.params, defaults)
         
-
         # Background image.
         self.filenameBackground = os.path.expanduser(self.params['filenameBackground'])
         self.imgBackground  = cv2.imread(self.filenameBackground, cv.CV_LOAD_IMAGE_GRAYSCALE)
         
+        self.scale = self.params['scale_image']
+        self.params = self.scale_params(self.params, self.scale)
         
         # initialize wings and body
         self.fly = Fly(self.params)
@@ -927,43 +956,60 @@ class MainWindow:
         self.subImageRaw           = rospy.Subscriber(self.params['image_topic'], Image, self.image_callback)
         self.subCommand            = rospy.Subscriber('strokelitude/command', String, self.command_callback)
 
-        self.w_gap = 30
-        self.scaleText = 0.4
+        self.w_gap = int(30 * self.scale)
+        self.scaleText = 0.4 * self.scale
         self.fontface = cv2.FONT_HERSHEY_SIMPLEX
 
         # UI button specs.
         self.buttons = []
-        x = 10
-        y = 10
-        w = 40
-        h = 18
-        self.buttons.append(Button(name='exit', 
-                                   text='exit', 
-                                   rect=(x, y, w, h)))
+        x = int(10 * self.scale)
+        y = int(10 * self.scale)
+        w = int(40 * self.scale)
+        h = int(18 * self.scale)
+        btn = Button(name='exit', 
+                   text='exit', 
+                   pt=[x,y],
+                   scaleText=self.scaleText)
+        self.buttons.append(btn)
         
-        x += w+2
-        w = 65
-        self.buttons.append(Button(name='save bg', 
-                                   text='save bg', 
-                                   rect=(x, y, w, h)))
+        x += int((w+2) * self.scale)
+        w = int(65 * self.scale)
+        x = btn.right+1
+        btn = Button(name='save bg', 
+                   text='saveBG', 
+                   pt=[x,y],
+                   scaleText=self.scaleText)
+        self.buttons.append(btn)
         
-        x += w+2
-        w = 95
-        self.buttons.append(Button(name='invertcolor', 
-                                   text='normal color' if (not self.params['invertcolor']) else 'inverted color', 
-                                   rect=(x, y, w, h)))
+        x += int((w+2) * self.scale)
+        w = int(95 * self.scale)
+        x = btn.right+1
+        btn = Button(name='invertcolor', 
+                   text='inverted', # Instantiate with the longest possible text. 
+                   pt=[x,y],
+                   scaleText=self.scaleText)
+        btn.set_text('normal' if (not self.params['invertcolor']) else 'inverted') 
+        self.buttons.append(btn)
 
-        x += w+2
-        w = 90
-        self.buttons.append(Button(name='flipedge', 
-                                   text='using edge1' if (self.params['flipedge']) else 'using edge2', 
-                                   rect=(x, y, w, h)))
+        x += int((w+2) * self.scale)
+        w = int(90 * self.scale)
+        x = btn.right+1
+        btn = Button(name='flipedge', 
+                   text='edge2',  # Instantiate with the longest possible text.
+                   pt=[x,y],
+                   scaleText=self.scaleText)
+        btn.set_text('edge1' if (self.params['flipedge']) else 'edge2')
+        self.buttons.append(btn)
 
-        x += w+2
-        w = 90
-        self.buttons.append(Button(name='flipsymmetry', 
-                                   text='symmetric' if (self.params['symmetric']) else 'asymmetric', 
-                                   rect=(x, y, w, h)))
+        x += int((w+2) * self.scale)
+        w = int(90 * self.scale)
+        x = btn.right+1
+        btn = Button(name='flipsymmetry', 
+                   text='asymmetric', 
+                   pt=[x,y],
+                   scaleText=self.scaleText)
+        btn.set_text('symmetric' if (self.params['symmetric']) else 'asymmetric')
+        self.buttons.append(btn)
 
 
         # user callbacks
@@ -1003,7 +1049,7 @@ class MainWindow:
             
             for button in self.buttons:
                 if (button.name=='flipedge'):
-                    button.set_text('using edge1' if (self.params['flipedge']) else 'using edge2')
+                    button.set_text('edge1' if (self.params['flipedge']) else 'edge2')
                     
             
         if (self.command == 'flipsymmetry'):
@@ -1019,7 +1065,7 @@ class MainWindow:
             
             for button in self.buttons:
                 if (button.name=='invertcolor'):
-                    button.set_text('normal color' if (not self.params['invertcolor']) else 'inverted color')
+                    button.set_text('normal' if (not self.params['invertcolor']) else 'inverted')
                     
             
         if (self.command == 'save_background'):
@@ -1047,6 +1093,23 @@ class MainWindow:
         rospy.set_param('strokelitude', self.params)
     
         
+    def scale_params(self, paramsIn, scale):
+		paramsOut = copy.deepcopy(paramsIn)
+		for wing in ['left', 'right']:
+			paramsOut[wing]['hinge']['x'] = int(paramsIn[wing]['hinge']['x']*scale)  
+			paramsOut[wing]['hinge']['y'] = int(paramsIn[wing]['hinge']['y']*scale)  
+			paramsOut[wing]['radius_outer'] = int(paramsIn[wing]['radius_outer']*scale)  
+			paramsOut[wing]['radius_inner'] = int(paramsIn[wing]['radius_inner']*scale)  
+
+		for bodypart in ['head', 'abdomen']:
+			paramsOut[bodypart]['x'] = int(paramsIn[bodypart]['x']*scale) 
+			paramsOut[bodypart]['y'] = int(paramsIn[bodypart]['y']*scale)  
+			paramsOut[bodypart]['radius_minor'] = int(paramsIn[bodypart]['radius_minor']*scale)  
+			paramsOut[bodypart]['radius_major'] = int(paramsIn[bodypart]['radius_major']*scale)
+			
+		return paramsOut  
+	
+	
     # set_dict(self, dTarget, dSource, bPreserve)
     # Takes a target dictionary, and enters values from the source dictionary, overwriting or not, as asked.
     # For example,
@@ -1089,14 +1152,20 @@ class MainWindow:
         # Receive an image:
         try:
             if (not self.params['invertcolor']):
-                self.imgCamera = np.uint8(cv.GetMat(self.cvbridge.imgmsg_to_cv(rosimage, 'passthrough')))
+                img = np.uint8(cv.GetMat(self.cvbridge.imgmsg_to_cv(rosimage, 'passthrough')))
             else:
-                self.imgCamera = 255-np.uint8(cv.GetMat(self.cvbridge.imgmsg_to_cv(rosimage, 'passthrough')))
-                
+                img = 255-np.uint8(cv.GetMat(self.cvbridge.imgmsg_to_cv(rosimage, 'passthrough')))
+            
         except CvBridgeError, e:
             rospy.logwarn ('Exception converting background image from ROS to opencv:  %s' % e)
             self.imgCamera = None
             
+         
+        if (self.scale == 1.0):              
+        	self.imgCamera = img
+        else:  
+        	self.imgCamera = cv2.resize(img, (0,0), fx=self.scale, fy=self.scale) 
+                
         if (self.imgCamera is not None):
             # Background subtraction.
             if (self.imgBackground is not None):
@@ -1122,23 +1191,23 @@ class MainWindow:
                 self.fly.draw(imgOutput)
                 self.draw_buttons(imgOutput)
             
-                x_left   = 10
-                y_bottom = imgOutput.shape[0]-10 
-                x_right  = imgOutput.shape[1]-10
+                x_left   = int(10 * self.scale)
+                y_bottom = int(imgOutput.shape[0] - 10 * self.scale)
+                x_right  = int(imgOutput.shape[1] - 10 * self.scale)
                 x = x_left
 
                 if (self.fly.wing_l.angle_amplitude is not None):
                     #s = 'L:% 7.1f' % np.rad2deg(self.fly.wing_l.angle_amplitude)
                     s = 'L:% 7.4f' % self.fly.wing_l.angle_amplitude
                     cv2.putText(imgOutput, s, (x, y_bottom), self.fontface, self.scaleText, self.fly.wing_l.bgra)
-                    w_text = 50
+                    w_text = int(50 * self.scale)
                     x += w_text+self.w_gap
                 
                 if (self.fly.wing_r.angle_amplitude is not None):
                     #s = 'R:% 7.1f' % np.rad2deg(self.fly.wing_r.angle_amplitude)
                     s = 'R:% 7.4f' % self.fly.wing_r.angle_amplitude
                     cv2.putText(imgOutput, s, (x, y_bottom), self.fontface, self.scaleText, self.fly.wing_r.bgra)
-                    w_text = 50
+                    w_text = int(50 * self.scale)
                     x += w_text+self.w_gap
                 
     
@@ -1148,7 +1217,7 @@ class MainWindow:
                     #s = 'L+R:% 7.1f' % np.rad2deg(leftplusright)
                     s = 'L+R:% 7.4f' % leftplusright
                     cv2.putText(imgOutput, s, (x, y_bottom), self.fontface, self.scaleText, cv.Scalar(255,64,64,0) )
-                    w_text = 70
+                    w_text = int(70 * self.scale)
                     x += w_text+self.w_gap
 
                     
@@ -1158,7 +1227,7 @@ class MainWindow:
                     #s = 'L-R:% 7.1f' % np.rad2deg(leftminusright)
                     s = 'L-R:% 7.4f' % leftminusright
                     cv2.putText(imgOutput, s, (x, y_bottom), self.fontface, self.scaleText, cv.Scalar(255,64,64,0) )
-                    w_text = 70
+                    w_text = int(70 * self.scale)
                     x += w_text+self.w_gap
 
                     
@@ -1169,7 +1238,7 @@ class MainWindow:
                     s = 'no flight'
                 
                 cv2.putText(imgOutput, s, (x, y_bottom), self.fontface, self.scaleText, cv.Scalar(255,64,255,0) )
-                w_text = 70
+                w_text = int(70 * self.scale)
                 x += w_text+self.w_gap
             
 
@@ -1423,7 +1492,8 @@ class MainWindow:
             # Save the results.
             if (event==cv.CV_EVENT_LBUTTONUP):
                 self.fly.create_masks(self.shapeImage)
-                rospy.set_param('strokelitude', self.params)
+                params1 = self.scale_params(self.params, 1/self.scale)
+                rospy.set_param('strokelitude', params1)
             
         # end if (self.uiSelected=='handle'):
             
