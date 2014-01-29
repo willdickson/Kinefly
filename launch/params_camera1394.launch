@@ -1,0 +1,6 @@
+<launch>
+  <param name="video_mode"           type="string" value="format7_mode0"/>
+  <param name="frame_rate"           type="double" value="100"/>
+
+
+</launch>

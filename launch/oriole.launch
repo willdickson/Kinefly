@@ -1,0 +1,16 @@
+<launch>
+	<!-- ========================================================== -->
+	<!-- Launch everything needed for strokelitude.                 -->
+	<!-- ========================================================== -->
+
+
+    <include file="$(find StrokelitudeROS)/launch/params_strokelitude.launch" ns="strokelitude" />
+    <include file="$(find StrokelitudeROS)/launch/params_camera1394.launch"       ns="camera" />
+
+
+    <include file="$(find StrokelitudeROS)/launch/camera.launch" />
+
+
+    <node name="strokelitude"       pkg="StrokelitudeROS"  type="strokelitude.py" required="true"      />
+    
+</launch>

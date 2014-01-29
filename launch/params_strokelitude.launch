@@ -15,28 +15,28 @@
     <param name="resolution_degrees"        type="double"       value="1.0" /> <!-- Coarser resolution will increase the framerate. -->
     <param name="threshold_flight"          type="double"       value="500" />
   
-    <param name="head/x"                    type="double"       value="358" />
-    <param name="head/y"                    type="double"       value="217" />
-    <param name="head/radius_minor"         type="double"       value="48" />
+    <param name="head/x"                    type="double"       value="301" />
+    <param name="head/y"                    type="double"       value="146" />
+    <param name="head/radius_minor"         type="double"       value="56" />
     <param name="head/radius_major"         type="double"       value="53" />
 
-    <param name="abdomen/x"                 type="double"       value="374" />
-    <param name="abdomen/y"                 type="double"       value="348" />
-    <param name="abdomen/radius_minor"      type="double"       value="68" />
+    <param name="abdomen/x"                 type="double"       value="306" />
+    <param name="abdomen/y"                 type="double"       value="248" />
+    <param name="abdomen/radius_minor"      type="double"       value="64" />
     <param name="abdomen/radius_major"      type="double"       value="67" />
 
-    <param name="right/hinge/x"             type="double"       value="415" />
-    <param name="right/hinge/y"             type="double"       value="300" />
-    <param name="right/radius_outer"        type="double"       value="200" />
+    <param name="right/hinge/x"             type="double"       value="351" />
+    <param name="right/hinge/y"             type="double"       value="218" />
+    <param name="right/radius_outer"        type="double"       value="185" />
     <param name="right/radius_inner"        type="double"       value="135" />
-    <param name="right/angle_hi"            type="double"       value="0.7854" /> 
-    <param name="right/angle_lo"            type="double"       value="-1.745" />
+    <param name="right/angle_hi"            type="double"       value="0.83858" /> 
+    <param name="right/angle_lo"            type="double"       value="-1.65740" />
 
-    <param name="left/hinge/x"              type="double"       value="324" />
-    <param name="left/hinge/y"              type="double"       value="311" />
-    <param name="left/radius_outer"         type="double"       value="200" />
+    <param name="left/hinge/x"              type="double"       value="259" />
+    <param name="left/hinge/y"              type="double"       value="222" />
+    <param name="left/radius_outer"         type="double"       value="185" />
     <param name="left/radius_inner"         type="double"       value="135" />
-    <param name="left/angle_hi"             type="double"       value="0.7854" /> 
-    <param name="left/angle_lo"             type="double"       value="-1.745" />
+    <param name="left/angle_hi"             type="double"       value="0.83858" /> 
+    <param name="left/angle_lo"             type="double"       value="-1.65740" />
 
 </launch>
