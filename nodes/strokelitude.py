@@ -21,7 +21,9 @@ from StrokelitudeROS.msg import float32list as float32list_msg
 from StrokelitudeROS.msg import MsgFlystate, MsgWing, MsgBodypart
 from StrokelitudeROS.cfg import strokelitudeConfig
 
-
+bTesting = False
+imgTest = None
+iTest = 0
 
 # Colors.
 bgra_dict = {'red'           : cv.Scalar(0,0,255,0),
@@ -227,6 +229,14 @@ class Fly(object):
         self.wing_l.create_angle_mask (shapeImage)
         self.wing_l.assign_pixels_to_bins ()
 
+        if (bTesting):
+            # Make a test image.
+            global imgTest
+            imgAngles8 = ((self.wing_r.imgAnglesRoi_b+np.pi)/(2.0*np.pi)*255.).astype(np.uint8)
+            imgAnglesMasked = cv2.bitwise_and(imgAngles8, self.wing_r.imgMaskRoi)
+            imgTest = imgAnglesMasked
+
+
 
     def set_params(self, params):
         self.head.set_params(params)
@@ -264,6 +274,14 @@ class Fly(object):
         self.abdomen.update(image)
         self.wing_l.update(image)
         self.wing_r.update(image)
+
+        if (bTesting):
+            global iTest
+            global imgTest
+            iBin = iTest % (len(self.wing_r.pixelsRoi)-1)
+            rospy.logwarn(iBin)
+            imgTest[self.wing_r.pixelsRoi[iBin]] = 255
+            iTest += 1
     
             
     def draw(self, image):
@@ -490,7 +508,6 @@ class Wing(object):
         self.intensities           = None
         self.binsValid             = None
         self.intensitiesValid      = None
-        self.imgTest = None
         
         # Bodyframe angles have zero degrees point orthogonal to body axis: 
         # If body axis is north/south, then 0-deg is east for right wing, west for left wing.
@@ -618,9 +635,8 @@ class Wing(object):
         angles_i = np.arctan2(y,x)
         anglesRoi_i = angles_i[self.roiMask[1]:self.roiMask[3], self.roiMask[0]:self.roiMask[2]]
         
-        imgAnglesRoi_b  = self.transform_angle_b_from_i(anglesRoi_i)
-
-        self.ravelMaskAnglesRoi_b = np.ravel(imgAnglesRoi_b)
+        self.imgAnglesRoi_b  = self.transform_angle_b_from_i(anglesRoi_i)
+        self.ravelMaskAnglesRoi_b = np.ravel(self.imgAnglesRoi_b)
                    
 
     # create_stroke_mask()
@@ -691,7 +707,6 @@ class Wing(object):
             # Apply the mask.
             imgMasked = cv2.bitwise_and(imgRoi, self.imgMaskRoi)            
             ravelImageMasked = np.ravel(imgMasked)
-            self.imgTest = imgMasked
             
             # Get the pixel mass.
             self.mass = np.sum(ravelImageMasked) / self.pixelmax
@@ -1255,12 +1270,14 @@ class MainWindow:
                 x += w_text+self.w_gap
             
 
-                # Display a test image.
-                #if self.fly.wing_r.imgTest is not None:
-                #    cv2.imshow(self.window_name, self.fly.wing_r.imgTest)
+                if (bTesting):
+                    # Display a test image.
+                    if imgTest is not None:
+                        cv2.imshow(self.window_name, imgTest)
+                else:
+                    # Display the image.
+                    cv2.imshow(self.window_name, imgOutput)
 
-                # Display the image.
-                cv2.imshow(self.window_name, imgOutput)
                 cv2.waitKey(1)
 
 

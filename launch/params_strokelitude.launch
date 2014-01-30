@@ -22,23 +22,23 @@
     <param name="head/radius_minor"         type="double"       value="56" />
     <param name="head/radius_major"         type="double"       value="53" />
 
-    <param name="abdomen/x"                 type="double"       value="306" />
-    <param name="abdomen/y"                 type="double"       value="248" />
+    <param name="abdomen/x"                 type="double"       value="312" />
+    <param name="abdomen/y"                 type="double"       value="266" />
     <param name="abdomen/radius_minor"      type="double"       value="64" />
     <param name="abdomen/radius_major"      type="double"       value="67" />
 
-    <param name="right/hinge/x"             type="double"       value="351" />
-    <param name="right/hinge/y"             type="double"       value="218" />
+    <param name="right/hinge/x"             type="double"       value="354" />
+    <param name="right/hinge/y"             type="double"       value="225" />
     <param name="right/radius_outer"        type="double"       value="195" />
     <param name="right/radius_inner"        type="double"       value="140" />
-    <param name="right/angle_hi"            type="double"       value="0.0" />   <!-- Radians -->
+    <param name="right/angle_hi"            type="double"       value="1.0" />   <!-- Radians -->
     <param name="right/angle_lo"            type="double"       value="-1.78" /> <!-- Radians -->
 
-    <param name="left/hinge/x"              type="double"       value="259" />
-    <param name="left/hinge/y"              type="double"       value="222" />
+    <param name="left/hinge/x"              type="double"       value="262" />
+    <param name="left/hinge/y"              type="double"       value="233" />
     <param name="left/radius_outer"         type="double"       value="195" />
     <param name="left/radius_inner"         type="double"       value="140" />
-    <param name="left/angle_hi"             type="double"       value="0.0" />   <!-- Radians -->
+    <param name="left/angle_hi"             type="double"       value="1.0" />   <!-- Radians -->
     <param name="left/angle_lo"             type="double"       value="-1.78" /> <!-- Radians -->
 
 </launch>
