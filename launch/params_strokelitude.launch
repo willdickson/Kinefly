@@ -7,14 +7,15 @@
     <param name="filenameBackground"        type="string"       value="~/strokelitude.png" />
     <param name="image_topic"               type="string"       value="/camera/image_raw" />
 
-    <param name="use_gui"                   type="bool"         value="true" />
-    <param name="scale_image"               type="double"       value="1.0" /> <!-- Reducing the image scale will speed the framerate. -->
-    <param name="invertcolor"               type="bool"         value="false" />
-    <param name="flipedge"                  type="bool"         value="false" />
-    <param name="symmetric"                 type="bool"         value="true" />
+    <param name="use_gui"                   type="bool"         value="true" />  <!-- You can turn off the GUI to speed the framerate. -->
+    <param name="invertcolor"               type="bool"         value="false" /> <!-- You want a light fly on a dark background.  Only needed if not using a background image. -->
+    <param name="flipedge"                  type="bool"         value="false" /> <!-- Set which edge to use as the second edge when only finding one edge. -->
+    <param name="symmetric"                 type="bool"         value="true" />  <!-- Forces the UI to remain symmetric. -->
+    <param name="threshold_flight"          type="double"       value="500" />   <!-- Pixel mass of the wings to count as flying. -->
 
-    <param name="resolution_degrees"        type="double"       value="1.0" /> <!-- Coarser resolution will speed the framerate. -->
-    <param name="threshold_flight"          type="double"       value="500" />
+    <param name="n_edges"                   type="int"          value="1" />     <!-- Number of edges per wing to find.  1 or 2. -->
+    <param name="scale_image"               type="double"       value="1.0" />   <!-- Reducing the image scale will speed the framerate. -->
+    <param name="resolution_radians"        type="double"       value="0.0174532925" />   <!-- Coarser resolution will speed the framerate. 1 degree == 0.0174532925 radians. -->
   
     <param name="head/x"                    type="double"       value="301" />
     <param name="head/y"                    type="double"       value="146" />
@@ -28,16 +29,16 @@
 
     <param name="right/hinge/x"             type="double"       value="351" />
     <param name="right/hinge/y"             type="double"       value="218" />
-    <param name="right/radius_outer"        type="double"       value="185" />
-    <param name="right/radius_inner"        type="double"       value="135" />
-    <param name="right/angle_hi"            type="double"       value="0.83858" /> 
-    <param name="right/angle_lo"            type="double"       value="-1.65740" />
+    <param name="right/radius_outer"        type="double"       value="195" />
+    <param name="right/radius_inner"        type="double"       value="140" />
+    <param name="right/angle_hi"            type="double"       value="0.0" />   <!-- Radians -->
+    <param name="right/angle_lo"            type="double"       value="-1.78" /> <!-- Radians -->
 
     <param name="left/hinge/x"              type="double"       value="259" />
     <param name="left/hinge/y"              type="double"       value="222" />
-    <param name="left/radius_outer"         type="double"       value="185" />
-    <param name="left/radius_inner"         type="double"       value="135" />
-    <param name="left/angle_hi"             type="double"       value="0.83858" /> 
-    <param name="left/angle_lo"             type="double"       value="-1.65740" />
+    <param name="left/radius_outer"         type="double"       value="195" />
+    <param name="left/radius_inner"         type="double"       value="140" />
+    <param name="left/angle_hi"             type="double"       value="0.0" />   <!-- Radians -->
+    <param name="left/angle_lo"             type="double"       value="-1.78" /> <!-- Radians -->
 
 </launch>

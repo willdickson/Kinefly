@@ -47,9 +47,15 @@ def get_angle_from_points_i(pt1, pt2):
 
 def filter_median(data):
     data2 = copy.copy(data)
-    q = 1
+    q = 1       # q is the 'radius' of the filter window.  q==1 is a window of 3.  q==2 is a window of 5.
     for i in range(q,len(data)-q):
-        data2[i] = np.median(data[i-q:i+q]) # Median filter of window.
+        data2[i] = np.median(data[i-q:i+q+1]) # Median filter of window.
+
+    # Left-fill the first values.
+    data2[0:q] = data2[q]
+
+    # Right-fill the last values.
+    data2[len(data2)-q:len(data2)] = data2[-(q+1)]
 
     return data2
         
@@ -276,22 +282,22 @@ class Fly(object):
         pt = self.head.ptCenter_i - self.head.ptHinge_i + self.head.ptCOM # The head COM point relative to the hinge.
         angleHead = -(np.arctan2(pt[1], pt[0]) - self.angleBody + np.pi/2)
         angleHead = (angleHead + np.pi) % (2*np.pi) - np.pi
-        offsetHead = np.linalg.norm(pt)
+        radiusHead = np.linalg.norm(pt)
         
         pt = self.abdomen.ptCenter_i - self.abdomen.ptHinge_i + self.abdomen.ptCOM # The abdomen COM point relative to the abdomen hinge.
         angleAbdomen = -(np.arctan2(pt[1], pt[0]) - self.angleBody + np.pi/2)
         angleAbdomen = (angleAbdomen + np.pi) % (2*np.pi) - np.pi
-        offsetAbdomen = np.linalg.norm(pt)
+        radiusAbdomen = np.linalg.norm(pt)
         
         flystate              = MsgFlystate()
         flystate.header       = Header(seq=self.iCount, stamp=self.stamp, frame_id='Fly')
         flystate.left         = MsgWing(mass=self.wing_l.mass, angle1=self.wing_l.angle_leading_b, angle2=self.wing_l.angle_trailing_b)
         flystate.right        = MsgWing(mass=self.wing_r.mass, angle1=self.wing_r.angle_leading_b, angle2=self.wing_r.angle_trailing_b)
         flystate.head         = MsgBodypart(mass   = self.head.mass,    
-                                            offset = offsetHead,    
+                                            radius = radiusHead,    
                                             angle  = angleHead)
         flystate.abdomen      = MsgBodypart(mass   = self.abdomen.mass, 
-                                            offset = offsetAbdomen, 
+                                            radius = radiusAbdomen, 
                                             angle  = angleAbdomen)
         self.iCount += 1
         
@@ -484,7 +490,7 @@ class Wing(object):
         self.intensities           = None
         self.binsValid             = None
         self.intensitiesValid      = None
-
+        self.imgTest = None
         
         # Bodyframe angles have zero degrees point orthogonal to body axis: 
         # If body axis is north/south, then 0-deg is east for right wing, west for left wing.
@@ -568,7 +574,7 @@ class Wing(object):
     def set_params(self, params):
         self.params    = params
         self.ptHinge   = np.array([self.params[self.side]['hinge']['x'], self.params[self.side]['hinge']['y']])
-        nbins          = 360/self.params['resolution_degrees'] + 1
+        nbins          = int((2*np.pi)/self.params['resolution_radians']) + 1
         self.bins      = np.linspace(-np.pi, np.pi, nbins)
         self.angleBody = self.get_bodyangle_i()
 
@@ -685,6 +691,7 @@ class Wing(object):
             # Apply the mask.
             imgMasked = cv2.bitwise_and(imgRoi, self.imgMaskRoi)            
             ravelImageMasked = np.ravel(imgMasked)
+            self.imgTest = imgMasked
             
             # Get the pixel mass.
             self.mass = np.sum(ravelImageMasked) / self.pixelmax
@@ -772,20 +779,25 @@ class Wing(object):
         diff = filter_median(np.diff(self.intensitiesValid))
             
         iPeak = np.argmax(self.intensitiesValid)
+
+        # Major and minor edges, must have opposite signs.
         iMax = np.argmax(diff)
         iMin = np.argmin(diff)
-        (iMajor,iMinor) = (iMax,iMin) if (np.abs(diff[iMax]) > np.abs(diff[iMin])) else (iMin,iMax) # Major and minor edges.
+        (iMajor,iMinor) = (iMax,iMin) if (np.abs(diff[iMax]) > np.abs(diff[iMin])) else (iMin,iMax) 
 
         iEdge1 = iMajor
         
         # The minor edge must be at least 3/4 the strength of the major edge to be used, else use the end of the array.
-        if (3*np.abs(diff[iMajor])/4 < np.abs(diff[iMinor])):
+        #if (3*np.abs(diff[iMajor])/4 < np.abs(diff[iMinor])):
+        if (self.params['n_edges']==2):
             iEdge2 = iMinor
-        else:
+        elif (self.params['n_edges']==1):
             if (self.params['flipedge']):
                 iEdge2 = 0              # Front edge.
             else:
                 iEdge2 = -1             # Back edge.
+        else:
+            rospy.logwarn('Parameter n_edges must be 1 or 2.')
         
         # Convert the edge index to an angle.
         angle1 = float(self.binsValid[iEdge1])
@@ -861,15 +873,15 @@ class Wing(object):
 
                         
     def serve_bins_callback(self, request):
-        if (self.bins is not None):
-            return float32listResponse(self.bins)
-            #return float32listResponse(self.binsValid[:-1])
+        if (self.binsValid is not None):
+            #return float32listResponse(self.bins)
+            return float32listResponse(self.binsValid[:-1])
             
     def serve_histogram_callback(self, request):
-        if (self.intensities is not None):
-            return float32listResponse(self.intensities)
+        if (self.intensitiesValid is not None):
+            #return float32listResponse(self.intensities)
             #return float32listResponse(np.diff(self.intensitiesValid))
-            #return float32listResponse(filter_median(np.diff(self.intensitiesValid)))
+            return float32listResponse(filter_median(np.diff(self.intensitiesValid)))
             
     def serve_edges_callback(self, request):
         if (self.angle_trailing_b is not None):            
@@ -903,12 +915,13 @@ class MainWindow:
         defaults = {'filenameBackground':'~/strokelitude.png',
                     'image_topic':'/camera/image_raw',
                     'use_gui':True,
-                    'scale_image':1.0,
                     'invertcolor':False,
                     'flipedge':False,
                     'symmetric':True,
-                    'resolution_degrees':1.0,
+                    'resolution_radians':0.0174532925,  # 1.0 degree == 0.0174532925 radians.
                     'threshold_flight':0.1,
+                    'scale_image':1.0,
+                    'n_edges':1,
                     'right':{'hinge':{'x':300,
                                       'y':100},
                              'radius_outer':30,
@@ -1242,7 +1255,11 @@ class MainWindow:
                 x += w_text+self.w_gap
             
 
-                # display image
+                # Display a test image.
+                #if self.fly.wing_r.imgTest is not None:
+                #    cv2.imshow(self.window_name, self.fly.wing_r.imgTest)
+
+                # Display the image.
                 cv2.imshow(self.window_name, imgOutput)
                 cv2.waitKey(1)
 

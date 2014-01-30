@@ -5,10 +5,10 @@
 
 
     <include file="$(find StrokelitudeROS)/launch/params_strokelitude.launch" ns="strokelitude" />
-    <include file="$(find StrokelitudeROS)/launch/params_camera.launch"       ns="camera" />
+    <include file="$(find StrokelitudeROS)/launch/params_camera1394.launch"   ns="camera" />
 
 
-    <include file="$(find StrokelitudeROS)/launch/camera.launch" />
+    <include file="$(find StrokelitudeROS)/launch/camera_1394.launch" />
 
 
     <node name="strokelitude"       pkg="StrokelitudeROS"  type="strokelitude.py" required="true"      />
