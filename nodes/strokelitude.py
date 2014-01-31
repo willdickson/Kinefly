@@ -21,9 +21,25 @@ from StrokelitudeROS.msg import float32list as float32list_msg
 from StrokelitudeROS.msg import MsgFlystate, MsgWing, MsgBodypart
 from StrokelitudeROS.cfg import strokelitudeConfig
 
-bTesting = False
-imgTest = None
-iTest = 0
+
+# A class to help with debugging.  It just draws an image.
+class Test:
+    def __init__(self, bEnable, name):
+        self.ravel = None
+        self.shape = (0,0)
+        self.i = 0
+        self.bEnable = bEnable
+        self.name = name
+        if (self.bEnable):
+            cv.NamedWindow(self.name,1)
+        
+    def show(self):
+        if (self.bEnable) and (self.ravel is not None):
+            cv2.imshow(self.name, np.reshape(self.ravel, self.shape))
+        
+gbTestEnable = False   
+        
+    
 
 # Colors.
 bgra_dict = {'red'           : cv.Scalar(0,0,255,0),
@@ -49,17 +65,22 @@ def get_angle_from_points_i(pt1, pt2):
 
 def filter_median(data):
     data2 = copy.copy(data)
-    q = 1       # q is the 'radius' of the filter window.  q==1 is a window of 3.  q==2 is a window of 5.
+    q = 0       # q is the 'radius' of the filter window.  q==1 is a window of 3.  q==2 is a window of 5.
     for i in range(q,len(data)-q):
         data2[i] = np.median(data[i-q:i+q+1]) # Median filter of window.
 
     # Left-fill the first values.
-    data2[0:q] = data2[q]
-
-    # Right-fill the last values.
-    data2[len(data2)-q:len(data2)] = data2[-(q+1)]
-
-    return data2
+    try:
+        data2[0:q] = data2[q]
+    
+        # Right-fill the last values.
+        data2[len(data2)-q:len(data2)] = data2[-(q+1)]
+        dataOut = data2
+        
+    except IndexError:
+        dataOut = data
+        
+    return dataOut
         
 
 def clip(x, lo, hi):
@@ -229,14 +250,6 @@ class Fly(object):
         self.wing_l.create_angle_mask (shapeImage)
         self.wing_l.assign_pixels_to_bins ()
 
-        if (bTesting):
-            # Make a test image.
-            global imgTest
-            imgAngles8 = ((self.wing_r.imgAnglesRoi_b+np.pi)/(2.0*np.pi)*255.).astype(np.uint8)
-            imgAnglesMasked = cv2.bitwise_and(imgAngles8, self.wing_r.imgMaskRoi)
-            imgTest = imgAnglesMasked
-
-
 
     def set_params(self, params):
         self.head.set_params(params)
@@ -244,17 +257,18 @@ class Fly(object):
         self.wing_l.set_params(params)
         self.wing_r.set_params(params)
 
-        self.angleBody = self.get_bodyangle_i()
+        self.angleBody_i = self.get_bodyangle_i()
         self.ptBodyCenter = (np.array([params['head']['x'], params['head']['y']]) + np.array([params['abdomen']['x'], params['abdomen']['y']])) / 2
         r = max(params['left']['radius_outer'], params['right']['radius_outer'])
-        self.ptBody1 = tuple((self.ptBodyCenter + r * np.array([np.cos(self.angleBody), np.sin(self.angleBody)])).astype(int))
-        self.ptBody2 = tuple((self.ptBodyCenter - r * np.array([np.cos(self.angleBody), np.sin(self.angleBody)])).astype(int))
+        self.ptBody1 = tuple((self.ptBodyCenter + r * np.array([np.cos(self.angleBody_i), np.sin(self.angleBody_i)])).astype(int))
+        self.ptBody2 = tuple((self.ptBodyCenter - r * np.array([np.cos(self.angleBody_i), np.sin(self.angleBody_i)])).astype(int))
     
             
     def get_bodyangle_i(self):
-        angle_i = get_angle_from_points_i(self.head.ptCenter_i, self.abdomen.ptCenter_i)
+        angle_i = get_angle_from_points_i(self.abdomen.ptCenter_i, self.head.ptCenter_i)
+        angleBody  = (angle_i         + np.pi) % (2*np.pi) - np.pi
          
-        return angle_i
+        return angleBody
         
                 
     def update_handle_points(self):
@@ -275,13 +289,16 @@ class Fly(object):
         self.wing_l.update(image)
         self.wing_r.update(image)
 
-        if (bTesting):
-            global iTest
-            global imgTest
-            iBin = iTest % (len(self.wing_r.pixelsRoi)-1)
-            rospy.logwarn(iBin)
-            imgTest[self.wing_r.pixelsRoi[iBin]] = 255
-            iTest += 1
+        if (gbTestEnable):
+            for wing in [self.wing_r, self.wing_l]:
+                i = int(wing.test.i/10)
+                iBin = wing.iBinsValid[i % (len(wing.iBinsValid))]
+                wing.test.shape = wing.imgRoi.shape
+                #wing.test.ravel = copy.deepcopy(np.ravel(wing.imgMaskRoi))
+                wing.test.ravel = copy.deepcopy(np.ravel(wing.imgRoi))
+                #wing.test.ravel = copy.deepcopy(np.ravel(wing.imgAnglesRoi_b))
+                wing.test.ravel[wing.iPixelsRoi[iBin]] = 255-wing.test.ravel[wing.iPixelsRoi[iBin]]
+                wing.test.i += 1
     
             
     def draw(self, image):
@@ -298,12 +315,12 @@ class Fly(object):
     
     def publish(self):
         pt = self.head.ptCenter_i - self.head.ptHinge_i + self.head.ptCOM # The head COM point relative to the hinge.
-        angleHead = -(np.arctan2(pt[1], pt[0]) - self.angleBody + np.pi/2)
+        angleHead = -(np.arctan2(pt[1], pt[0]) - self.angleBody_i)# + np.pi/2)
         angleHead = (angleHead + np.pi) % (2*np.pi) - np.pi
         radiusHead = np.linalg.norm(pt)
         
         pt = self.abdomen.ptCenter_i - self.abdomen.ptHinge_i + self.abdomen.ptCOM # The abdomen COM point relative to the abdomen hinge.
-        angleAbdomen = -(np.arctan2(pt[1], pt[0]) - self.angleBody + np.pi/2)
+        angleAbdomen = -(np.arctan2(pt[1], pt[0]) - self.angleBody_i)# + np.pi/2)
         angleAbdomen = (angleAbdomen + np.pi) % (2*np.pi) - np.pi
         radiusAbdomen = np.linalg.norm(pt)
         
@@ -333,7 +350,7 @@ class Bodypart(object):
         self.name = name
 
         self.bgra     = bgra_dict[color]
-        self.bgra_com = bgra_dict['red']
+        self.bgra_com = bgra_dict['blue']
         self.pixelmax = 255.
 
         self.handles = {'center':Handle(np.array([0,0])),
@@ -354,16 +371,16 @@ class Bodypart(object):
     #
     def set_params(self, params):
         self.params  = params
-        self.angleBody = self.get_bodyangle_i()
-        self.cosBodyangle = np.cos(self.angleBody)
-        self.sinBodyangle = np.sin(self.angleBody)
+        self.angleBody_i = self.get_bodyangle_i()
+        self.cosBodyangle = np.cos(self.angleBody_i)
+        self.sinBodyangle = np.sin(self.angleBody_i)
         self.ptCenter_i = np.array([self.params[self.name]['x'], self.params[self.name]['y']])
         
         # Compute the hinge location, which is on the intersection of the bodypart ellipse and the body axis.
         ptBodyCenter = (np.array([self.params['head']['x'], self.params['head']['y']]) + np.array([self.params['abdomen']['x'], self.params['abdomen']['y']])) / 2
         r = self.params[self.name]['radius_major']
-        ptHinge1 = (self.ptCenter_i + r*np.array([np.cos(self.angleBody), np.sin(self.angleBody)]))
-        ptHinge2 = (self.ptCenter_i - r*np.array([np.cos(self.angleBody), np.sin(self.angleBody)]))
+        ptHinge1 = (self.ptCenter_i + r*np.array([np.cos(self.angleBody_i), np.sin(self.angleBody_i)]))
+        ptHinge2 = (self.ptCenter_i - r*np.array([np.cos(self.angleBody_i), np.sin(self.angleBody_i)]))
         r1 = np.linalg.norm(ptHinge1 - ptBodyCenter)
         r2 = np.linalg.norm(ptHinge2 - ptBodyCenter)
         self.ptHinge_i = ptHinge1 if (r1<r2) else ptHinge2 
@@ -373,10 +390,11 @@ class Bodypart(object):
         
         
     def get_bodyangle_i(self):
-        angle_i = get_angle_from_points_i(np.array([self.params['head']['x'], self.params['head']['y']]), 
-                                          np.array([self.params['abdomen']['x'], self.params['abdomen']['y']]))
+        angle_i = get_angle_from_points_i(np.array([self.params['abdomen']['x'], self.params['abdomen']['y']]), 
+                                          np.array([self.params['head']['x'], self.params['head']['y']]))
+        angleBody  = (angle_i         + np.pi) % (2*np.pi) - np.pi
          
-        return angle_i
+        return angleBody
         
                 
     # create_mask()
@@ -388,7 +406,7 @@ class Bodypart(object):
         cv2.ellipse(self.imgMask,
                     (int(self.params[self.name]['x']), int(self.params[self.name]['y'])),
                     (int(self.params[self.name]['radius_major']), int(self.params[self.name]['radius_minor'])),
-                    np.rad2deg(self.angleBody),
+                    np.rad2deg(self.angleBody_i),
                     0,
                     360,
                     bgra_dict['white'], 
@@ -460,7 +478,7 @@ class Bodypart(object):
         cv2.ellipse(image,
                     (int(self.params[self.name]['x']), int(self.params[self.name]['y'])),
                     (int(self.params[self.name]['radius_major']), int(self.params[self.name]['radius_minor'])),
-                    np.rad2deg(self.angleBody),
+                    np.rad2deg(self.angleBody_i),
                     0,
                     360,
                     self.bgra, 
@@ -498,16 +516,17 @@ class Bodypart(object):
 ###############################################################################
 ###############################################################################
 class Wing(object):
-    def __init__(self, side='right', params={}, color='white'):
+    def __init__(self, side='right', params={}, color='black'):
         self.side = side
         
-        self.ravelMaskRoi          = None
-        self.ravelMaskAnglesRoi_b  = None
-
-        self.bins                  = None
-        self.intensities           = None
-        self.binsValid             = None
-        self.intensitiesValid      = None
+        self.ravelMaskRoi       = None
+        self.ravelAnglesRoi_b   = None
+        self.ravelRoi           = None
+        
+        self.bins               = None
+        self.intensities        = None
+        self.binsValid          = None
+        self.intensitiesValid   = None
         
         # Bodyframe angles have zero degrees point orthogonal to body axis: 
         # If body axis is north/south, then 0-deg is east for right wing, west for left wing.
@@ -537,10 +556,12 @@ class Wing(object):
         self.set_params(params)
 
         # services, for live histograms
-        self.service_histogram = rospy.Service('wing_histogram_'+side, float32list, self.serve_histogram_callback)
+        self.service_intensity = rospy.Service('wing_intensity_'+side, float32list, self.serve_intensity_callback)
         self.service_bins      = rospy.Service('wing_bins_'+side, float32list, self.serve_bins_callback)
         self.service_edges     = rospy.Service('wing_edges_'+side, float32list, self.serve_edges_callback)
         
+        self.test = Test(gbTestEnable, self.side)
+
     
     # get_angles_i_from_b()
     # Return angle1 and angle2 oriented to the image rather than the fly.
@@ -564,9 +585,9 @@ class Wing(object):
     #
     def transform_angle_i_from_b(self, angle_b):
         if self.side == 'right':
-            angle_i  = self.angleBody + angle_b
+            angle_i  =  angle_b + self.angleBody_i + np.pi/2
         else: # left
-            angle_i  = self.angleBody - angle_b + np.pi
+            angle_i  = -angle_b + self.angleBody_i + np.pi/2 + np.pi
              
         angle_i = (angle_i+np.pi) % (2*np.pi) - np.pi
         return angle_i
@@ -577,30 +598,31 @@ class Wing(object):
     #
     def transform_angle_b_from_i(self, angle_i):
         if self.side == 'right':
-            angle_b  = angle_i - self.angleBody
+            angle_b  =  angle_i - self.angleBody_i - np.pi/2
         else:  
-            angle_b  = self.angleBody - angle_i + np.pi 
+            angle_b  = -angle_i + self.angleBody_i + np.pi/2 + np.pi
 
         angle_b = (angle_b+np.pi) % (2*np.pi) - np.pi
         return angle_b
-        
+         
 
     # set_params()
     # Set the given params dict into this object.  Any member vars that come from params should be set here.
     #
     def set_params(self, params):
         self.params    = params
-        self.ptHinge   = np.array([self.params[self.side]['hinge']['x'], self.params[self.side]['hinge']['y']])
+        self.ptHinge   = np.array([self.params[self.side]['hinge']['x'], self.params[self.side]['hinge']['y']]).astype(np.float64)
         nbins          = int((2*np.pi)/self.params['resolution_radians']) + 1
         self.bins      = np.linspace(-np.pi, np.pi, nbins)
-        self.angleBody = self.get_bodyangle_i()
+        self.angleBody_i = self.get_bodyangle_i()
 
         (angle_lo_i, angle_hi_i) = self.get_angles_i_from_b(self.params[self.side]['angle_lo'], self.params[self.side]['angle_hi'])
         angle_mid_i              = (angle_hi_i - angle_lo_i)/2 + angle_lo_i
          
+         
+        # Cache the sin & cos values for drawing handles, etc.
         self.cos = {}
         self.sin = {}
-        
         self.cos['hi']  = float(np.cos(angle_hi_i)) 
         self.sin['hi']  = float(np.sin(angle_hi_i))
         self.cos['mid'] = float(np.cos(angle_mid_i))
@@ -608,37 +630,28 @@ class Wing(object):
         self.cos['lo']  = float(np.cos(angle_lo_i))
         self.sin['lo']  = float(np.sin(angle_lo_i))
 
-        angle_lo_b = min([self.params[self.side]['angle_lo'], self.params[self.side]['angle_hi']])
-        angle_hi_b = max([self.params[self.side]['angle_lo'], self.params[self.side]['angle_hi']])
+        angle_lo = (self.params[self.side]['angle_lo'] + np.pi) % (2*np.pi) - np.pi
+        angle_hi = (self.params[self.side]['angle_hi'] + np.pi) % (2*np.pi) - np.pi
+
+        angle_min = min(angle_lo, angle_hi)
+        angle_max = max(angle_lo, angle_hi)
         
-        self.iValidBins = np.where((angle_lo_b < self.bins) * (self.bins < angle_hi_b))[0]
-        
+        self.iBinsValid = list(np.where((angle_min <= self.bins) * (self.bins <= angle_max))[0])
+            
+        if (len(self.iBinsValid)==0):
+            self.iBinsValid = [0] # TODO: make this the proper bin to match the angle. 
+
+        self.intensities = np.zeros(len(self.bins), dtype=np.float64)
         self.update_handle_points()
         
         
     def get_bodyangle_i(self):
-        angle_i = get_angle_from_points_i(np.array([self.params['head']['x'], self.params['head']['y']]), 
-                                          np.array([self.params['abdomen']['x'], self.params['abdomen']['y']]))
-         
-        return angle_i - np.pi/2 
+        angle_i = get_angle_from_points_i(np.array([self.params['abdomen']['x'], self.params['abdomen']['y']]), 
+                                          np.array([self.params['head']['x'], self.params['head']['y']]))
+        angleBody  = (angle_i + np.pi) % (2*np.pi) - np.pi
+        return angleBody 
         
                 
-    # create_angle_mask()
-    # Create an image where each pixel value is the angle from the hinge.                    
-    # 
-    def create_angle_mask(self, shape):
-        # Set up matrices of x and y coordinates.
-        x = np.tile(np.array([range(shape[1])])   - self.ptHinge[0], (shape[0], 1))
-        y = np.tile(np.array([range(shape[0])]).T - self.ptHinge[1], (1, shape[1]))
-        
-        # Calc their angles.
-        angles_i = np.arctan2(y,x)
-        anglesRoi_i = angles_i[self.roiMask[1]:self.roiMask[3], self.roiMask[0]:self.roiMask[2]]
-        
-        self.imgAnglesRoi_b  = self.transform_angle_b_from_i(anglesRoi_i)
-        self.ravelMaskAnglesRoi_b = np.ravel(self.imgAnglesRoi_b)
-                   
-
     # create_stroke_mask()
     # Create a mask of valid wingstroke areas.
     #
@@ -656,13 +669,10 @@ class Wing(object):
                     np.rad2deg(angle_hi_i),
                     255, 
                     cv.CV_FILLED)
-        cv2.ellipse(imgMask,
+        cv2.circle(imgMask,
                     ptCenter,
-                    (int(self.params[self.side]['radius_inner']), int(self.params[self.side]['radius_inner'])),
+                    int(self.params[self.side]['radius_inner']),
                     0,
-                    np.rad2deg(angle_lo_i),
-                    np.rad2deg(angle_hi_i),
-                    0, 
                     cv.CV_FILLED)
         
 
@@ -670,59 +680,79 @@ class Wing(object):
         xSum = np.sum(imgMask, 0)
         ySum = np.sum(imgMask, 1)
         xMin = np.where(xSum>0)[0][0]
-        xMax = np.where(xSum>0)[0][-1]
+        xMax = np.where(xSum>0)[0][-1] + 1
         yMin = np.where(ySum>0)[0][0]
-        yMax = np.where(ySum>0)[0][-1]
+        yMax = np.where(ySum>0)[0][-1] + 1
         
-        self.roiMask = np.array([xMin, yMin, xMax, yMax])
+        self.roi = np.array([xMin, yMin, xMax, yMax])
         self.imgMaskRoi = imgMask[yMin:yMax, xMin:xMax]
 
         
         self.ravelMaskRoi = np.ravel(self.imgMaskRoi)
         
         
+    
+    def update_imgroi(self, image, roi):
+        # Only use the ROI that covers the stroke rect.
+        self.imgRoi = image[roi[1]:roi[3], roi[0]:roi[2]]
+        self.ravelRoi = np.ravel(self.imgRoi)
+
+
+    
+    # create_angle_mask()
+    # Create an image where each pixel value is the angle from the hinge, in body coordinates.                    
+    # 
+    def create_angle_mask(self, shape):
+        # Set up matrices of x and y coordinates.
+        x = np.tile(np.array([range(shape[1])]).astype(np.float64)   - self.ptHinge[0], (shape[0], 1))
+        y = np.tile(np.array([range(shape[0])]).astype(np.float64).T - self.ptHinge[1], (1, shape[1]))
+
+        # Calc the angle at each pixel coordinate.
+        imgAngles_i = np.arctan2(y,x) # Ranges [-pi,+pi]
+        imgAnglesRoi_i = imgAngles_i[self.roi[1]:self.roi[3], self.roi[0]:self.roi[2]]
+        
+        self.imgAnglesRoi_b  = self.transform_angle_b_from_i(imgAnglesRoi_i)
+        self.ravelAnglesRoi_b = np.ravel(self.imgAnglesRoi_b)
+                   
+
     # assign_pixels_to_bins()
-    # Create two lists, one containing the pixel indices for each bin, and the other containing the intensities (mean pixel values).
+    # Create two lists, one containing the pixel indices (of the ROI) for each bin, and the other containing the intensities (mean pixel values).
     #
     def assign_pixels_to_bins(self):
         # Create empty bins.
-        self.pixelsRoi = [[] for i in range(len(self.bins))]
-        self.intensities = np.zeros(len(self.bins))
+        self.iPixelsRoi = [[] for i in range(len(self.bins))]
 
-        # Put each pixel into an appropriate bin.            
-        for iPixel, angle in enumerate(self.ravelMaskAnglesRoi_b):
+        # Put each iPixel into an appropriate bin.            
+        for iPixel, angle in enumerate(self.ravelAnglesRoi_b):
             if self.ravelMaskRoi[iPixel]:
                 iBinBest = np.argmin(np.abs(self.bins - angle))
-                self.pixelsRoi[iBinBest].append(iPixel)
+                self.iPixelsRoi[iBinBest].append(iPixel)
+                
+#         for i in self.iPixelsRoi:
+#             rospy.logwarn('%s: %s, %s' % (self.side, i, len(i)))
                 
          
-    # update_bin_intensities()
+    # update_intensity_function()
     # Update the list of intensities corresponding to the bin angles.
     #            
-    def update_bin_intensities(self, image):
+    def update_intensity_function(self):
         if (self.ravelMaskRoi is not None) and (self.intensities is not None):
-            # Only use the ROI.
-            imgRoi = image[self.roiMask[1]:self.roiMask[3], self.roiMask[0]:self.roiMask[2]]
-
-            # Apply the mask.
-            imgMasked = cv2.bitwise_and(imgRoi, self.imgMaskRoi)            
-            ravelImageMasked = np.ravel(imgMasked)
-            
             # Get the pixel mass.
-            self.mass = np.sum(ravelImageMasked) / self.pixelmax
+            self.mass = np.sum(self.ravelRoi) / self.pixelmax
             
             # Compute the stroke intensity function.
-            for iBin in self.iValidBins:
-                iPixels = self.pixelsRoi[iBin]
+            for iBin in self.iBinsValid:
+                iPixels = self.iPixelsRoi[iBin]
                 if (len(iPixels) > 0):
-                    pixels = ravelImageMasked[iPixels]                          # TODO: This line is the main cause of slow framerate.
-                    #pixels = np.zeros(len(iPixels))                            # Compare with this line.
-                    self.intensities[iBin] = np.sum(pixels) / len(iPixels) / self.pixelmax
+                    pixels = self.ravelRoi[iPixels]                     # TODO: This line is a cause of slow framerate.
+                    #pixels = np.zeros(len(iPixels))                    # Compare with this line.
+                    self.intensities[iBin] = np.mean(pixels)# / self.pixelmax
                 else:
                     self.intensities[iBin] = 0.0
              
-            self.binsValid        = self.bins[self.iValidBins]
-            self.intensitiesValid = self.intensities[self.iValidBins]
+            self.binsValid        = self.bins[self.iBinsValid]
+            self.intensitiesValid = self.intensities[self.iBinsValid]
+            
 
                         
     # update_edge_stats()
@@ -739,8 +769,8 @@ class Wing(object):
             if self.bFlying:
                 if (len(self.intensitiesValid)>1):
                     (self.angle_leading_b, self.angle_trailing_b) = self.get_edge_angles()
-                    self.angle_amplitude = np.abs(self.angle_leading_b - self.angle_trailing_b)
-                    self.angle_mean = np.mean([self.angle_leading_b, self.angle_trailing_b])
+                    self.angle_amplitude                          = np.abs(self.angle_leading_b - self.angle_trailing_b)
+                    self.angle_mean                               = np.mean([self.angle_leading_b, self.angle_trailing_b])
                     
             else: # not flying
                 self.angle_leading_b  = np.pi/2
@@ -768,21 +798,21 @@ class Wing(object):
         # High & Low Angles.
         (angle_lo_i, angle_hi_i) = self.get_angles_i_from_b(self.params[self.side]['angle_lo'], self.params[self.side]['angle_hi'])
         self.handles['hi'].pt = (self.ptHinge + self.params[self.side]['radius_outer'] * np.array([self.cos['hi'], 
-                                                                                                          self.sin['hi']]))
+                                                                                                   self.sin['hi']]))
         self.handles['lo'].pt = (self.ptHinge + self.params[self.side]['radius_outer'] * np.array([self.cos['lo'], 
-                                                                                                          self.sin['lo']]))
+                                                                                                   self.sin['lo']]))
 
         # Inner Radius.
         self.handles['inner'].pt = (self.ptHinge + self.params[self.side]['radius_inner'] * np.array([self.cos['mid'], 
-                                                                                                             self.sin['mid']]))
-
+                                                                                                      self.sin['mid']]))
 
     
     # update()
     # Update all the internals given a foreground camera image.
     #
     def update(self, image):
-        self.update_bin_intensities(image)
+        self.update_imgroi(image, self.roi)
+        self.update_intensity_function()
         self.update_edge_stats()
         self.update_flight_status()
 
@@ -791,14 +821,29 @@ class Wing(object):
     # Get the angles of the two wing edges.
     #                    
     def get_edge_angles(self):
-        diff = filter_median(np.diff(self.intensitiesValid))
+        #diff = filter_median(np.diff(self.intensitiesValid))
+        diff = (np.diff(self.intensitiesValid))
             
-        iPeak = np.argmax(self.intensitiesValid)
-
-        # Major and minor edges, must have opposite signs.
+        # Major and minor edges must have opposite signs.  Major is the steeper of the two intensity slopes.
         iMax = np.argmax(diff)
         iMin = np.argmin(diff)
-        (iMajor,iMinor) = (iMax,iMin) if (np.abs(diff[iMax]) > np.abs(diff[iMin])) else (iMin,iMax) 
+#        (iMajor,iMinor) = (iMax,iMin) if (np.abs(diff[iMax]) > np.abs(diff[iMin])) else (iMin,iMax)
+        if (np.abs(diff[iMax]) > np.abs(diff[iMin])): 
+            (iMajor,iMinor) = (iMax,iMin)  
+        else:
+            (iMajor,iMinor) = (iMin,iMax)
+#             rospy.logwarn('%s **********************************************' % self.side)
+#             rospy.logwarn('iPixelsRoi: %s' % self.iPixelsRoi)
+#             rospy.logwarn('iPixelsRoi[%s]: %s' % (iMin, self.iPixelsRoi[iMin]))
+#             rospy.logwarn('iPixelsRoi[%s]: %s' % (iMax, self.iPixelsRoi[iMax]))
+#             rospy.logwarn(self.ravelRoi[self.iPixelsRoi[iMin]])
+#             rospy.logwarn(self.ravelRoi[self.iPixelsRoi[iMax]])
+
+# #             #cv2.imwrite('/home/ssafarik/test.png', self.imgRoi)
+# #             rospy.logwarn(self.intensitiesValid)
+# #             rospy.logwarn(np.diff(self.intensitiesValid))
+#             rospy.logwarn('%s: %s' % (self.side, (iMin,iMax)))
+              
 
         iEdge1 = iMajor
         
@@ -812,7 +857,7 @@ class Wing(object):
             else:
                 iEdge2 = -1             # Back edge.
         else:
-            rospy.logwarn('Parameter n_edges must be 1 or 2.')
+            rospy.logwarn('Parameter error:  n_edges must be 1 or 2.')
         
         # Convert the edge index to an angle.
         angle1 = float(self.binsValid[iEdge1])
@@ -885,18 +930,40 @@ class Wing(object):
                 cv2.line(image, ptHinge, (int(x),int(y)), self.bgra, self.thickness_wing)
                 
         self.draw_handles(image)
+        
+        self.test.show()
 
                         
     def serve_bins_callback(self, request):
-        if (self.binsValid is not None):
-            #return float32listResponse(self.bins)
-            return float32listResponse(self.binsValid[:-1])
+        # Bins.
+        if (self.bins is not None):
+            return float32listResponse(self.bins)
+        
+        # Diff bins.
+#         if (self.binsValid is not None):
+#             return float32listResponse(self.binsValid[:-1])
             
-    def serve_histogram_callback(self, request):
-        if (self.intensitiesValid is not None):
-            #return float32listResponse(self.intensities)
-            #return float32listResponse(np.diff(self.intensitiesValid))
-            return float32listResponse(filter_median(np.diff(self.intensitiesValid)))
+    def serve_intensity_callback(self, request):
+        # Intensity function.
+        if (self.intensities is not None):
+            return float32listResponse(self.intensities)
+        
+        # Number of pixels in each bin.
+#         if (self.bins is not None):
+#             n = []
+#             for i in range(len(self.bins)):
+#                 n.append(len(self.iPixelsRoi[i]))
+#                 
+#             n2 = np.array(n, dtype=np.float)
+#             return float32listResponse(n2)
+        
+        # Diff
+#         if (self.intensitiesValid is not None):
+#             return float32listResponse(np.diff(self.intensitiesValid))
+
+        # Filtered diff.
+#         if (self.intensitiesValid is not None):
+#             return float32listResponse(filter_median(np.diff(self.intensitiesValid)))
             
     def serve_edges_callback(self, request):
         if (self.angle_trailing_b is not None):            
@@ -919,7 +986,7 @@ class MainWindow:
 
         # initialize
         rospy.init_node('strokelitude', anonymous=True)
-
+        
         # initialize display
         self.window_name = 'Strokelitude'
         cv.NamedWindow(self.window_name,1)
@@ -976,7 +1043,11 @@ class MainWindow:
         self.nameSelected = None
         self.uiSelected = None
         self.fly.update_handle_points()
-
+        self.tPrev = rospy.Time.now().to_sec()
+        self.hz = 0.0
+        self.hzSum = 0.0
+        self.iCount = 0
+        
         # Publishers.
         self.pubCommand            = rospy.Publisher('strokelitude/command', String)
 
@@ -1215,6 +1286,7 @@ class MainWindow:
                 self.bInitialized = True
                                 
             if (self.params['use_gui']):
+        
                 imgOutput = cv2.cvtColor(imgForeground, cv.CV_GRAY2RGB)
                 self.fly.draw(imgOutput)
                 self.draw_buttons(imgOutput)
@@ -1244,7 +1316,7 @@ class MainWindow:
                     leftplusright = self.fly.wing_l.angle_amplitude + self.fly.wing_r.angle_amplitude
                     #s = 'L+R:% 7.1f' % np.rad2deg(leftplusright)
                     s = 'L+R:% 7.4f' % leftplusright
-                    cv2.putText(imgOutput, s, (x, y_bottom), self.fontface, self.scaleText, cv.Scalar(255,64,64,0) )
+                    cv2.putText(imgOutput, s, (x, y_bottom), self.fontface, self.scaleText, bgra_dict['magenta'])
                     w_text = int(70 * self.scale)
                     x += w_text+self.w_gap
 
@@ -1254,7 +1326,7 @@ class MainWindow:
                     leftminusright = self.fly.wing_l.angle_amplitude - self.fly.wing_r.angle_amplitude
                     #s = 'L-R:% 7.1f' % np.rad2deg(leftminusright)
                     s = 'L-R:% 7.4f' % leftminusright
-                    cv2.putText(imgOutput, s, (x, y_bottom), self.fontface, self.scaleText, cv.Scalar(255,64,64,0) )
+                    cv2.putText(imgOutput, s, (x, y_bottom), self.fontface, self.scaleText, bgra_dict['magenta'])
                     w_text = int(70 * self.scale)
                     x += w_text+self.w_gap
 
@@ -1265,18 +1337,34 @@ class MainWindow:
                 else:
                     s = 'no flight'
                 
-                cv2.putText(imgOutput, s, (x, y_bottom), self.fontface, self.scaleText, cv.Scalar(255,64,255,0) )
+                cv2.putText(imgOutput, s, (x, y_bottom), self.fontface, self.scaleText, bgra_dict['magenta'])
                 w_text = int(70 * self.scale)
                 x += w_text+self.w_gap
             
 
-                if (bTesting):
-                    # Display a test image.
-                    if imgTest is not None:
-                        cv2.imshow(self.window_name, imgTest)
-                else:
-                    # Display the image.
-                    cv2.imshow(self.window_name, imgOutput)
+                # Output the framerate.
+                tNow = rospy.Time.now().to_sec()
+                dt = tNow - self.tPrev
+                self.tPrev = tNow
+                hzNow = 1/dt if dt != 0.0 else 0.0
+                self.iCount += 1
+                if (self.iCount > 100):                     
+                    a= 0.01
+                    self.hz = (1-a)*self.hz + a*hzNow 
+                else:                                       
+                    if (self.iCount>20):             # Get past the transient response.       
+                        self.hzSum += hzNow                 
+                    else:
+                        self.hzSum = hzNow * self.iCount     
+                        
+                    self.hz = self.hzSum / self.iCount
+                    
+                cv2.putText(imgOutput, '%5.1f Hz' % self.hz, (x, y_bottom), self.fontface, self.scaleText, cv.Scalar(255,64,255,0) )
+                w_text = int(70 * self.scale)
+                x += w_text+self.w_gap
+            
+                # Display the image.
+                cv2.imshow(self.window_name, imgOutput)
 
                 cv2.waitKey(1)
 
@@ -1387,10 +1475,10 @@ class MainWindow:
                     ptLC = ptLeft-ptCenterPre
                     ptRC = ptRight-ptCenterPre
                     rL = np.linalg.norm(ptLC)
-                    aL = np.arctan2(ptLC[1], ptLC[0]) - angleBodyPre
+                    aL = np.arctan2(ptLC[1], ptLC[0]) - angleBodyPre # angle from center to hinge in body axis coords.
                     rR = np.linalg.norm(ptRC)
                     aR = np.arctan2(ptRC[1], ptRC[0]) - angleBodyPre
-                
+
                 # Move the selected body point.
                 pt = ptMouse
                 self.params[bodypartSelected]['x'] = float(pt[0])
@@ -1436,7 +1524,7 @@ class MainWindow:
                 pt = ptMouse - self.wingSelected.ptHinge
                 self.params[bodypartSelected]['angle_hi'] = float(self.wingSelected.transform_angle_b_from_i(np.arctan2(pt[1], pt[0])))
                 self.params[bodypartSelected]['radius_outer'] = float(max(self.wingSelected.params[bodypartSelected]['radius_inner']+2, 
-                                                                         np.linalg.norm(self.wingSelected.ptHinge - ptMouse))) # Outer radius > inner radius.
+                                                                          np.linalg.norm(self.wingSelected.ptHinge - ptMouse))) # Outer radius > inner radius.
                 if (self.params['symmetric']):
                     self.params[bodypartSlave]['angle_hi']     = self.params[bodypartSelected]['angle_hi']
                     self.params[bodypartSlave]['radius_outer'] = self.params[bodypartSelected]['radius_outer']

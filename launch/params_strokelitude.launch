@@ -8,7 +8,7 @@
     <param name="image_topic"               type="string"       value="/camera/image_raw" />
 
     <param name="use_gui"                   type="bool"         value="true" />  <!-- You can turn off the GUI to speed the framerate. -->
-    <param name="invertcolor"               type="bool"         value="false" /> <!-- You want a light fly on a dark background.  Only needed if not using a background image. -->
+    <param name="invertcolor"               type="bool"         value="true" /> <!-- You want a light fly on a dark background.  Only needed if not using a background image. -->
     <param name="flipedge"                  type="bool"         value="false" /> <!-- Set which edge to use as the second edge when only finding one edge. -->
     <param name="symmetric"                 type="bool"         value="true" />  <!-- Forces the UI to remain symmetric. -->
     <param name="threshold_flight"          type="double"       value="500" />   <!-- Pixel mass of the wings to count as flying. -->
@@ -17,28 +17,28 @@
     <param name="scale_image"               type="double"       value="1.0" />   <!-- Reducing the image scale will speed the framerate. -->
     <param name="resolution_radians"        type="double"       value="0.0174532925" />   <!-- Coarser resolution will speed the framerate. 1 degree == 0.0174532925 radians. -->
   
-    <param name="head/x"                    type="double"       value="301" />
-    <param name="head/y"                    type="double"       value="146" />
+    <param name="head/x"                    type="double"       value="303" />
+    <param name="head/y"                    type="double"       value="148" />
     <param name="head/radius_minor"         type="double"       value="56" />
     <param name="head/radius_major"         type="double"       value="53" />
 
-    <param name="abdomen/x"                 type="double"       value="312" />
-    <param name="abdomen/y"                 type="double"       value="266" />
+    <param name="abdomen/x"                 type="double"       value="317" />
+    <param name="abdomen/y"                 type="double"       value="268" />
     <param name="abdomen/radius_minor"      type="double"       value="64" />
     <param name="abdomen/radius_major"      type="double"       value="67" />
 
     <param name="right/hinge/x"             type="double"       value="354" />
-    <param name="right/hinge/y"             type="double"       value="225" />
-    <param name="right/radius_outer"        type="double"       value="195" />
+    <param name="right/hinge/y"             type="double"       value="222" />
     <param name="right/radius_inner"        type="double"       value="140" />
-    <param name="right/angle_hi"            type="double"       value="1.0" />   <!-- Radians -->
-    <param name="right/angle_lo"            type="double"       value="-1.78" /> <!-- Radians -->
+    <param name="right/radius_outer"        type="double"       value="212" />
+    <param name="right/angle_hi"            type="double"       value="-1.75" />   <!-- Radians -->
+    <param name="right/angle_lo"            type="double"       value="0.75" />  <!-- Radians -->
 
-    <param name="left/hinge/x"              type="double"       value="262" />
-    <param name="left/hinge/y"              type="double"       value="233" />
-    <param name="left/radius_outer"         type="double"       value="195" />
+    <param name="left/hinge/x"              type="double"       value="269" />
+    <param name="left/hinge/y"              type="double"       value="232" />
     <param name="left/radius_inner"         type="double"       value="140" />
-    <param name="left/angle_hi"             type="double"       value="1.0" />   <!-- Radians -->
-    <param name="left/angle_lo"             type="double"       value="-1.78" /> <!-- Radians -->
+    <param name="left/radius_outer"         type="double"       value="212" />
+    <param name="left/angle_hi"             type="double"       value="-1.75" />   <!-- Radians -->
+    <param name="left/angle_lo"             type="double"       value="0.75" />  <!-- Radians -->
 
 </launch>
