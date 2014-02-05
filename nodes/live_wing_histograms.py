@@ -18,9 +18,9 @@ class Live_Plotter:
         rospy.init_node('liveplotter', anonymous=True)
         
         # right wing
-        service_name = "wing_histogram_right"
+        service_name = "wing_intensity_right"
         rospy.wait_for_service(service_name)
-        self.get_wing_histogram_right = rospy.ServiceProxy(service_name, float32list)
+        self.get_wing_intensity_right = rospy.ServiceProxy(service_name, float32list)
         
         service_name = "wing_bins_right"
         rospy.wait_for_service(service_name)
@@ -31,9 +31,9 @@ class Live_Plotter:
         self.get_wing_edges_right = rospy.ServiceProxy(service_name, float32list)
         
         # left wing
-        service_name = "wing_histogram_left"
+        service_name = "wing_intensity_left"
         rospy.wait_for_service(service_name)
-        self.get_wing_histogram_left = rospy.ServiceProxy(service_name, float32list)
+        self.get_wing_intensity_left = rospy.ServiceProxy(service_name, float32list)
         
         service_name = "wing_bins_left"
         rospy.wait_for_service(service_name)
@@ -64,16 +64,17 @@ class Live_Plotter:
         
         self.line_right, = plt.plot(self.bins_right, data_right, '.', color=colorRight)
         self.line_left, = plt.plot(self.bins_left, data_left, '.', color=colorLeft)
-        self.line_lo, = plt.plot([self.limits_right[0], self.limits_right[0]], [-0.002,0.002], color='black', linewidth=2)
-        self.line_hi, = plt.plot([self.limits_right[1], self.limits_right[1]], [-0.002,0.002], color='black', linewidth=2)
+        self.line_lo, = plt.plot([self.limits_right[0], self.limits_right[0]], [0,200], color='black', linewidth=2)
+        self.line_hi, = plt.plot([self.limits_right[1], self.limits_right[1]], [0,200], color='black', linewidth=2)
         
-        self.line_trailing_right, = plt.plot([self.edges_right[0], self.edges_right[0]], [-0.002,0.002], color=colorRight, linewidth=2)
-        self.line_leading_right, = plt.plot([self.edges_right[1], self.edges_right[1]], [-0.002,0.002], color=colorRight, linewidth=2)
+        self.line_trailing_right, = plt.plot([self.edges_right[0], self.edges_right[0]], [0,200], color=colorRight, linewidth=2)
+        self.line_leading_right, = plt.plot([self.edges_right[1], self.edges_right[1]], [0,200], color=colorRight, linewidth=2)
         
-        self.line_trailing_left, = plt.plot([self.edges_left[0], self.edges_right[0]], [-0.002,0.002], color=colorLeft, linewidth=2)
-        self.line_leading_left, = plt.plot([self.edges_left[1], self.edges_left[1]], [-0.002,0.002], color=colorLeft, linewidth=2)
+        self.line_trailing_left, = plt.plot([self.edges_left[0], self.edges_right[0]], [0,200], color=colorLeft, linewidth=2)
+        self.line_leading_left, = plt.plot([self.edges_left[1], self.edges_left[1]], [0,200], color=colorLeft, linewidth=2)
         
-        plt.ylim(-0.02, 0.02)
+        #plt.ylim(0.1, 0.1)
+        plt.ylim(0,200)
         #plt.autoscale(True)
                 
         self.image_animation = animation.FuncAnimation(self.fig, self.update_line, self.bins_right, init_func=self.init_plot, interval=50, blit=True)
@@ -91,8 +92,8 @@ class Live_Plotter:
                 self.limits_left = [rospy.get_param('strokelitude/left/angle_lo'), rospy.get_param('strokelitude/left/angle_hi')]
                 self.last_update = time.time()
                 
-            data_right = self.get_wing_histogram_right(1).data
-            data_left = self.get_wing_histogram_left(1).data
+            data_right = self.get_wing_intensity_right(1).data
+            data_left = self.get_wing_intensity_left(1).data
             
             self.edges_right = self.get_wing_edges_right(1).data
             self.edges_left = self.get_wing_edges_left(1).data
@@ -101,14 +102,14 @@ class Live_Plotter:
                 self.line_right.set_data(self.bins_right, data_right)
             if data_left is not None:
                 self.line_left.set_data(self.bins_left, data_left)
-            self.line_lo.set_data([self.limits_right[0], self.limits_right[0]], [-0.002,0.002])
-            self.line_hi.set_data([self.limits_right[1], self.limits_right[1]], [-0.002,0.002])
+            self.line_lo.set_data([self.limits_right[0], self.limits_right[0]], [0,200])
+            self.line_hi.set_data([self.limits_right[1], self.limits_right[1]], [0,200])
             
-            self.line_trailing_right.set_data([self.edges_right[0], self.edges_right[0]], [-0.002,0.002])
-            self.line_leading_right.set_data([self.edges_right[1], self.edges_right[1]], [-0.002,0.002])
+            self.line_trailing_right.set_data([self.edges_right[0], self.edges_right[0]], [0,200])
+            self.line_leading_right.set_data([self.edges_right[1], self.edges_right[1]], [0,200])
             
-            self.line_trailing_left.set_data([self.edges_left[0], self.edges_left[0]], [-0.002,0.002])
-            self.line_leading_left.set_data([self.edges_left[1], self.edges_left[1]], [-0.002,0.002])
+            self.line_trailing_left.set_data([self.edges_left[0], self.edges_left[0]], [0,200])
+            self.line_leading_left.set_data([self.edges_left[1], self.edges_left[1]], [0,200])
         except:
             pass
             
