@@ -10,6 +10,7 @@
   <url>http://ros.org/wiki/StrokelitudeROS</url>
   <depend package="cv_bridge"/> 
   <depend package="dynamic_reconfigure"/> 
+  <depend package="ledpanels"/> 
 
 </package>
 

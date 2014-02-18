@@ -1,0 +1,12 @@
+<launch>
+	<!-- ========================================================== -->
+	<!-- Launch everything needed for strokelitude.                 -->
+	<!-- ========================================================== -->
+
+
+    <include file="$(find StrokelitudeROS)/launch/params_strokelitude.launch" />
+    <include file="$(find StrokelitudeROS)/launch/camera_playbag.launch" />
+
+    <node name="strokelitude"       pkg="StrokelitudeROS"  type="strokelitude.py" required="true"      />
+    
+</launch>
