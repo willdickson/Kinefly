@@ -380,7 +380,7 @@ class Bodypart(object):
     # Set the given params dict into this object.
     #
     def set_params(self, params):
-        self.params  = params
+        self.params = params
         self.angleBody_i = self.get_bodyangle_i()
         self.cosBodyangle = np.cos(self.angleBody_i)
         self.sinBodyangle = np.sin(self.angleBody_i)
@@ -885,25 +885,16 @@ class Wing(object):
 # #                rospy.logwarn('% d: n=%3d, iMajor=%d, pixelsMajor=%s' % (i, len(pixelsMajor), iMajor, pixelsMajor))
 # #                rospy.logwarn('% d: %6.2f, %6.2f, %s, %s' % (i, np.mean(pixelsMajor), np.std(pixelsMajor), np.sum(pixelsMajor), len(pixelsMajor)))
 
-        iEdge1 = iMajor
-        
-        if (self.params['n_edges']==2):
-            iEdge2 = iMinor
-        elif (self.params['n_edges']==1):
-            if (self.params['flipedge']):
-                iEdge2 = self.iBinsValid[0]              # Front edge.
-            else:
-                iEdge2 = self.iBinsValid[-1]             # Back edge.
-        else:
-            rospy.logwarn('Parameter error:  n_edges must be 1 or 2.')
-        
         # Convert the edge index to an angle.
-        if (self.params['n_edges']==1):
-            angle1 = self.bins[iEdge1]
+        if (self.params['n_edges']==2):
+            angle1 = self.bins[iMajor]
+            angle2 = self.bins[iMinor]
+        elif (self.params['n_edges']==1):
+            angle1 = self.bins[iMajor]
             angle2 = 0.0
         else:
-            angle1 = self.bins[iEdge1]
-            angle2 = self.bins[iEdge2]
+            rospy.logwarn('Parameter error:  n_edges must be 1 or 2.')
+
         
         return (angle1, angle2)
         
@@ -1051,7 +1042,6 @@ class MainWindow:
                     'image_topic':'/camera/image_raw',
                     'use_gui':True,                     # You can turn off the GUI to speed the framerate.
                     'invertcolor':False,                # You want a light fly on a dark background.  Only needed if not using a background image.
-                    'flipedge':False,                   # Set which edge to use as the second edge when only finding one edge.
                     'symmetric':True,                   # Forces the UI to remain symmetric.
                     'resolution_radians':0.0174532925,  # Coarser resolution will speed the framerate. 1 degree == 0.0174532925 radians.
                     'threshold_flight':0.1,
@@ -1089,7 +1079,6 @@ class MainWindow:
         self.imgBackground  = cv2.imread(self.filenameBackground, cv.CV_LOAD_IMAGE_GRAYSCALE)
         
         self.scale = self.params['scale_image']
-        self.params = self.scale_params(self.params, self.scale)
         
         # initialize wings and body
         self.fly = Fly(self.params)
@@ -1139,14 +1128,6 @@ class MainWindow:
         self.buttons.append(btn)
 
         x = btn.right+1
-        btn = Button(name='flipedge', 
-                   text='edge2',  # Instantiate with the longest possible text.
-                   pt=[x,y],
-                   scaleText=self.scaleText)
-        btn.set_text('edge1' if (self.params['flipedge']) else 'edge2')
-        self.buttons.append(btn)
-
-        x = btn.right+1
         btn = Button(name='flipsymmetry', 
                    text='asymmetric', 
                    pt=[x,y],
@@ -1172,7 +1153,7 @@ class MainWindow:
             pass
         
         # Set it into the wings.
-        self.fly.set_params(self.params)
+        self.fly.set_params(self.scale_params(self.params, self.scale))
         rosparam.dump_params(self.parameterfile, 'strokelitude')
         
         return config
@@ -1188,14 +1169,6 @@ class MainWindow:
             rospy.signal_shutdown('User requested exit.')
         
         
-        if (self.command == 'flipedge'):
-            self.params['flipedge'] = not self.params['flipedge']
-            
-            for button in self.buttons:
-                if (button.name=='flipedge'):
-                    button.set_text('edge1' if (self.params['flipedge']) else 'edge2')
-                    
-            
         if (self.command == 'flipsymmetry'):
             self.params['symmetric'] = not self.params['symmetric']
             
@@ -1219,7 +1192,6 @@ class MainWindow:
         if (self.command == 'help'):
             rospy.logwarn('The strokelitude/command topic accepts the following string commands:')
             rospy.logwarn('  help                 This message.')
-            rospy.logwarn('  flipedge             Toggle which wing edge to use as default.')
             rospy.logwarn('  flipsymmetry         Toggle symmetry when mousing the handles.')
             rospy.logwarn('  invertcolor          Toggle blackonwhite or whiteonblack.')
             rospy.logwarn('  save_background      Save the instant camera image to disk for')
@@ -1233,25 +1205,24 @@ class MainWindow:
             rospy.logwarn('are settable as launch-time parameters.')
             rospy.logwarn('')
 
-        self.fly.set_params(self.params)
-        self.params = self.scale_params(self.params, 1/self.scale)
-        rosparam.dump_params(self.parameterfile, 'strokelitude')
+        self.fly.set_params(self.scale_params(self.params, self.scale))
+        self.set_dict_with_preserve(self.params, rospy.get_param('strokelitude'))
         rospy.set_param('strokelitude', self.params)
-        self.params = self.scale_params(self.params, self.scale)
+        rosparam.dump_params(self.parameterfile, 'strokelitude')
         
     def scale_params(self, paramsIn, scale):
 		paramsOut = copy.deepcopy(paramsIn)
 		for wing in ['left', 'right']:
-			paramsOut[wing]['hinge']['x'] = int(paramsIn[wing]['hinge']['x']*scale)  
-			paramsOut[wing]['hinge']['y'] = int(paramsIn[wing]['hinge']['y']*scale)  
-			paramsOut[wing]['radius_outer'] = int(paramsIn[wing]['radius_outer']*scale)  
-			paramsOut[wing]['radius_inner'] = int(paramsIn[wing]['radius_inner']*scale)  
+			paramsOut[wing]['hinge']['x'] = (paramsIn[wing]['hinge']['x']*scale)  
+			paramsOut[wing]['hinge']['y'] = (paramsIn[wing]['hinge']['y']*scale)  
+			paramsOut[wing]['radius_outer'] = (paramsIn[wing]['radius_outer']*scale)  
+			paramsOut[wing]['radius_inner'] = (paramsIn[wing]['radius_inner']*scale)  
 
 		for bodypart in ['head', 'abdomen']:
-			paramsOut[bodypart]['x'] = int(paramsIn[bodypart]['x']*scale) 
-			paramsOut[bodypart]['y'] = int(paramsIn[bodypart]['y']*scale)  
-			paramsOut[bodypart]['radius_minor'] = int(paramsIn[bodypart]['radius_minor']*scale)  
-			paramsOut[bodypart]['radius_major'] = int(paramsIn[bodypart]['radius_major']*scale)
+			paramsOut[bodypart]['x'] = (paramsIn[bodypart]['x']*scale) 
+			paramsOut[bodypart]['y'] = (paramsIn[bodypart]['y']*scale)  
+			paramsOut[bodypart]['radius_minor'] = (paramsIn[bodypart]['radius_minor']*scale)  
+			paramsOut[bodypart]['radius_major'] = (paramsIn[bodypart]['radius_major']*scale)
 			
 		return paramsOut  
 	
@@ -1513,19 +1484,21 @@ class MainWindow:
     def update_params_from_handle(self, bodypartSelected, tagSelected, ptMouse):             
         bodypartSlave = 'right' if (self.bodypartSelected=='left') else 'left'
                     
+        params = self.scale_params(self.params, self.scale) 
+        
         # Head or Abdomen points
         if (bodypartSelected=='head') or (bodypartSelected=='abdomen'):
             if (tagSelected=='center'): 
 
                 # Get the hinge points pre-move.
-                if (self.params['symmetric']):
-                    ptHead = np.array([self.params['head']['x'], self.params['head']['y']])
-                    ptAbdomen = np.array([self.params['abdomen']['x'], self.params['abdomen']['y']])
+                if (params['symmetric']):
+                    ptHead = np.array([params['head']['x'], params['head']['y']])
+                    ptAbdomen = np.array([params['abdomen']['x'], params['abdomen']['y']])
                     ptCenterPre = (ptHead + ptAbdomen) / 2
                     ptBodyPre = ptHead - ptAbdomen
                     angleBodyPre = np.arctan2(ptBodyPre[1], ptBodyPre[0])
-                    ptLeft = np.array([self.params['left']['hinge']['x'], self.params['left']['hinge']['y']])
-                    ptRight = np.array([self.params['right']['hinge']['x'], self.params['right']['hinge']['y']])
+                    ptLeft = np.array([params['left']['hinge']['x'], params['left']['hinge']['y']])
+                    ptRight = np.array([params['right']['hinge']['x'], params['right']['hinge']['y']])
                     ptLC = ptLeft-ptCenterPre
                     ptRC = ptRight-ptCenterPre
                     rL = np.linalg.norm(ptLC)
@@ -1535,73 +1508,75 @@ class MainWindow:
 
                 # Move the selected body point.
                 pt = ptMouse
-                self.params[bodypartSelected]['x'] = float(pt[0])
-                self.params[bodypartSelected]['y'] = float(pt[1])
+                params[bodypartSelected]['x'] = float(pt[0])
+                params[bodypartSelected]['y'] = float(pt[1])
                 
                 # Now move the hinge points relative to the new body points.
-                if (self.params['symmetric']):
-                    ptHead = np.array([self.params['head']['x'], self.params['head']['y']])
-                    ptAbdomen = np.array([self.params['abdomen']['x'], self.params['abdomen']['y']])
+                if (params['symmetric']):
+                    ptHead = np.array([params['head']['x'], params['head']['y']])
+                    ptAbdomen = np.array([params['abdomen']['x'], params['abdomen']['y']])
                     ptCenterPost = (ptHead + ptAbdomen) / 2
                     ptBodyPost = ptHead - ptAbdomen
                     angleBodyPost = np.arctan2(ptBodyPost[1], ptBodyPost[0])
                     ptLeft = ptCenterPost + rL * np.array([np.cos(aL+angleBodyPost), np.sin(aL+angleBodyPost)])
                     ptRight = ptCenterPost + rR * np.array([np.cos(aR+angleBodyPost), np.sin(aR+angleBodyPost)])
-                    self.params['left']['hinge']['x'] = float(ptLeft[0])
-                    self.params['left']['hinge']['y'] = float(ptLeft[1])
-                    self.params['right']['hinge']['x'] = float(ptRight[0])
-                    self.params['right']['hinge']['y'] = float(ptRight[1])
+                    params['left']['hinge']['x'] = float(ptLeft[0])
+                    params['left']['hinge']['y'] = float(ptLeft[1])
+                    params['right']['hinge']['x'] = float(ptRight[0])
+                    params['right']['hinge']['y'] = float(ptRight[1])
                     
 
 
             if (tagSelected=='radius_major'): 
-                self.params[bodypartSelected]['radius_major'] = float(np.linalg.norm(np.array([self.params[bodypartSelected]['x'],self.params[bodypartSelected]['y']]) - ptMouse))
+                params[bodypartSelected]['radius_major'] = float(np.linalg.norm(np.array([params[bodypartSelected]['x'],params[bodypartSelected]['y']]) - ptMouse))
             if (tagSelected=='radius_minor'): 
-                self.params[bodypartSelected]['radius_minor'] = float(np.linalg.norm(np.array([self.params[bodypartSelected]['x'],self.params[bodypartSelected]['y']]) - ptMouse))
+                params[bodypartSelected]['radius_minor'] = float(np.linalg.norm(np.array([params[bodypartSelected]['x'],params[bodypartSelected]['y']]) - ptMouse))
 
 
         # Wing points.
         elif (bodypartSelected=='left') or (bodypartSelected=='right'):
             # Hinge point.
             if (tagSelected=='hinge'): 
-                self.params[bodypartSelected]['hinge']['x'] = float(ptMouse[0])
-                self.params[bodypartSelected]['hinge']['y'] = float(ptMouse[1])
+                params[bodypartSelected]['hinge']['x'] = float(ptMouse[0])
+                params[bodypartSelected]['hinge']['y'] = float(ptMouse[1])
 
-                if (self.params['symmetric']):
+                if (params['symmetric']):
                     ptSlave = self.get_reflection_across_bodyaxis(ptMouse)
-                    self.params[bodypartSlave]['hinge']['x'] = float(ptSlave[0])
-                    self.params[bodypartSlave]['hinge']['y'] = float(ptSlave[1])
+                    params[bodypartSlave]['hinge']['x'] = float(ptSlave[0])
+                    params[bodypartSlave]['hinge']['y'] = float(ptSlave[1])
 
 
             # High angle.
             elif (tagSelected=='angle_hi'): 
                 pt = ptMouse - self.wingSelected.ptHinge
-                self.params[bodypartSelected]['angle_hi'] = float(self.wingSelected.transform_angle_b_from_i(np.arctan2(pt[1], pt[0])))
-                self.params[bodypartSelected]['radius_outer'] = float(max(self.wingSelected.params[bodypartSelected]['radius_inner']+2, 
+                params[bodypartSelected]['angle_hi'] = float(self.wingSelected.transform_angle_b_from_i(np.arctan2(pt[1], pt[0])))
+                params[bodypartSelected]['radius_outer'] = float(max(self.wingSelected.params[bodypartSelected]['radius_inner']+2, 
                                                                           np.linalg.norm(self.wingSelected.ptHinge - ptMouse))) # Outer radius > inner radius.
-                if (self.params['symmetric']):
-                    self.params[bodypartSlave]['angle_hi']     = self.params[bodypartSelected]['angle_hi']
-                    self.params[bodypartSlave]['radius_outer'] = self.params[bodypartSelected]['radius_outer']
+                if (params['symmetric']):
+                    params[bodypartSlave]['angle_hi']     = params[bodypartSelected]['angle_hi']
+                    params[bodypartSlave]['radius_outer'] = params[bodypartSelected]['radius_outer']
                   
                   
             # Low angle.
             elif (tagSelected=='angle_lo'): 
                 pt = ptMouse - self.wingSelected.ptHinge
-                self.params[bodypartSelected]['angle_lo'] = float(self.wingSelected.transform_angle_b_from_i(np.arctan2(pt[1], pt[0])))
-                self.params[bodypartSelected]['radius_outer'] = float(max(self.wingSelected.params[bodypartSelected]['radius_inner']+2, 
+                params[bodypartSelected]['angle_lo'] = float(self.wingSelected.transform_angle_b_from_i(np.arctan2(pt[1], pt[0])))
+                params[bodypartSelected]['radius_outer'] = float(max(self.wingSelected.params[bodypartSelected]['radius_inner']+2, 
                                                                           np.linalg.norm(self.wingSelected.ptHinge - ptMouse)))
-                if (self.params['symmetric']):
-                    self.params[bodypartSlave]['angle_lo']     = self.params[bodypartSelected]['angle_lo']
-                    self.params[bodypartSlave]['radius_outer'] = self.params[bodypartSelected]['radius_outer']
+                if (params['symmetric']):
+                    params[bodypartSlave]['angle_lo']     = params[bodypartSelected]['angle_lo']
+                    params[bodypartSlave]['radius_outer'] = params[bodypartSelected]['radius_outer']
                   
                   
             # Inner radius.
             elif (tagSelected=='inner'): 
-                self.params[bodypartSelected]['radius_inner'] = float(min(np.linalg.norm(self.wingSelected.ptHinge - ptMouse), 
+                params[bodypartSelected]['radius_inner'] = float(min(np.linalg.norm(self.wingSelected.ptHinge - ptMouse), 
                                                                           self.wingSelected.params[bodypartSelected]['radius_outer']-2))
-                if (self.params['symmetric']):
-                    self.params[bodypartSlave]['radius_inner'] = self.params[bodypartSelected]['radius_inner']
+                if (params['symmetric']):
+                    params[bodypartSlave]['radius_inner'] = params[bodypartSelected]['radius_inner']
                 
+        self.params = self.scale_params(params, 1/self.scale) 
+
                 
     # onMouse()
     # Handle mouse events.
@@ -1648,9 +1623,6 @@ class MainWindow:
                     elif (self.nameSelected == self.nameSelectedNow == 'exit'):
                         self.pubCommand.publish('exit')
                         
-                    elif (self.nameSelected == self.nameSelectedNow == 'flipedge'):
-                        self.pubCommand.publish('flipedge')
-                        
                     elif (self.nameSelected == self.nameSelectedNow == 'invertcolor'):
                         self.pubCommand.publish('invertcolor')
                         
@@ -1663,15 +1635,18 @@ class MainWindow:
         elif (self.uiSelected=='handle'):
             # Set the new params.
             self.update_params_from_handle(self.bodypartSelected, self.tagSelected, ptMouse)
-            self.fly.set_params(self.params)
+            self.fly.set_params(self.scale_params(self.params, self.scale))
+            
+            self.set_dict_with_preserve(self.params, rospy.get_param('strokelitude'))
+            rospy.set_param('strokelitude', self.params)
             rosparam.dump_params(self.parameterfile, 'strokelitude')
             
         
             # Save the results.
             if (event==cv.CV_EVENT_LBUTTONUP):
                 self.fly.create_masks(self.shapeImage)
-                params1 = self.scale_params(self.params, 1/self.scale)
-                rospy.set_param('strokelitude', params1)
+                self.set_dict_with_preserve(self.params, rospy.get_param('strokelitude'))
+                rospy.set_param('strokelitude', self.params)
             
         # end if (self.uiSelected=='handle'):
             
@@ -1686,6 +1661,11 @@ class MainWindow:
                 
     def run(self):
         rospy.spin()
+
+        self.set_dict_with_preserve(self.params, rospy.get_param('strokelitude'))
+        rospy.set_param('strokelitude', self.params)
+        rosparam.dump_params(self.parameterfile, 'strokelitude')
+
         cv2.destroyAllWindows()
 
 
