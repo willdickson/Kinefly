@@ -49,7 +49,7 @@ class Strokelitude2Ledpanels:
                         }
         self.set_dict_with_preserve(self.params, self.defaults)
         self.update_coefficients_from_params()
-        #rospy.set_param('strokelitude',self.params)
+        rospy.set_param('strokelitude/ledpanels', self.params)
         
         self.msgpanels = MsgPanelsCommand(command='all_off', arg1=0, arg2=0, arg3=0, arg4=0, arg5=0, arg6=0)
         

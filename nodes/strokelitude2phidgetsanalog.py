@@ -7,104 +7,103 @@ import rosparam
 import copy
 import numpy as np
 
-from std_msgs.msg import Float32, Header, String
+from std_msgs.msg import String
 
-from StrokelitudeROS.msg import MsgFlystate, MsgWing, MsgBodypart
+from StrokelitudeROS.msg import MsgFlystate
+import Phidgets
 import Phidgets.Devices.Analog
 
 
 ###############################################################################
 ###############################################################################
-class Strokelitude2Voltage:
+class Strokelitude2PhidgetsAnalog:
 
     def __init__(self):
         self.bInitialized = False
 
         # initialize
-        rospy.init_node('strokelitude2voltage', anonymous=True)
+        rospy.init_node('strokelitude2phidgetsanalog', anonymous=True)
         
         # Load the parameters.
-        self.params = rospy.get_param('strokelitude/voltage', {})
-        self.defaults = {'x0': 0.0,
-                         'xl1':1.0,
-                         'xl2':0.0,
-                         'xr1':-1.0,
-                         'xr2':0.0,
-                         'xha':0.0,
-                         'xhr':0.0,
-                         'xaa':0.0,
-                         'xar':0.0,
-                         'y0': 0.0,
-                         'yl1':0.0,
-                         'yl2':0.0,
-                         'yr1':0.0,
-                         'yr2':0.0,
-                         'yha':0.0,
-                         'yhr':0.0,
-                         'yaa':0.0,
-                         'yar':0.0,
-                        }
+        self.params = rospy.get_param('strokelitude/phidgetsanalog', {})
+        self.defaults = {'v00': 0.0, 'v0l1':1.0, 'v0l2':0.0, 'v0r1':0.0, 'v0r2':0.0, 'v0ha':0.0, 'v0hr':0.0, 'v0aa':0.0, 'v0ar':0.0, # L
+                         'v10': 0.0, 'v1l1':0.0, 'v1l2':0.0, 'v1r1':1.0, 'v1r2':0.0, 'v1ha':0.0, 'v1hr':0.0, 'v1aa':0.0, 'v1ar':0.0, # R
+                         'v20': 0.0, 'v2l1':1.0, 'v2l2':0.0, 'v2r1':1.0, 'v2r2':0.0, 'v2ha':0.0, 'v2hr':0.0, 'v2aa':0.0, 'v2ar':0.0, # L+R
+                         'v30': 0.0, 'v3l1':1.0, 'v3l2':0.0, 'v3r1':-1.0, 'v3r2':0.0, 'v3ha':0.0, 'v3hr':0.0, 'v3aa':0.0, 'v3ar':0.0, # L-R
+                         }
         self.set_dict_with_preserve(self.params, self.defaults)
+        rospy.set_param('strokelitude/phidgetsanalog', self.params)
+        
+
         self.update_coefficients_from_params()
-        #rospy.set_param('strokelitude',self.params)
+        
         
         # Subscriptions.        
         self.subFlystate = rospy.Subscriber('strokelitude/flystate', MsgFlystate, self.flystate_callback)
-        self.subCommand  = rospy.Subscriber('strokelitude2voltage/command', String, self.command_callback)
-        rospy.sleep(1) # Time to connect publishers & subscribers.
+        self.subCommand  = rospy.Subscriber('strokelitude2phidgetsanalog/command', String, self.command_callback)
+        rospy.sleep(1) # Allow time to connect publishers & subscribers.
 
         self.analog = Phidgets.Devices.Analog.Analog()
         self.analog.openPhidget()
         while (True):
-            rospy.logwarn('Waiting for PhidgetAnalog device...')
-            self.analog.waitForAttach(1000)
+            rospy.logwarn('Waiting for PhidgetsAnalog device...')
+            try:
+                self.analog.waitForAttach(1000)
+            except Phidgets.PhidgetException.PhidgetException:
+                pass
+            
             if (self.analog.isAttached()):
                 break
-        rospy.logwarn('Attached to PhidgetAnalog device...')
+        rospy.logwarn('Attached to: %s, ID=%s' % (self.analog.getDeviceName(), self.analog.getDeviceID()))
         for i in range(4):
             self.analog.setEnabled(i, True)
         
         self.bInitialized = True
         
 
+    # update_coefficients_from_params()
+    #
+    # Pull the coefficients out of the params dict.
+    # There are four voltage channels (v0,v1,v2,v3), and each channel has coefficients to make a voltage from wing, head, and abdomen angles.
+    # 
     def update_coefficients_from_params(self):
-        self.x0  = self.params['x0']
-        self.xl1 = self.params['xl1']
-        self.xl2 = self.params['xl2']
-        self.xr1 = self.params['xr1']
-        self.xr2 = self.params['xr2']
-        self.xha = self.params['xha']
-        self.xhr = self.params['xhr']
-        self.xaa = self.params['xaa']
-        self.xar = self.params['xar']
+        self.a = np.array([[self.params['v00'], self.params['v0l1'], self.params['v0l2'], self.params['v0r1'], self.params['v0r2'], self.params['v0ha'], self.params['v0hr'], self.params['v0aa'], self.params['v0ar']],
+                           [self.params['v10'], self.params['v1l1'], self.params['v1l2'], self.params['v1r1'], self.params['v1r2'], self.params['v1ha'], self.params['v1hr'], self.params['v1aa'], self.params['v1ar']],
+                           [self.params['v20'], self.params['v2l1'], self.params['v2l2'], self.params['v2r1'], self.params['v2r2'], self.params['v2ha'], self.params['v2hr'], self.params['v2aa'], self.params['v2ar']],
+                           [self.params['v30'], self.params['v3l1'], self.params['v3l2'], self.params['v3r1'], self.params['v3r2'], self.params['v3ha'], self.params['v3hr'], self.params['v3aa'], self.params['v3ar']]
+                          ]
+                          )
+
         
         
     def flystate_callback(self, flystate):
-        voltages = self.get_voltages(flystate)
-        for i in range(4):
-            self.analog.setVoltage(i, voltages[i])
+        if (self.analog.isAttached()):
+            voltages = self.voltages_from_flystate(flystate)
+            for i in range(4):
+                self.analog.setVoltage(i, voltages[i])
     
     
     # get_voltages()
     #
-    def get_voltages(self, flystate):
-        voltages = [0.0, 0.0, 0.0, 0.0]
+    def voltages_from_flystate(self, flystate):
+        f = np.array([1.0,
+                      flystate.left.angle1,
+                      flystate.left.angle2,
+                      flystate.right.angle1,
+                      flystate.right.angle2,
+                      flystate.head.angle,
+                      flystate.head.radius,
+                      flystate.abdomen.angle,
+                      flystate.abdomen.radius
+                      ])
         
-        L1 = flystate.left.angle1
-        L2 = flystate.left.angle2
-        R1 = flystate.right.angle1
-        R2 = flystate.right.angle2
-        HA = flystate.head.angle
-        HR = flystate.head.radius
-        AA = flystate.abdomen.angle
-        AR = flystate.abdomen.radius
-        
-        # L1,L2,R1,R2,HA,HR,AA,AR are all in radians.
-        # x0,xl1,xl2,xr1,xr2,xha,xhr,xaa,xar are coefficients to convert to frames.
-        voltages[0] = self.x0 + self.xl1*L1 + self.xl2*L2 + \
-                                self.xr1*R1 + self.xr2*R2 + \
-                                self.xha*HA + self.xhr*HR + \
-                                self.xaa*AA + self.xar*AR # Angle + Radius
+        voltages = np.dot(self.a, f)
+        # L1,L2,R1,R2,HA,AA are all in radians.
+        # v00,v0l1,v0l2,v0r1,v0r2,v0ha,v0hr,v0aa,v0ar are coefficients to convert to voltage.
+#         voltages[0] = self.v00 + self.v0l1*L1 + self.v0l2*L2 + \
+#                                  self.v0r1*R1 + self.v0r2*R2 + \
+#                                  self.v0ha*HA + self.v0hr*HR + \
+#                                  self.v0aa*AA + self.v0ar*AR # Angle + Radius
                        
         return voltages
 
@@ -121,12 +120,12 @@ class Strokelitude2Voltage:
 
 
         if (self.command == 'help'):
-            rospy.logwarn('The strokelitude2voltage/command topic accepts the following string commands:')
+            rospy.logwarn('The strokelitude2phidgetsanalog/command topic accepts the following string commands:')
             rospy.logwarn('  help                 This message.')
             rospy.logwarn('  exit                 Exit the program.')
             rospy.logwarn('')
             rospy.logwarn('You can send the above commands at the shell prompt via:')
-            rospy.logwarn('rostopic pub -1 strokelitude2voltage/command std_msgs/String commandtext')
+            rospy.logwarn('rostopic pub -1 strokelitude2phidgetsanalog/command std_msgs/String commandtext')
             rospy.logwarn('')
             rospy.logwarn('Parameters are settable as launch-time parameters.')
             rospy.logwarn('')
@@ -168,9 +167,13 @@ class Strokelitude2Voltage:
     def run(self):
         rospy.spin()
 
+        if (self.analog.isAttached()):
+            for i in range(4):
+                self.analog.setVoltage(i, 0.0)
+
 
 if __name__ == '__main__':
 
-    s2l = Strokelitude2Voltage()
-    s2l.run()
+    s2pa = Strokelitude2PhidgetsAnalog()
+    s2pa.run()
 
