@@ -11,6 +11,8 @@
     <include file="$(find StrokelitudeROS)/launch/camera_1394.launch" />
 
 
-    <node name="strokelitude"       pkg="StrokelitudeROS"  type="strokelitude.py" required="true"      />
+    <node name="strokelitude"            pkg="StrokelitudeROS"  type="strokelitude.py"           required="true"      />
+    <node name="strokelitude2ledpanels"  pkg="StrokelitudeROS"  type="strokelitude2ledpanels.py"  />
+    <node name="ledpanels"               pkg="ledpanels"        type="ledpanels.py"  />
     
 </launch>

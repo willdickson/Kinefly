@@ -4,5 +4,6 @@
 	<!-- ========================================================== -->
 
 
-    <param name="strokelitude_parameterfile"             type="string"       value="~/strokelitude.yaml" />
+    <rosparam file="$(env HOME)/strokelitude.yaml" />
+    <param name="strokelitude_parameterfile" type="string" value="$(env HOME)/strokelitude.yaml" />
 </launch>

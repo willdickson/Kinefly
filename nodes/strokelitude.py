@@ -898,8 +898,12 @@ class Wing(object):
             rospy.logwarn('Parameter error:  n_edges must be 1 or 2.')
         
         # Convert the edge index to an angle.
-        angle1 = self.bins[iEdge1]
-        angle2 = self.bins[iEdge2]
+        if (self.params['n_edges']==1):
+            angle1 = self.bins[iEdge1]
+            angle2 = 0.0
+        else:
+            angle1 = self.bins[iEdge1]
+            angle2 = self.bins[iEdge2]
         
         return (angle1, angle2)
         
@@ -959,17 +963,18 @@ class Wing(object):
             if (self.angle_leading_b is not None):
                 (angle_leading_i, angle_trailing_i) = self.get_angles_i_from_b(self.angle_leading_b, self.angle_trailing_b)
                 
-                x0 = self.ptHinge[0] + self.params[self.side]['radius_inner'] * np.cos(angle_trailing_i)
-                y0 = self.ptHinge[1] + self.params[self.side]['radius_inner'] * np.sin(angle_trailing_i)
-                x1 = self.ptHinge[0] + self.params[self.side]['radius_outer'] * np.cos(angle_trailing_i)
-                y1 = self.ptHinge[1] + self.params[self.side]['radius_outer'] * np.sin(angle_trailing_i)
-                cv2.line(image, (int(x0),int(y0)), (int(x1),int(y1)), self.bgra, self.thickness_wing)
-                
                 x0 = self.ptHinge[0] + self.params[self.side]['radius_inner'] * np.cos(angle_leading_i)
                 y0 = self.ptHinge[1] + self.params[self.side]['radius_inner'] * np.sin(angle_leading_i)
                 x1 = self.ptHinge[0] + self.params[self.side]['radius_outer'] * np.cos(angle_leading_i)
                 y1 = self.ptHinge[1] + self.params[self.side]['radius_outer'] * np.sin(angle_leading_i)
                 cv2.line(image, (int(x0),int(y0)), (int(x1),int(y1)), self.bgra, self.thickness_wing)
+                
+                if (self.params['n_edges']==2):
+                    x0 = self.ptHinge[0] + self.params[self.side]['radius_inner'] * np.cos(angle_trailing_i)
+                    y0 = self.ptHinge[1] + self.params[self.side]['radius_inner'] * np.sin(angle_trailing_i)
+                    x1 = self.ptHinge[0] + self.params[self.side]['radius_outer'] * np.cos(angle_trailing_i)
+                    y1 = self.ptHinge[1] + self.params[self.side]['radius_outer'] * np.sin(angle_trailing_i)
+                    cv2.line(image, (int(x0),int(y0)), (int(x1),int(y1)), self.bgra, self.thickness_wing)
                 
         self.draw_handles(image)
         
@@ -1104,7 +1109,7 @@ class MainWindow:
         self.subImageRaw           = rospy.Subscriber(self.params['image_topic'], Image, self.image_callback)
         self.subCommand            = rospy.Subscriber('strokelitude/command', String, self.command_callback)
 
-        self.w_gap = int(30 * self.scale)
+        self.w_gap = int(20 * self.scale)
         self.scaleText = 0.4 * self.scale
         self.fontface = cv2.FONT_HERSHEY_SIMPLEX
 
@@ -1229,9 +1234,10 @@ class MainWindow:
             rospy.logwarn('')
 
         self.fly.set_params(self.params)
+        self.params = self.scale_params(self.params, 1/self.scale)
         rosparam.dump_params(self.parameterfile, 'strokelitude')
         rospy.set_param('strokelitude', self.params)
-    
+        self.params = self.scale_params(self.params, self.scale)
         
     def scale_params(self, paramsIn, scale):
 		paramsOut = copy.deepcopy(paramsIn)
@@ -1338,17 +1344,25 @@ class MainWindow:
                 x = x_left
 
                 if (self.fly.wing_l.angle_amplitude is not None):
-                    #s = 'L:% 7.1f' % np.rad2deg(self.fly.wing_l.angle_amplitude)
-                    s = 'L:% 7.4f' % self.fly.wing_l.angle_amplitude
+                    if (self.params['n_edges']==1):
+                        s = 'L:% 7.4f' % (self.fly.wing_l.angle_leading_b)
+                        w = 70
+                    else:
+                        s = 'L:% 7.4f,% 7.4f' % (self.fly.wing_l.angle_leading_b,self.fly.wing_l.angle_trailing_b)
+                        w = 120
                     cv2.putText(imgOutput, s, (x, y_bottom), self.fontface, self.scaleText, self.fly.wing_l.bgra)
-                    w_text = int(50 * self.scale)
+                    w_text = int(w * self.scale)
                     x += w_text+self.w_gap
                 
                 if (self.fly.wing_r.angle_amplitude is not None):
-                    #s = 'R:% 7.1f' % np.rad2deg(self.fly.wing_r.angle_amplitude)
-                    s = 'R:% 7.4f' % self.fly.wing_r.angle_amplitude
+                    if (self.params['n_edges']==1):
+                        s = 'R:% 7.4f' % (self.fly.wing_r.angle_leading_b)
+                        w = 70
+                    else:
+                        s = 'R:% 7.4f,% 7.4f' % (self.fly.wing_r.angle_leading_b,self.fly.wing_r.angle_trailing_b)
+                        w = 120
                     cv2.putText(imgOutput, s, (x, y_bottom), self.fontface, self.scaleText, self.fly.wing_r.bgra)
-                    w_text = int(50 * self.scale)
+                    w_text = int(w * self.scale)
                     x += w_text+self.w_gap
                 
     
@@ -1358,7 +1372,7 @@ class MainWindow:
                     #s = 'L+R:% 7.1f' % np.rad2deg(leftplusright)
                     s = 'L+R:% 7.4f' % leftplusright
                     cv2.putText(imgOutput, s, (x, y_bottom), self.fontface, self.scaleText, bgra_dict['magenta'])
-                    w_text = int(70 * self.scale)
+                    w_text = int(90 * self.scale)
                     x += w_text+self.w_gap
 
                     
@@ -1368,7 +1382,7 @@ class MainWindow:
                     #s = 'L-R:% 7.1f' % np.rad2deg(leftminusright)
                     s = 'L-R:% 7.4f' % leftminusright
                     cv2.putText(imgOutput, s, (x, y_bottom), self.fontface, self.scaleText, bgra_dict['magenta'])
-                    w_text = int(70 * self.scale)
+                    w_text = int(90 * self.scale)
                     x += w_text+self.w_gap
 
                     
@@ -1379,7 +1393,7 @@ class MainWindow:
                     s = 'no flight'
                 
                 cv2.putText(imgOutput, s, (x, y_bottom), self.fontface, self.scaleText, bgra_dict['magenta'])
-                w_text = int(70 * self.scale)
+                w_text = int(50 * self.scale)
                 x += w_text+self.w_gap
             
 
@@ -1684,7 +1698,7 @@ if __name__ == '__main__':
     rospy.logwarn('**************************************************************************')
     rospy.logwarn('')  
     rospy.logwarn('     StrokelitudeROS: Camera-based Wingbeat Analyzer Software for ROS')
-    rospy.logwarn('         by Floris van Breugel, Steve Safarik, (c) 2014')
+    rospy.logwarn('         by Steve Safarik, Floris van Breugel (c) 2014')
     rospy.logwarn('')  
     rospy.logwarn('     Left click+drag to move any handle points.')
     rospy.logwarn('')  

@@ -6,7 +6,6 @@ import rosparam
 
 import copy
 import numpy as np
-import serial
 
 from std_msgs.msg import Float32, Header, String
 
@@ -27,28 +26,26 @@ class Strokelitude2Ledpanels:
         
         # Load the parameters.
         self.params = rospy.get_param('strokelitude/ledpanels', {})
-        self.defaults = {'x_panels': 24,
-                        'y_panels': 3,
-                        'mode': 'velocity',
-                        'pattern_id': 4,
-                        'x0': 0.0,
-                        'xl1':2.0,
-                        'xl2':0.0,
-                        'xr1':-2.0,
-                        'xr2':0.0,
-                        'xha':0.0,
-                        'xhr':0.0,
-                        'xaa':0.0,
-                        'xar':0.0,
-                        'y0': 0.0,
-                        'yl1':0.0,
-                        'yl2':0.0,
-                        'yr1':0.0,
-                        'yr2':0.0,
-                        'yha':0.0,
-                        'yhr':0.0,
-                        'yaa':0.0,
-                        'yar':0.0,
+        self.defaults = {'mode': 'velocity',
+                         'pattern_id': 1,
+                         'x0': 0.0,
+                         'xl1':1.0,
+                         'xl2':0.0,
+                         'xr1':-1.0,
+                         'xr2':0.0,
+                         'xha':0.0,
+                         'xhr':0.0,
+                         'xaa':0.0,
+                         'xar':0.0,
+                         'y0': 0.0,
+                         'yl1':0.0,
+                         'yl2':0.0,
+                         'yr1':0.0,
+                         'yr2':0.0,
+                         'yha':0.0,
+                         'yhr':0.0,
+                         'yaa':0.0,
+                         'yar':0.0,
                         }
         self.set_dict_with_preserve(self.params, self.defaults)
         self.update_coefficients_from_params()
