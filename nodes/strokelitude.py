@@ -26,7 +26,7 @@ from StrokelitudeROS.cfg import strokelitudeConfig
 # A class to help with debugging.  It just draws an image.
 class Test:
     def __init__(self, bEnable, name):
-        self.ravel = None
+        self.image = None
         self.shape = (0,0)
         self.i = 0
         self.bEnable = bEnable
@@ -34,11 +34,20 @@ class Test:
         if (self.bEnable):
             cv.NamedWindow(self.name,1)
         
-    def show(self):
-        if (self.bEnable) and (self.ravel is not None):
-            cv2.imshow(self.name, np.reshape(self.ravel, self.shape))
+    def set_shape(self, shape):
+        self.shape = shape
         
-gbTestEnable = False   # Set to True to enable some debugging output.
+    def set_ravelled(self, ravel):
+        self.image = np.reshape(ravel, self.shape)
+        
+    def set_image(self, image):
+        self.image = image
+        
+    def show(self):
+        if (self.bEnable) and (self.image is not None):
+            cv2.imshow(self.name, self.image)
+        
+gbTestEnable = True   # Set to True to enable debugging output.
         
     
 
@@ -86,6 +95,9 @@ def filter_median(data, q=1): # q is the 'radius' of the filter window.  q==1 is
 def clip(x, lo, hi):
     return max(min(x,hi),lo)
     
+    
+class Struct:
+    pass
 
         
 ###############################################################################
@@ -196,10 +208,10 @@ class Button:
 ###############################################################################
 ###############################################################################
 class Handle:
-    def __init__(self, pt=np.array([0,0])):
+    def __init__(self, pt=np.array([0,0]), color=bgra_dict['white']):
         self.pt = pt
 
-        self.bgra = bgra_dict['white']
+        self.color = color
         self.radius = 4
 
 
@@ -215,7 +227,7 @@ class Handle:
     # Draw a handle.
     # 
     def draw(self, image):
-        cv2.circle(image, tuple(self.pt.astype(int)),  self.radius, self.bgra, cv.CV_FILLED)
+        cv2.circle(image, tuple(self.pt.astype(int)),  self.radius, self.color, cv.CV_FILLED)
         
 # end class Handle
                 
@@ -289,27 +301,27 @@ class Fly(object):
         self.wing_l.update(image)
         self.wing_r.update(image)
 
-        if (gbTestEnable):
-            for wing in [self.wing_r, self.wing_l]:
-                i = int(wing.test.i/1)
-                #iBin = wing.iBinsValid[i % (len(wing.iBinsValid))] # Sweep.
-                #iBin = abs(int(len(wing.bins) * wing.angleBody_i / np.pi / 2.0)) # Vertical wedge on the right wing.
-                iBin = wing.iMajor
-#                rospy.logwarn('%s: bodyangle=%s, nBins=%d, iBin=%d, bin=%s' % (wing.side, wing.angleBody_i, len(wing.bins), iBin, wing.bins[iBin]))
-                wing.test.shape = wing.imgRoi.shape
-                #wing.test.ravel = copy.deepcopy(np.ravel(wing.imgMaskRoi))
-                wing.test.ravel = np.ravel(wing.imgRoi)#copy.deepcopy(np.ravel(wing.imgRoi))
-                #wing.test.ravel = copy.deepcopy(np.ravel(wing.imgAnglesRoi_b))
-                
-                # Draw wedge locations on the test images.
-                wing.test.ravel[wing.iPixelsRoi[iBin-3]] = 255#255-wing.test.ravel[wing.iPixelsRoi[iBin-1]]
-                wing.test.ravel[wing.iPixelsRoi[iBin-2]] = 128#255-wing.test.ravel[wing.iPixelsRoi[iBin-1]]
-                wing.test.ravel[wing.iPixelsRoi[iBin-1]] = 0#255-wing.test.ravel[wing.iPixelsRoi[iBin-1]]
-                wing.test.ravel[wing.iPixelsRoi[iBin]] = 128#255-wing.test.ravel[wing.iPixelsRoi[iBin]]
-                wing.test.ravel[wing.iPixelsRoi[iBin+1]] = 255#255-wing.test.ravel[wing.iPixelsRoi[iBin+1]]
-                wing.test.ravel[wing.iPixelsRoi[iBin+2]] = 128#255-wing.test.ravel[wing.iPixelsRoi[iBin+1]]
-                wing.test.ravel[wing.iPixelsRoi[iBin+3]] = 0#255-wing.test.ravel[wing.iPixelsRoi[iBin+1]]
-                wing.test.i += 1
+#         if (gbTestEnable):
+#             for wing in [self.wing_r, self.wing_l]:
+#                 i = int(wing.test.i/1)
+#                 #iBin = wing.iBinsValid[i % (len(wing.iBinsValid))] # Sweep.
+#                 #iBin = abs(int(len(wing.bins) * wing.angleBody_i / np.pi / 2.0)) # Vertical wedge on the right wing.
+#                 iBin = wing.iMajor
+# #                rospy.logwarn('%s: bodyangle=%s, nBins=%d, iBin=%d, bin=%s' % (wing.side, wing.angleBody_i, len(wing.bins), iBin, wing.bins[iBin]))
+#                 wing.test.shape = wing.imgRoi.shape
+#                 #wing.test.ravel = copy.deepcopy(np.ravel(wing.maskRoi))
+#                 wing.test.ravel = np.ravel(wing.imgRoi)#copy.deepcopy(np.ravel(wing.imgRoi))
+#                 #wing.test.ravel = copy.deepcopy(np.ravel(wing.imgAnglesRoi_b))
+#                 
+#                 # Draw wedge locations on the test images.
+#                 wing.test.ravel[wing.iPixelsRoi[iBin-3]] = 255#255-wing.test.ravel[wing.iPixelsRoi[iBin-1]]
+#                 wing.test.ravel[wing.iPixelsRoi[iBin-2]] = 128#255-wing.test.ravel[wing.iPixelsRoi[iBin-1]]
+#                 wing.test.ravel[wing.iPixelsRoi[iBin-1]] = 0#255-wing.test.ravel[wing.iPixelsRoi[iBin-1]]
+#                 wing.test.ravel[wing.iPixelsRoi[iBin]] = 128#255-wing.test.ravel[wing.iPixelsRoi[iBin]]
+#                 wing.test.ravel[wing.iPixelsRoi[iBin+1]] = 255#255-wing.test.ravel[wing.iPixelsRoi[iBin+1]]
+#                 wing.test.ravel[wing.iPixelsRoi[iBin+2]] = 128#255-wing.test.ravel[wing.iPixelsRoi[iBin+1]]
+#                 wing.test.ravel[wing.iPixelsRoi[iBin+3]] = 0#255-wing.test.ravel[wing.iPixelsRoi[iBin+1]]
+#                 wing.test.i += 1
     
             
     def draw(self, image):
@@ -324,12 +336,12 @@ class Fly(object):
         
     
     def publish(self):
-        pt = self.head.ptCenter_i - self.head.ptHinge_i + self.head.ptCOM # The head COM point relative to the hinge.
+        pt = self.head.ptCenter_i - self.head.ptHinge_i + self.head.state.pt # The head COM point relative to the hinge.
         angleHead = -(np.arctan2(pt[1], pt[0]) - self.angleBody_i)# + np.pi/2.0)
         angleHead = (angleHead + np.pi) % (2.0*np.pi) - np.pi
         radiusHead = np.linalg.norm(pt)
         
-        pt = self.abdomen.ptCenter_i - self.abdomen.ptHinge_i + self.abdomen.ptCOM # The abdomen COM point relative to the abdomen hinge.
+        pt = self.abdomen.ptCenter_i - self.abdomen.ptHinge_i + self.abdomen.state.pt # The abdomen COM point relative to the abdomen hinge.
         angleAbdomen = -(np.arctan2(pt[1], pt[0]) - self.angleBody_i)# + np.pi/2.0)
         angleAbdomen = (angleAbdomen + np.pi) % (2.0*np.pi) - np.pi
         radiusAbdomen = np.linalg.norm(pt)
@@ -338,10 +350,10 @@ class Fly(object):
         flystate.header       = Header(seq=self.iCount, stamp=self.stamp, frame_id='Fly')
         flystate.left         = MsgWing(mass=self.wing_l.mass, angle1=self.wing_l.angle_leading_b, angle2=self.wing_l.angle_trailing_b)
         flystate.right        = MsgWing(mass=self.wing_r.mass, angle1=self.wing_r.angle_leading_b, angle2=self.wing_r.angle_trailing_b)
-        flystate.head         = MsgBodypart(mass   = self.head.mass,    
+        flystate.head         = MsgBodypart(mass   = self.head.state.mass,    
                                             radius = radiusHead,    
                                             angle  = angleHead)
-        flystate.abdomen      = MsgBodypart(mass   = self.abdomen.mass, 
+        flystate.abdomen      = MsgBodypart(mass   = self.abdomen.state.mass, 
                                             radius = radiusAbdomen, 
                                             angle  = angleAbdomen)
         self.iCount += 1
@@ -357,24 +369,171 @@ class Fly(object):
 # Head or Abdomen.
 class Bodypart(object):
     def __init__(self, name=None, params={}, color='white'):
+        self.bInitializedMasks = False
+        self.bInitialized = False
+
         self.name = name
 
         self.bgra     = bgra_dict[color]
         self.bgra_com = bgra_dict['blue']
-        self.pixelmax = 255.
+        self.pixelmax = 255.0
+        self._transforms = {}
+    
+        self.state = Struct()
+        self.state.mass = 0.0
+        self.state.pt = np.array([0.0, 0.0])
+        self.state.angle = 0.0
 
-        self.handles = {'center':Handle(np.array([0,0])),
-                        'radius_minor':Handle(np.array([0,0])),
-                        'radius_major':Handle(np.array([0,0]))
+        self.handles = {'center':Handle(np.array([0,0]), self.bgra),
+                        'radius_minor':Handle(np.array([0,0]), self.bgra),
+                        'radius_major':Handle(np.array([0,0]), self.bgra)
                         }
 
         self.set_params(params)
-        self.mass = 0.0
-        self.ptCenter_i = np.array([0,0])
-        self.ptCOM = np.array([0,0])
-
+        self.ptCOM        = np.array([0.0, 0.0])
+        self.ptCenter_i   = np.array([0,0])
+        
+        self.imgRoi                             = None
+        self.imgRoiHanned                       = None
+        self.imgRoiHannedPrev                   = None
+        self.imgRoiMasked                       = None
+        self.imgRoiMaskedPolar                  = None
+        self.imgRoiMaskedPolarCropped           = None
+        self.imgRoiMaskedPolarCroppedHanned     = None
+        self.imgRoiMaskedPolarCroppedHannedPrev = None
+        self.imgRoiMasked1                      = None
+        
+        self.hannRoi                            = None
+        self.hannRoiMaskedPolarCropped          = None
+        
         self.pubAngle = rospy.Publisher('strokelitude/'+self.name+'/angle', Float32)
 
+        self.test = Test(gbTestEnable, self.name)
+
+    
+    def _get_transform_log(self, i_0, j_0, i_n, j_n, p_n, t_n, p_s, t_s):
+        transform = self._transforms.get((i_0, j_0, i_n, j_n, p_n, t_n))
+    
+        if transform == None:
+            i_k = []
+            j_k = []
+            p_k = []
+            t_k = []
+    
+            for p in range(0, p_n):
+                p_exp = np.exp(p * p_s)
+                for t in range(0, t_n):
+                    t_rad = t * t_s
+    
+                    i = int(i_0 + p_exp * np.sin(t_rad))
+                    j = int(j_0 + p_exp * np.cos(t_rad))
+    
+                    if 0 <= i < i_n and 0 <= j < j_n:
+                        i_k.append(i)
+                        j_k.append(j)
+                        p_k.append(p)
+                        t_k.append(t)
+    
+            transform = ((np.array(p_k), np.array(t_k)), (np.array(i_k), np.array(j_k)))
+            self._transforms[i_0, j_0, i_n, j_n, p_n, t_n] = transform
+    
+        return transform
+    
+    # logpolar()
+    # Remap an image into log-polar coordinates, where (j_0,i_0) is the (x,y) origin in the original image.
+    # Credits to http://machineawakening.blogspot.com/2012/02
+    #
+    def logpolar(self, image, i_0, j_0, p_n=None, t_n=None):
+        (i_n, j_n) = image.shape[:2]
+        
+        i_c = max(i_0, i_n - i_0)
+        j_c = max(j_0, j_n - j_0)
+        d_c = (i_c ** 2 + j_c ** 2) ** 0.5
+        
+        if p_n == None:
+            p_n = int(np.ceil(d_c))
+        
+        if t_n == None:
+            t_n = j_n
+        
+        p_s = np.log(d_c) / p_n
+        t_s = 2.0 * np.pi / t_n
+        
+        (pt, ij) = self._get_transform_log(i_0, j_0, i_n, j_n, p_n, t_n, p_s, t_s)
+    
+        imgTransformed = np.zeros((p_n, t_n) + image.shape[2:], dtype=image.dtype)
+    
+        imgTransformed[pt] = image[ij]
+        return (imgTransformed, np.array((pt,ij)))
+
+
+    def _get_transform_lin(self, i_0, j_0, i_n, j_n, p_n, t_n, p_s, t_s):
+        transform = self._transforms.get((i_0, j_0, i_n, j_n, p_n, t_n))
+    
+        if transform == None:
+            i_k = []
+            j_k = []
+            p_k = []
+            t_k = []
+    
+            for p in range(0, p_n):
+                p_exp = (p * p_s)
+                for t in range(0, t_n):
+                    t_rad = t * t_s
+    
+                    i = int(i_0 + p_exp * np.sin(t_rad))
+                    j = int(j_0 + p_exp * np.cos(t_rad))
+    
+                    if 0 <= i < i_n and 0 <= j < j_n:
+                        i_k.append(i)
+                        j_k.append(j)
+                        p_k.append(p)
+                        t_k.append(t)
+    
+            transform = ((np.array(p_k), np.array(t_k)), (np.array(i_k), np.array(j_k)))
+            self._transforms[i_0, j_0, i_n, j_n, p_n, t_n] = transform
+    
+        return transform
+    
+    # linpolar()
+    # Remap an image into linear-polar coordinates, where (j_0,i_0) is the (x,y) origin in the original image.
+    # Credits to http://machineawakening.blogspot.com/2012/02
+    #
+    def linpolar(self, image, i_0, j_0, p_n=None, t_n=None):
+        (i_n, j_n) = image.shape[:2]
+        
+        i_c = max(i_0, i_n - i_0)
+        j_c = max(j_0, j_n - j_0)
+        d_c = (i_c ** 2 + j_c ** 2) ** 0.5
+        
+        if p_n == None:
+            p_n = int(np.ceil(d_c))
+        
+        if t_n == None:
+            t_n = j_n
+        
+        p_s = (d_c) / p_n
+        t_s = 2.0 * np.pi / t_n
+        
+        (pt, ij) = self._get_transform_lin(i_0, j_0, i_n, j_n, p_n, t_n, p_s, t_s)
+        
+        imgTransformed = np.zeros((p_n, t_n) + image.shape[2:], dtype=image.dtype)
+    
+        imgTransformed[pt] = image[ij]
+        return (imgTransformed, np.array((pt,ij)))
+
+
+    def map_pt_from_ij(self, ptij, i, j):
+        pt = ptij[0].T
+        ij = ptij[1].T
+        k2 = np.where(ij==[i,j])[0]
+        if (k2[0]==k2[1]): # Both i and j coords are part of the same point.
+            rv = pt[k2[0]]
+        else:
+            rv = None
+            
+        return rv
+                
 
     # set_params()
     # Set the given params dict into this object.
@@ -394,6 +553,8 @@ class Bodypart(object):
         r1 = np.linalg.norm(ptHinge1 - ptBodyCenter)
         r2 = np.linalg.norm(ptHinge2 - ptBodyCenter)
         self.ptHinge_i = ptHinge1 if (r1<r2) else ptHinge2 
+        
+        self.state.pt = np.array([0.0, 0.0])
 
         # Refresh the handle points.
         self.update_handle_points()
@@ -408,12 +569,12 @@ class Bodypart(object):
         
                 
     # create_mask()
-    # Create an image mask.
+    # Create an elliptical mask, and a Hanning window.
     #
     def create_mask(self, shape):
-        # Create the mask.
-        self.imgMask = np.zeros(shape, dtype=np.uint8)
-        cv2.ellipse(self.imgMask,
+        # Create the normal-size mask.
+        mask1 = np.zeros(shape, dtype=np.uint8)
+        cv2.ellipse(mask1,
                     (int(self.params[self.name]['x']), int(self.params[self.name]['y'])),
                     (int(self.params[self.name]['radius_major']), int(self.params[self.name]['radius_minor'])),
                     np.rad2deg(self.angleBody_i),
@@ -422,7 +583,68 @@ class Bodypart(object):
                     bgra_dict['white'], 
                     cv.CV_FILLED)
         
-        self.ravelMask = np.ravel(self.imgMask)
+        # Find the ROI of the mask.
+        b=0 # Border
+        xSum = np.sum(mask1, 0)
+        ySum = np.sum(mask1, 1)
+        xMin = np.where(xSum>0)[0][0]  - b
+        xMax = np.where(xSum>0)[0][-1] + b+1
+        yMin = np.where(ySum>0)[0][0]  - b
+        yMax = np.where(ySum>0)[0][-1] + b+1
+        
+        xMin = np.max([0,xMin])
+        yMin = np.max([0,yMin])
+        xMax = np.min([xMax, shape[1]-1])
+        yMax = np.min([yMax, shape[0]-1])
+        self.roi1 = np.array([xMin, yMin, xMax, yMax])
+        self.maskRoiEllipse1 = mask1[yMin:yMax, xMin:xMax]
+        
+        # Create the double-size mask.
+        mask2 = np.zeros(shape, dtype=np.uint8)
+        cv2.ellipse(mask2,
+                    (int(self.params[self.name]['x']), int(self.params[self.name]['y'])),
+                    (2*int(self.params[self.name]['radius_major']), 2*int(self.params[self.name]['radius_minor'])),
+                    np.rad2deg(self.angleBody_i),
+                    0,
+                    360,
+                    bgra_dict['white'], 
+                    cv.CV_FILLED)
+        
+        # Find the ROI of the mask.
+        b=0 # Border
+        xSum = np.sum(mask2, 0)
+        ySum = np.sum(mask2, 1)
+        xMin = np.where(xSum>0)[0][0]  - b
+        xMax = np.where(xSum>0)[0][-1] + b+1
+        yMin = np.where(ySum>0)[0][0]  - b
+        yMax = np.where(ySum>0)[0][-1] + b+1
+        
+        xMin = np.max([0,xMin])
+        yMin = np.max([0,yMin])
+        xMax = np.min([xMax, shape[1]-1])
+        yMax = np.min([yMax, shape[0]-1])
+        self.roi = np.array([xMin, yMin, xMax, yMax])
+        self.maskRoiEllipse = mask2[yMin:yMax, xMin:xMax]
+        
+        self.hannRoi = None
+        self.hannRoiMaskedPolarCropped = None
+        self.bInitializedMasks = True
+        
+        
+    # create_hanning_window()
+    # Create a 2D Hanning window.
+    #
+    def create_hanning_window(self, shape):
+        (height,width) = shape
+        hanning = np.zeros(shape, dtype=np.float32)
+        for i in range(width):
+             for j in range(height):
+                 x = (i-1)*2*np.pi/(width-1)
+                 y = (j-1)*2*np.pi/(height-1)
+                 hanning[j][i] = 0.5*(1-np.cos(x)) * 0.5*(1-np.cos(y))
+                 
+        return hanning
+
         
         
     # update_handle_points()
@@ -436,28 +658,166 @@ class Bodypart(object):
         self.handles['radius_minor'].pt = np.array([self.params[self.name]['x'], self.params[self.name]['y']]) + (self.params[self.name]['radius_minor'] * np.array([-self.sinBodyangle,self.cosBodyangle]))
         
         
-    # update_state_from_image()
-    # Update the bodypart state from the masked image.
-    #
-    def update_state_from_image(self, image):
-        imgMasked = cv2.bitwise_and(image, self.imgMask)
-        moments = cv2.moments(imgMasked, binaryImage=False)
+    def update_images(self, image):
+        # Save the prior images.
+        if (self.imgRoiHanned is not None):
+            self.imgRoiHannedPrev = self.imgRoiHanned
+            
+        if (self.imgRoiMaskedPolarCroppedHanned is not None):
+            self.imgRoiMaskedPolarCroppedHannedPrev = self.imgRoiMaskedPolarCroppedHanned
         
-        if (moments['m00'] != 0.0):
-            self.mass  = moments['m00'] / self.pixelmax
-            self.ptCOM = np.array([moments['m10']/moments['m00'] - self.params[self.name]['x'], 
-                                   moments['m01']/moments['m00'] - self.params[self.name]['y']])
-        else:
-            self.mass = 0.0
-            self.ptCOM = np.array([0,0])
+        # Extract the ROI image.
+        self.imgRoi1        = image[self.roi1[1]:self.roi1[3], self.roi1[0]:self.roi1[2]]
+        self.imgRoi         = image[self.roi[1]:self.roi[3],   self.roi[0]:self.roi[2]]
+        if (self.maskRoiEllipse is not None) and (self.imgRoi is not None):
+            self.imgRoiMasked1      = cv2.bitwise_and(self.imgRoi1, self.maskRoiEllipse1)
+            self.imgRoiMasked       = cv2.bitwise_and(self.imgRoi, self.maskRoiEllipse)
+            #self.imgRoiMasked       = cv2.multiply(self.imgRoi.astype(np.float32), self.hannRoi)
+            
+            xOrigin = int(self.imgRoi.shape[1]/2)
+            yOrigin = int(self.imgRoi.shape[0]/2)
+            xMax = self.imgRoi.shape[1]-1
+            yMax = self.imgRoi.shape[0]-1
+            (self.imgRoiMaskedPolar,ptij)  = self.linpolar(self.imgRoiMasked.astype(np.uint8), yOrigin, xOrigin)
+            
+            # Find the y value where the warped edge should be cropped out.
+#             ptL = self.map_pt_from_ij(ptij, yOrigin, 0) 
+#             ptR = self.map_pt_from_ij(ptij, yOrigin, xMax) 
+#             ptT = self.map_pt_from_ij(ptij, 0,       xOrigin) 
+#             ptB = self.map_pt_from_ij(ptij, yMax,    xOrigin)
+#             rospy.logwarn([ptL,ptR,ptT,ptB])
+#             yCrop = np.min([ptL[0], ptR[0], ptT[0], ptB[0]])
+            minY = np.min(self.imgRoiMaskedPolar,1)
+            iMinY = np.where(minY==0)[0] # Find the min y coordinate of black encroachment (i.e. where off-image got mapped into the polar image).
+            if (len(iMinY>0)):
+                self.imgRoiMaskedPolarCropped = self.imgRoiMaskedPolar[0:iMinY[0]]
+            else:
+                self.imgRoiMaskedPolarCropped = self.imgRoiMaskedPolar
+
+             
+            if (self.bInitializedMasks):
+                if (self.hannRoi is None) or (self.imgRoi.shape != self.hannRoi.shape):
+                    self.hannRoi = self.create_hanning_window(self.imgRoi.shape)
+                
+                if (self.hannRoiMaskedPolarCropped is None) or (self.imgRoiMaskedPolarCropped.shape != self.hannRoiMaskedPolarCropped.shape):
+                    self.hannRoiMaskedPolarCropped = self.create_hanning_window(self.imgRoiMaskedPolarCropped.shape)
+                
+                self.imgRoiHanned                   = cv2.multiply(self.imgRoi.astype(np.float32), self.hannRoi)
+                self.imgRoiMaskedPolarCroppedHanned = cv2.multiply(self.imgRoiMaskedPolarCropped.astype(np.float32), self.hannRoiMaskedPolarCropped)
+        
+            if (self.imgRoiMaskedPolarCroppedHanned is not None):
+                self.test.set_image(self.imgRoiMaskedPolarCroppedHanned.astype(np.uint8))
+        
+
+    # update_center_of_mass()
+    # Update the bodypart center-of-mass.
+    #
+    def update_center_of_mass(self):
+        if (self.imgRoiMasked1 is not None):
+            moments = cv2.moments(self.imgRoiMasked1, binaryImage=False)
+            
+            if (moments['m00'] != 0.0):
+                self.mass  = moments['m00'] / self.pixelmax
+                self.ptCOM = np.array([moments['m10']/moments['m00'] - self.params[self.name]['x'] + self.roi1[0], 
+                                       moments['m01']/moments['m00'] - self.params[self.name]['y'] + self.roi1[1]])
+            else:
+                self.mass = 0.0
+                self.ptCOM = np.array([0,0])
             
     
-    
+    # update_state_using_moments()
+    # Update the bodypart center-of-mass.
+    #
+    def update_state_using_moments(self):
+        self.state.mass  = self.mass
+        self.state.pt = self.ptCOM
+            
+            
+    # get_shift_from_phasecorr()
+    # Calculate the coordinate shift between the two images.
+    #
+    def get_shift_from_phasecorr(self, imgA, imgB):
+        if (self.bInitialized) and (imgA is not None) and (imgB is not None) and (imgA.shape==imgB.shape):
+            # Phase correlation.
+            A  = cv2.dft(imgA)
+            B  = cv2.dft(imgB)
+            AB = cv2.mulSpectrums(A, B, flags=0, conjB=True)
+            crosspower = AB / cv2.norm(AB)
+            shift = cv2.idft(crosspower)
+            shiftI  = np.roll(shift,  int(shift.shape[0]/2), 0)
+            shiftIJ = np.roll(shiftI, int(shift.shape[1]/2), 1) # Roll the matrix so 0,0 goes to the center.
+            
+            # Get the coordinates of the maximum shift.
+            kShift = np.argmax(shiftIJ)
+            (iShift,jShift) = np.unravel_index(kShift, shiftIJ.shape)
+            
+            # Get the weighted centroid of a 5x5 region around the peak, for sub-pixel accuracy.
+            a = clip(iShift-2, 0, shiftIJ.shape[0]-1)
+            b = clip(iShift+2, 0, shiftIJ.shape[0]-1)
+            c = clip(jShift-2, 0, shiftIJ.shape[1]-1)
+            d = clip(jShift+2, 0, shiftIJ.shape[1]-1)
+            #peak = shiftIJ[a:b][c:d]
+            #moments = cv2.moments(peak, binaryImage=False)
+            moments={'m00':0.0, 'm10':0.0, 'm01':0.0}
+            for i in range(a,b+1):
+                for j in range(c,d+1):
+                    moments['m00'] += 1     * 1     * shiftIJ[i][j]
+                    moments['m10'] += (j+1) * 1     * shiftIJ[i][j] 
+                    moments['m01'] += 1     * (i+1) * shiftIJ[i][j]
+                      
+            if (moments['m00'] != 0.0):
+                jShift = moments['m10']/moments['m00'] 
+                iShift = moments['m01']/moments['m00']
+            
+            # Accomodate the matrix roll we did above.
+            iShift -= int(shift.shape[0]/2)+1
+            jShift -= int(shift.shape[1]/2)+1
+
+            # Convert unsigned shifts to signed shifts. 
+            height = shiftIJ.shape[0]
+            width  = shiftIJ.shape[1]
+            iShift  = ((iShift+height/2) % height) - height/2 
+            jShift  = ((jShift+width/2) % width) - width/2 
+            
+            rv = np.array([jShift, iShift])
+            
+        else:
+            rv = np.array([0, 0])
+            
+        return rv
+        
+        
+    # update_state_using_phasecorr()
+    # Update the bodypart translation & rotation.
+    #
+    def update_state_using_phasecorr(self):
+        # Get the translation between successive images.
+        ptCartesian = self.get_shift_from_phasecorr(self.imgRoiHanned, self.imgRoiHannedPrev) # as [x,y]
+        ptErr = self.state.pt - self.ptCOM 
+        self.state.pt += ptCartesian - 0.005*ptErr # Correct for drift error due to integrating the shifts; pull gently toward the COM.  
+
+#         # Get the rotation & expansion between successive images.
+#         ptPolar = self.get_shift_from_phasecorr(self.imgRoiMaskedPolarCroppedHanned, self.imgRoiMaskedPolarCroppedHannedPrev) # as [angle,radius]
+#         dAngle = ptPolar[0] * 2.0*np.pi / self.imgRoiMaskedPolarCroppedHanned.shape[1]
+#         dRadius = ptPolar[1]
+#         self.state.angle += dAngle
+
+        self.state.mass = 0.0
+        
+        
     # update()
     # Update all the internals given a foreground camera image.
     #
     def update(self, image):
-        self.update_state_from_image(image)
+        if (not self.bInitializedMasks):
+            self.create_mask(image.shape)
+            
+        self.update_images(image)
+        self.update_center_of_mass()
+        self.update_state_using_phasecorr()
+        
+        if (self.bInitializedMasks):
+            self.bInitialized = True
     
     
     # hit_object()
@@ -496,10 +856,22 @@ class Bodypart(object):
 
         self.draw_handles(image)
 
-        # Draw the bodypart center of mass.        
-        ptCOM_i = (int(self.ptCOM[0]+self.params[self.name]['x']), int(self.ptCOM[1]+self.params[self.name]['y'])) 
+        # Draw the bodypart center of mass.    
+        a=2.0        
+        pt_i = (int(a*self.ptCOM[0]+self.params[self.name]['x']), int(a*self.ptCOM[1]+self.params[self.name]['y'])) 
         cv2.ellipse(image,
-                    ptCOM_i,
+                    pt_i,
+                    (2,2),
+                    0,
+                    0,
+                    360,
+                    bgra_dict['red'], 
+                    1)
+        
+        # Draw the bodypart center.
+        pt_i = (int(a*self.state.pt[0]+self.params[self.name]['x']), int(a*self.state.pt[1]+self.params[self.name]['y'])) 
+        cv2.ellipse(image,
+                    pt_i,
                     (2,2),
                     0,
                     0,
@@ -517,7 +889,11 @@ class Bodypart(object):
                     360,
                     self.bgra, 
                     1)
-        cv2.line(image, ptHinge_i, ptCOM_i, self.bgra_com, 1)
+
+        # Draw line from hinge to center.        
+        cv2.line(image, ptHinge_i, pt_i, self.bgra_com, 1)
+        
+        self.test.show()
         
 # end class Bodypart
 
@@ -529,6 +905,7 @@ class Wing(object):
     def __init__(self, side='right', params={}, color='black'):
         self.side = side
         
+        self.roi                = None
         self.ravelMaskRoi       = None
         self.ravelAnglesRoi_b   = None
         
@@ -555,10 +932,10 @@ class Wing(object):
         self.thickness_outer  = 1
         self.thickness_wing   = 1
         
-        self.handles = {'hinge':Handle(np.array([0,0])),
-                        'angle_hi':Handle(np.array([0,0])),
-                        'angle_lo':Handle(np.array([0,0])),
-                        'inner':Handle(np.array([0,0]))
+        self.handles = {'hinge':Handle(np.array([0,0]), self.bgra),
+                        'angle_hi':Handle(np.array([0,0]), self.bgra),
+                        'angle_lo':Handle(np.array([0,0]), self.bgra),
+                        'inner':Handle(np.array([0,0]), self.bgra)
                         }
 
         self.set_params(params)
@@ -568,7 +945,7 @@ class Wing(object):
         self.service_bins      = rospy.Service('wing_bins_'+side, float32list, self.serve_bins_callback)
         self.service_edges     = rospy.Service('wing_edges_'+side, float32list, self.serve_edges_callback)
         
-        self.test = Test(gbTestEnable, self.side)
+        #self.test = Test(gbTestEnable, self.side)
 
     
     # get_angles_i_from_b()
@@ -666,11 +1043,11 @@ class Wing(object):
     #
     def create_stroke_mask(self, shape):
         # Create the wing mask.
-        imgMask = np.zeros(shape, dtype=np.uint8)
+        mask = np.zeros(shape, dtype=np.uint8)
         (angle_lo_i, angle_hi_i) = self.get_angles_i_from_b(self.params[self.side]['angle_lo'], self.params[self.side]['angle_hi'])
 
         ptCenter = tuple(self.ptHinge.astype(int))
-        cv2.ellipse(imgMask,
+        cv2.ellipse(mask,
                     ptCenter,
                     (int(self.params[self.side]['radius_outer']), int(self.params[self.side]['radius_outer'])),
                     0,
@@ -678,7 +1055,7 @@ class Wing(object):
                     np.rad2deg(angle_hi_i),
                     255, 
                     cv.CV_FILLED)
-        cv2.circle(imgMask,
+        cv2.circle(mask,
                     ptCenter,
                     int(self.params[self.side]['radius_inner']),
                     0,
@@ -686,22 +1063,20 @@ class Wing(object):
         
 
         # Find the ROI of the mask.
-        xSum = np.sum(imgMask, 0)
-        ySum = np.sum(imgMask, 1)
+        xSum = np.sum(mask, 0)
+        ySum = np.sum(mask, 1)
         xMin = np.where(xSum>0)[0][0] - 2
         xMax = np.where(xSum>0)[0][-1] + 3
         yMin = np.where(ySum>0)[0][0] - 2
         yMax = np.where(ySum>0)[0][-1] + 3
         
         self.roi = np.array([xMin, yMin, xMax, yMax])
-        self.imgMaskRoi = imgMask[yMin:yMax, xMin:xMax]
-
-        
-        self.ravelMaskRoi = np.ravel(self.imgMaskRoi)
+        self.maskRoi = mask[yMin:yMax, xMin:xMax]
+        self.ravelMaskRoi = np.ravel(self.maskRoi)
         
         
     
-    def update_imgroi(self, image, roi):
+    def update_images(self, image, roi):
         # Only use the ROI that covers the stroke rect.
         self.imgRoi = image[roi[1]:roi[3], roi[0]:roi[2]]
 
@@ -824,7 +1199,7 @@ class Wing(object):
     # Update all the internals given a foreground camera image.
     #
     def update(self, image):
-        self.update_imgroi(image, self.roi)
+        self.update_images(image, self.roi)
         self.update_intensity_function()
         self.update_edge_stats()
         self.update_flight_status()
@@ -969,7 +1344,7 @@ class Wing(object):
                 
         self.draw_handles(image)
         
-        self.test.show()
+        #self.test.show()
 
                         
     def serve_bins_callback(self, request):
