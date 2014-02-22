@@ -26,7 +26,8 @@ class Strokelitude2PhidgetsAnalog:
         
         # Load the parameters.
         self.params = rospy.get_param('strokelitude/phidgetsanalog', {})
-        self.defaults = {'v00': 0.0, 'v0l1':1.0, 'v0l2':0.0, 'v0r1':0.0, 'v0r2':0.0, 'v0ha':0.0, 'v0hr':0.0, 'v0aa':0.0, 'v0ar':0.0, # L
+        self.defaults = {'v0enable':True, 'v1enable':True, 'v2enable':True, 'v3enable':True, 
+                         'v00': 0.0, 'v0l1':1.0, 'v0l2':0.0, 'v0r1':0.0, 'v0r2':0.0, 'v0ha':0.0, 'v0hr':0.0, 'v0aa':0.0, 'v0ar':0.0, # L
                          'v10': 0.0, 'v1l1':0.0, 'v1l2':0.0, 'v1r1':1.0, 'v1r2':0.0, 'v1ha':0.0, 'v1hr':0.0, 'v1aa':0.0, 'v1ar':0.0, # R
                          'v20': 0.0, 'v2l1':1.0, 'v2l2':0.0, 'v2r1':1.0, 'v2r2':0.0, 'v2ha':0.0, 'v2hr':0.0, 'v2aa':0.0, 'v2ar':0.0, # L+R
                          'v30': 0.0, 'v3l1':1.0, 'v3l2':0.0, 'v3r1':-1.0, 'v3r2':0.0, 'v3ha':0.0, 'v3hr':0.0, 'v3aa':0.0, 'v3ar':0.0, # L-R
@@ -43,6 +44,7 @@ class Strokelitude2PhidgetsAnalog:
         self.subCommand  = rospy.Subscriber('strokelitude2phidgetsanalog/command', String, self.command_callback)
         rospy.sleep(1) # Allow time to connect publishers & subscribers.
 
+        # Connect to the Phidget.
         self.analog = Phidgets.Devices.Analog.Analog()
         self.analog.openPhidget()
         while (True):
@@ -54,9 +56,11 @@ class Strokelitude2PhidgetsAnalog:
             
             if (self.analog.isAttached()):
                 break
+            
         rospy.logwarn('Attached to: %s, ID=%s' % (self.analog.getDeviceName(), self.analog.getDeviceID()))
+        
         for i in range(4):
-            self.analog.setEnabled(i, True)
+            self.analog.setEnabled(i, self.enable[i])
         
         self.bInitialized = True
         
@@ -73,6 +77,7 @@ class Strokelitude2PhidgetsAnalog:
                            [self.params['v30'], self.params['v3l1'], self.params['v3l2'], self.params['v3r1'], self.params['v3r2'], self.params['v3ha'], self.params['v3hr'], self.params['v3aa'], self.params['v3ar']]
                           ]
                           )
+        self.enable = [self.params['v0enable'], self.params['v1enable'], self.params['v2enable'], self.params['v3enable']]  
 
         
         
@@ -80,7 +85,8 @@ class Strokelitude2PhidgetsAnalog:
         if (self.analog.isAttached()):
             voltages = self.voltages_from_flystate(flystate)
             for i in range(4):
-                self.analog.setVoltage(i, voltages[i])
+                if (self.enable[i]):
+                    self.analog.setVoltage(i, voltages[i])
     
     
     # get_voltages()

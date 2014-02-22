@@ -8,11 +8,12 @@
     <include file="$(find StrokelitudeROS)/launch/params_camera1394.launch"   ns="camera" />
 
 
-    <include file="$(find StrokelitudeROS)/launch/camera_1394.launch" />
+    <include file="$(find StrokelitudeROS)/launch/camera_ethernet.launch" />
 
 
-    <node name="strokelitude"            pkg="StrokelitudeROS"  type="strokelitude.py"           required="true"      />
-    <node name="strokelitude2ledpanels"  pkg="StrokelitudeROS"  type="strokelitude2ledpanels.py"  />
-    <node name="ledpanels"               pkg="ledpanels"        type="ledpanels.py"  />
+    <node name="strokelitude"                 pkg="StrokelitudeROS"  type="strokelitude.py"           required="true"      />
+    <node name="strokelitude2ledpanels"       pkg="StrokelitudeROS"  type="strokelitude2ledpanels.py"  />
+    <node name="strokelitude2phidgetsanalog"  pkg="StrokelitudeROS"  type="strokelitude2phidgetsanalog.py"  />
+    <node name="ledpanels"                    pkg="ledpanels"        type="ledpanels.py"  />
     
 </launch>
