@@ -383,26 +383,26 @@ class Fly(object):
         
     
     def publish(self):
-        pt = self.head.ptCenter_i - self.head.ptHinge_i + self.head.state.pt # The head COM point relative to the hinge.
-        angleHead = -(np.arctan2(pt[1], pt[0]) - self.angleBody_i)# + np.pi/2.0)
-        angleHead = (angleHead + np.pi) % (2.0*np.pi) - np.pi
-        radiusHead = np.linalg.norm(pt)
-        
-        pt = self.abdomen.ptCenter_i - self.abdomen.ptHinge_i + self.abdomen.state.pt # The abdomen COM point relative to the abdomen hinge.
-        angleAbdomen = -(np.arctan2(pt[1], pt[0]) - self.angleBody_i)# + np.pi/2.0)
-        angleAbdomen = (angleAbdomen + np.pi) % (2.0*np.pi) - np.pi
-        radiusAbdomen = np.linalg.norm(pt)
+#         pt = self.head.ptCenter_i - self.head.ptHinge_i + self.head.state.pt # The head COM point relative to the hinge.
+#         angleHead = -(np.arctan2(pt[1], pt[0]) - self.angleBody_i)# + np.pi/2.0)
+#         angleHead = (angleHead + np.pi) % (2.0*np.pi) - np.pi
+#         radiusHead = np.linalg.norm(pt)
+#         
+#         pt = self.abdomen.ptCenter_i - self.abdomen.ptHinge_i + self.abdomen.state.pt # The abdomen COM point relative to the abdomen hinge.
+#         angleAbdomen = -(np.arctan2(pt[1], pt[0]) - self.angleBody_i)# + np.pi/2.0)
+#         angleAbdomen = (angleAbdomen + np.pi) % (2.0*np.pi) - np.pi
+#         radiusAbdomen = np.linalg.norm(pt)
         
         flystate              = MsgFlystate()
         flystate.header       = Header(seq=self.iCount, stamp=self.stamp, frame_id='Fly')
         flystate.left         = MsgWing(mass=self.wing_l.mass, angle1=self.wing_l.angle_leading_b, angle2=self.wing_l.angle_trailing_b)
         flystate.right        = MsgWing(mass=self.wing_r.mass, angle1=self.wing_r.angle_leading_b, angle2=self.wing_r.angle_trailing_b)
         flystate.head         = MsgBodypart(mass   = self.head.state.mass,    
-                                            radius = radiusHead,    
-                                            angle  = angleHead)
+                                            radius = self.head.state.radius,    
+                                            angle  = self.head.state.angle)
         flystate.abdomen      = MsgBodypart(mass   = self.abdomen.state.mass, 
-                                            radius = radiusAbdomen, 
-                                            angle  = angleAbdomen)
+                                            radius = self.abdomen.state.radius, 
+                                            angle  = self.abdomen.state.angle)
         self.iCount += 1
         
         self.pubFlystate.publish(flystate)
@@ -422,19 +422,27 @@ class Bodypart(object):
         self.name = name
 
         self.bgra     = bgra_dict[color]
-        self.bgra_dim = tuple(np.array(bgra_dict[color])/2)
-        self.bgra_com = bgra_dict['blue']
+        self.bgra_dim = tuple(np.array(bgra_dict[color])/3)
+        self.bgra_state = bgra_dict['red']
         self.pixelmax = 255.0
         self._transforms = {}
     
         self.windowPolar = ImageWindow(False, self.name+'Polar')
         self.windowBG    = ImageWindow(False, self.name+'BG')
         self.windowFG    = ImageWindow(False, self.name+'FG')
+        self.windowTest    = ImageWindow(False, 'Test')
 
         self.state = Struct()
         self.state.mass = 0.0
-        self.state.pt = np.array([0.0, 0.0])
+        #self.state.pt = np.array([0.0, 0.0])
         self.state.angle = 0.0
+        self.state.radius = 0.0
+
+        self.stateInitial = Struct()
+        self.stateInitial.mass = 0.0
+        self.stateInitial.angle = 0.0
+        self.stateInitial.radius = 0.0
+
         self.stampPrev = None
         self.dt = rospy.Time(0)
 
@@ -445,7 +453,6 @@ class Bodypart(object):
                         }
 
         self.shape = (np.inf, np.inf)
-        self.set_params(params)
         self.ptCOM        = np.array([0.0, 0.0])
         self.ptCenter_i   = np.array([0,0])
         
@@ -465,6 +472,8 @@ class Bodypart(object):
         self.imgRoi2MaskedPolarCropped           = None
         self.imgRoi2MaskedPolarCroppedHanned     = None
         self.imgRoi2MaskedPolarCroppedHannedPrev = None
+        self.imgRoi2MaskedPolarCroppedHannedInitial = None
+
 
         self.imgRoi2Background                   = None
         
@@ -480,6 +489,7 @@ class Bodypart(object):
         self.maskRoiEllipse1                     = None
         self.maskRoiEllipse2                     = None
         
+        self.set_params(params)
         self.pubAngle = rospy.Publisher('strokelitude/'+self.name+'/angle', Float32)
 
     
@@ -514,7 +524,11 @@ class Bodypart(object):
         self.cosAngleBodyOutward = np.cos(self.angleBodyOutward_i)
         self.sinAngleBodyOutward = np.sin(self.angleBodyOutward_i)
         self.R = np.array([[self.cosAngleBodyOutward, -self.sinAngleBodyOutward], [self.sinAngleBodyOutward, self.cosAngleBodyOutward]])
-        self.state.pt = np.array([0.0, 0.0])
+
+        self.imgRoi2MaskedPolarCroppedHannedInitial = None
+        self.stateInitial.mass = 0.0
+        self.stateInitial.angle = 0.0
+        self.stateInitial.radius = self.params[self.name]['radius_axial']
 
         self.imgRoi1Background = None
         self.imgRoi2Background = None
@@ -819,45 +833,44 @@ class Bodypart(object):
             AB = cv2.mulSpectrums(A, B, flags=0, conjB=True)
             crosspower = AB / cv2.norm(AB)
             shift = cv2.idft(crosspower)
-            shiftI  = np.roll(shift,  int(shift.shape[0]/2), 0)
-            shiftIJ = np.roll(shiftI, int(shift.shape[1]/2), 1) # Roll the matrix so 0,0 goes to the center of the image.
+            shift0  = np.roll(shift,  int(shift.shape[0]/2), 0)
+            shift00 = np.roll(shift0, int(shift.shape[1]/2), 1) # Roll the matrix so 0,0 goes to the center of the image.
             
             # Get the coordinates of the maximum shift.
-            kShift = np.argmax(shiftIJ)
-            (iShift,jShift) = np.unravel_index(kShift, shiftIJ.shape)
-            
-            # Get the weighted centroid of a 5x5 region around the peak, for sub-pixel accuracy.
-            a = clip(iShift-2, 0, shiftIJ.shape[0]-1)
-            b = clip(iShift+2, 0, shiftIJ.shape[0]-1)
-            c = clip(jShift-2, 0, shiftIJ.shape[1]-1)
-            d = clip(jShift+2, 0, shiftIJ.shape[1]-1)
-            #peak = shiftIJ[a:b][c:d]
-            #moments = cv2.moments(peak, binaryImage=False)
-            moments={'m00':0.0, 'm10':0.0, 'm01':0.0}
-            for i in range(a,b+1):
-                for j in range(c,d+1):
-                    moments['m00'] += 1     * 1     * shiftIJ[i][j]
-                    moments['m10'] += (j+1) * 1     * shiftIJ[i][j] 
-                    moments['m01'] += 1     * (i+1) * shiftIJ[i][j]
+            kShift = np.argmax(shift00)
+            (iShift,jShift) = np.unravel_index(kShift, shift00.shape)
+            #rospy.logwarn((iShift,jShift))
+
+            # Get the weighted centroid of a region around the peak, for sub-pixel accuracy.
+            w = 21
+            r = int((w-1)/2)
+            i0 = clip(iShift-r, 0, shift00.shape[0]-1)
+            i1 = clip(iShift+r, 0, shift00.shape[0]-1)+1
+            j0 = clip(jShift-r, 0, shift00.shape[1]-1)
+            j1 = clip(jShift+r, 0, shift00.shape[1]-1)+1
+            peak = shift00[i0:i1].T[j0:j1].T
+            moments = cv2.moments(peak, binaryImage=False)
                       
             if (moments['m00'] != 0.0):
-                jShift = moments['m10']/moments['m00'] 
-                iShift = moments['m01']/moments['m00']
+                iShift = moments['m01']/moments['m00'] + float(i0)
+                jShift = moments['m10']/moments['m00'] + float(j0)
             
+            #rospy.logwarn((iShift,jShift))
+
             # Accomodate the matrix roll we did above.
-            iShift -= int(shift.shape[0]/2)+1
-            jShift -= int(shift.shape[1]/2)+1
+            iShift -= float(shift.shape[0])/2.0
+            jShift -= float(shift.shape[1])/2.0
 
             # Convert unsigned shifts to signed shifts. 
-            height = shiftIJ.shape[0]
-            width  = shiftIJ.shape[1]
-            iShift  = ((iShift+height/2) % height) - height/2 
-            jShift  = ((jShift+width/2) % width) - width/2 
+            height = float(shift00.shape[0])
+            width  = float(shift00.shape[1])
+            iShift  = ((iShift+height/2) % height) - height/2.0 
+            jShift  = ((jShift+width/2) % width) - width/2.0 
             
             rv = np.array([iShift, jShift])
             
         else:
-            rv = np.array([0, 0])
+            rv = np.array([0.0, 0.0])
             
         return rv
         
@@ -1029,9 +1042,6 @@ class Bodypart(object):
         if (self.imgRoi2Hanned is not None):
             self.imgRoi2HannedPrev = self.imgRoi2Hanned
             
-        if (self.imgRoi2MaskedPolarCroppedHanned is not None):
-            self.imgRoi2MaskedPolarCroppedHannedPrev = self.imgRoi2MaskedPolarCroppedHanned
-        
         self.shape = image.shape
         
         # Extract the ROI images.
@@ -1081,17 +1091,21 @@ class Bodypart(object):
                                                      theta_0 = min(theta_0a,theta_1a), 
                                                      theta_1 = max(theta_0a,theta_1a))
                 
-            # Find the y value where the warped edge should be cropped out.
-#             minY = np.min(self.imgRoi2MaskedPolar,1)
-#             iMinY = np.where(minY==0)[0] # Find the min y coordinate of black encroachment (i.e. where off-image got mapped into the polar image).
-#             if (len(iMinY>0)):
-#                 self.imgRoi2MaskedPolarCropped = self.imgRoi2MaskedPolar[0:iMinY[0]]
-#             else:
-#                 self.imgRoi2MaskedPolarCropped = self.imgRoi2MaskedPolar
-            self.imgRoi2MaskedPolarCropped = self.imgRoi2MaskedPolar
+            # Find the y value where the black band should be cropped out.
+            sumY = np.sum(self.imgRoi2MaskedPolar,1)
+            iSumY = np.where(sumY==0)[0]
+            if (len(iSumY)>0):
+                iMinY = np.min(iSumY)
+            else:
+                iMinY = self.imgRoi2MaskedPolar.shape[0]
+
+            self.imgRoi2MaskedPolarCropped = self.imgRoi2MaskedPolar[0:iMinY]
     
              
             if (self.bInitializedMasks):
+                if (self.imgRoi2MaskedPolarCroppedHanned is not None):
+                    self.imgRoi2MaskedPolarCroppedHannedPrev = self.imgRoi2MaskedPolarCroppedHanned
+        
                 if (self.hannRoi2 is None) or (self.imgRoi2.shape != self.hannRoi2.shape):
                     self.hannRoi2 = self.create_hanning_window(self.imgRoi2.shape)
                 
@@ -1102,20 +1116,24 @@ class Bodypart(object):
                 self.imgRoi2MaskedPolarCroppedHanned = cv2.multiply(self.imgRoi2MaskedPolarCropped.astype(np.float32), self.hannRoi2MaskedPolarCropped)
 
             
-            # Show the image.
-            #(img,iGood) = self.collapse_vertical_bands(self.imgRoi2MaskedPolarCropped)
-            #img = self.imgRoi2MaskedPolarCroppedHanned
-            img = self.imgRoi2MaskedPolarCropped
-            #img = self.imgRoi1Background
-            self.windowPolar.set_image(img)
+        if (self.imgRoi2MaskedPolarCroppedHannedInitial is None):
+            self.imgRoi2MaskedPolarCroppedHannedInitial = self.imgRoi2MaskedPolarCroppedHanned
+        
+        # Show the image.
+        #(img,iGood) = self.collapse_vertical_bands(self.imgRoi2MaskedPolarCropped)
+        #img = self.imgRoi2MaskedPolarCroppedHanned
+        img = self.imgRoi2MaskedPolarCropped
+        #img = self.imgRoi2MaskedPolarCroppedHannedInitial
+        #img = self.imgRoi1Background
+        self.windowPolar.set_image(img)
         
 
     # update_center_of_mass()
     # Update the bodypart center-of-mass.
     #
     def update_center_of_mass(self):
-        if (self.imgRoi1_0 is not None):
-            moments = cv2.moments(self.imgRoi1_0, binaryImage=False)
+        if (self.imgRoi1Masked is not None):
+            moments = cv2.moments(self.imgRoi1Masked, binaryImage=False)
             
             if (moments['m00'] != 0.0):
                 self.mass  = moments['m00'] / self.pixelmax
@@ -1137,12 +1155,12 @@ class Bodypart(object):
     # update_state_using_phasecorr()
     # Update the bodypart translation & rotation.
     #
-    def update_state_using_phasecorr(self):
+    def update_state_using_phasecorr_cartpolar(self): # This is the older version using both the cartesian and polar images.
         # Get the (x,y) translation between successive images.
         (iShift, jShift) = self.get_shift_from_phasecorr(self.imgRoi2Hanned, self.imgRoi2HannedPrev) # as [x,y]
         ptCartesian = np.array([jShift, iShift])
-        ptErr = self.state.pt - self.ptCOM 
-        self.state.pt += ptCartesian - 0.005*ptErr # Correct for drift error due to integrating the shifts; pull gently toward the COM.
+        ptErr = self.state.pt - self.ptCOM
+        self.state.pt += ptCartesian #- 0.005*ptErr # Correct for drift error due to integrating the shifts; pull gently toward the COM.
 
         # Get the rotation & expansion between successive images.
         if (self.imgRoi2MaskedPolarCroppedHanned is not None):
@@ -1150,6 +1168,49 @@ class Bodypart(object):
             dAngle = aShift * np.abs(2*self.angle_wedge) / self.imgRoi2MaskedPolarCroppedHanned.shape[1]
             dRadius = rShift
             self.state.angle += dAngle
+
+        self.state.mass = 0.0
+        
+    def update_state_using_phasecorr(self): # New version using just the polar image.
+        imgNow = self.imgRoi2MaskedPolarCroppedHanned
+        imgPrior = self.imgRoi2MaskedPolarCroppedHannedInitial
+        statePrior = self.stateInitial
+        self.windowTest.set_image(cv2.absdiff(imgNow,imgPrior))
+        
+        # Get the rotation & expansion between images.
+        if (imgNow is not None) and (imgPrior is not None):
+            (rShift, aShift) = self.get_shift_from_phasecorr(imgNow, imgPrior)
+            dAngle = aShift * np.abs(2*self.angle_wedge) / float(imgNow.shape[1])
+            dRadius = rShift
+            self.state.angle  = statePrior.angle + dAngle
+            self.state.radius = statePrior.radius + dRadius
+            
+            #rospy.logwarn('%0.3f, %0.3f, %d, %0.3f' % (rShift, aShift, imgNow.shape[1], dAngle))
+
+        self.state.mass = 0.0
+        
+        
+    # update_state_using_features()
+    # Update the bodypart translation & rotation.
+    #
+    def update_state_using_features(self):
+        imgNow = self.imgRoi2MaskedPolarCroppedHanned
+        imgPrior = self.imgRoi2MaskedPolarCroppedHannedPrev
+        RT = cv2.estimateRigidTransform(imgNow.astype(np.uint8), imgPrior.astype(np.uint8), fullAffine=False)
+            
+        # Get the (x,y) translation between successive images.
+        (iShift, jShift) = (RT[0,2], RT[1,2])
+        ptCartesian = np.array([jShift, iShift])
+        ptErr = self.state.pt - self.ptCOM
+        self.state.pt += ptCartesian #- 0.005*ptErr # Correct for drift error due to integrating the shifts; pull gently toward the COM.
+        self.state.angle += np.arctan2(RT[1,0], RT[0,0])
+        
+#         # Get the rotation & expansion between successive images.
+#         if (self.imgRoi2MaskedPolarCroppedHanned is not None):
+#             (rShift, aShift) = self.get_shift_from_phasecorr(self.imgRoi2MaskedPolarCroppedHanned, self.imgRoi2MaskedPolarCroppedHannedPrev) # as [angle,radius]
+#             dAngle = aShift * np.abs(2*self.angle_wedge) / self.imgRoi2MaskedPolarCroppedHanned.shape[1]
+#             dRadius = rShift
+#             self.state.angle += dAngle
 
         self.state.mass = 0.0
         
@@ -1173,6 +1234,7 @@ class Bodypart(object):
             self.update_polar()
             self.update_center_of_mass()
             self.update_state_using_phasecorr()
+            #self.update_state_using_features()
             
             if (self.bInitializedMasks):
                 self.bInitialized = True
@@ -1216,8 +1278,12 @@ class Bodypart(object):
 
         if (self.params[self.name]['track']):
             a=1.0 # Amount to amplify the visual display.
-            ptCenter0_i = (int(self.params[self.name]['x']), int(self.params[self.name]['y'])) 
-            ptCenter_i = (int(a*self.state.pt[0]+self.params[self.name]['x']), int(a*self.state.pt[1]+self.params[self.name]['y'])) 
+            ptCenter0_i = (int(self.params[self.name]['x']), int(self.params[self.name]['y']))
+            
+            pt = self.R.dot([self.state.radius*np.cos(self.state.angle), 
+                             self.state.radius*np.sin(self.state.angle)]) 
+            ptState_i = (int(a*pt[0]+self.params[self.name]['x']), 
+                         int(a*pt[1]+self.params[self.name]['y'])) 
             
             # Draw the outline.
             cv2.ellipse(image,
@@ -1253,28 +1319,28 @@ class Bodypart(object):
                         0,
                         0,
                         360,
-                        bgra_dict['red'], 
+                        bgra_dict['blue'], 
                         1)
             
-            # Draw the bodypart center.
+            # Draw the bodypart state position.
             cv2.ellipse(image,
-                        ptCenter_i,
+                        ptState_i,
                         (2,2),
                         0,
                         0,
                         360,
-                        self.bgra_com, 
+                        self.bgra_state, 
                         1)
             
-            # Draw the bodypart angle.
-            r = 20
-            pt0 = np.array(ptCenter_i) + (r*np.array([np.cos(self.state.angle), np.sin(self.state.angle)])).astype(int).clip((0,0),(image.shape[1],image.shape[0])) 
-            pt1 = np.array(ptCenter_i) - (r*np.array([np.cos(self.state.angle), np.sin(self.state.angle)])).astype(int).clip((0,0),(image.shape[1],image.shape[0])) 
-            cv2.line(image,
-                     tuple(pt0),
-                     tuple(pt1),
-                     self.bgra_com, 
-                     1)
+            # Draw the bodypart state angle.
+#             r = 20
+#             pt0 = np.array(ptState_i) + (r*np.array([np.cos(self.state.angle), np.sin(self.state.angle)])).astype(int).clip((0,0),(image.shape[1],image.shape[0])) 
+#             pt1 = np.array(ptState_i) - (r*np.array([np.cos(self.state.angle), np.sin(self.state.angle)])).astype(int).clip((0,0),(image.shape[1],image.shape[0])) 
+#             cv2.line(image,
+#                      tuple(pt0),
+#                      tuple(pt1),
+#                      self.bgra_state, 
+#                      1)
             
             # Draw the bodypart hinge.        
             ptHinge_i = (int(self.ptHinge_i[0]), int(self.ptHinge_i[1])) 
@@ -1288,11 +1354,12 @@ class Bodypart(object):
                         1)
     
             # Draw line from hinge to center.        
-            cv2.line(image, ptHinge_i, ptCenter_i, self.bgra_com, 1)
+            cv2.line(image, ptHinge_i, ptState_i, self.bgra_state, 1)
             
             self.windowPolar.show()
             self.windowBG.show()
             self.windowFG.show()
+            self.windowTest.show()
         
 # end class Bodypart
 
