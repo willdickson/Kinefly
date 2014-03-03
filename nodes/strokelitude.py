@@ -430,7 +430,7 @@ class Bodypart(object):
         self.windowPolar = ImageWindow(False, self.name+'Polar')
         self.windowBG    = ImageWindow(False, self.name+'BG')
         self.windowFG    = ImageWindow(False, self.name+'FG')
-        self.windowTest    = ImageWindow(False, 'Test')
+        self.windowTest    = ImageWindow(True, 'Test')
 
         self.state = Struct()
         self.state.mass = 0.0
@@ -447,7 +447,7 @@ class Bodypart(object):
         self.dt = rospy.Time(0)
 
         self.handles = {'center':Handle(np.array([0,0]), self.bgra),
-                        'radius_ortho':Handle(np.array([0,0]), self.bgra),
+                        #'radius_ortho':Handle(np.array([0,0]), self.bgra),
                         'radius_axial':Handle(np.array([0,0]), self.bgra),
                         'angle_wedge':Handle(np.array([0,0]), self.bgra)
                         }
@@ -1028,7 +1028,7 @@ class Bodypart(object):
         
         self.handles['center'].pt       = np.array([x, y])
         self.handles['radius_axial'].pt = np.array([x, y]) + (r1 * np.array([self.cosAngleBodyOutward,self.sinAngleBodyOutward]))
-        self.handles['radius_ortho'].pt = np.array([x, y]) + (r2 * np.array([-self.sinAngleBodyOutward,self.cosAngleBodyOutward]))
+        #self.handles['radius_ortho'].pt = np.array([x, y]) + (r2 * np.array([-self.sinAngleBodyOutward,self.cosAngleBodyOutward]))
         self.handles['angle_wedge'].pt  = np.array([x, y]) + np.dot(self.R, np.array([(r1+10)*np.cos(angle), -(r2+10)*np.sin(angle)]))
 
         self.ptWedge1    = tuple((np.array([x, y]) + np.dot(self.R, np.array([  (r1)*np.cos(self.angle_wedge),   -(r2)*np.sin(self.angle_wedge)]))).astype(int))
@@ -1376,6 +1376,7 @@ class Wing(object):
         self.ravelAnglesRoi_b   = None
         self.imgRoiBackground   = None
         self.imgRoi             = None
+        self.imgFullBackground  = None
         
         self.bins               = None
         self.intensities        = None
@@ -1942,7 +1943,7 @@ class MainWindow:
         self.parameterfile = os.path.expanduser(rospy.get_param('strokelitude_parameterfile', '~/strokelitude.yaml'))
         try:
             self.params = rosparam.load_file(self.parameterfile)[0][0]
-        except rosparam.RosParamException, e:
+        except (rosparam.RosParamException, IndexError), e:
             rospy.logwarn('%s.  Using default values.' % e)
             self.params = {}
             
@@ -2492,6 +2493,7 @@ class MainWindow:
 
             if (tagSelected=='radius_axial'): 
                 params[bodypartSelected]['radius_axial'] = float(np.linalg.norm(np.array([params[bodypartSelected]['x'],params[bodypartSelected]['y']]) - ptMouse))
+                params[bodypartSelected]['radius_ortho'] = params[bodypartSelected]['radius_axial'] # Force it to be circular. 
             if (tagSelected=='radius_ortho'): 
                 params[bodypartSelected]['radius_ortho'] = float(np.linalg.norm(np.array([params[bodypartSelected]['x'],params[bodypartSelected]['y']]) - ptMouse))
             if (tagSelected=='angle_wedge'):
