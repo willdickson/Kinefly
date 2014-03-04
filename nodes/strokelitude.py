@@ -1030,12 +1030,12 @@ class Bodypart(object):
         self.handles['center'].pt       = np.array([x, y])
         self.handles['radius_axial'].pt = np.array([x, y]) + ((r1+10) * np.array([self.cosAngleBodyOutward,self.sinAngleBodyOutward]))
         #self.handles['radius_ortho'].pt = np.array([x, y]) + (r2 * np.array([-self.sinAngleBodyOutward,self.cosAngleBodyOutward]))
-        self.handles['angle_wedge'].pt  = np.array([x, y]) + np.dot(self.R, np.array([(r1+0)*np.cos(angle), -(r2+0)*np.sin(angle)]))
+        self.handles['angle_wedge'].pt  = np.array([x, y]) + np.dot(self.R, np.array([r1*np.cos(angle), -r2*np.sin(angle)]))
 
-        self.ptWedge1    = tuple((np.array([x, y]) + np.dot(self.R, np.array([  (r1)*np.cos(self.angle_wedge),   -(r2)*np.sin(self.angle_wedge)]))).astype(int))
-        self.ptWedge2    = tuple((np.array([x, y]) + np.dot(self.R, np.array([  (r1)*np.cos(-self.angle_wedge),   -(r2)*np.sin(-self.angle_wedge)]))).astype(int))
-        self.ptWedge1_2x = tuple((np.array([x, y]) + np.dot(self.R, np.array([(2*r1)*np.cos(self.angle_wedge), -(2*r2)*np.sin(self.angle_wedge)]))).astype(int))
-        self.ptWedge2_2x = tuple((np.array([x, y]) + np.dot(self.R, np.array([(2*r1)*np.cos(-self.angle_wedge), -(2*r2)*np.sin(-self.angle_wedge)]))).astype(int))
+        self.ptWedge1    = tuple((np.array([x, y]) + np.dot(self.R, np.array([  r1*np.cos(self.angle_wedge),    -(r2)*np.sin(self.angle_wedge)]))).astype(int))
+        self.ptWedge2    = tuple((np.array([x, y]) + np.dot(self.R, np.array([  r1*np.cos(-self.angle_wedge),   -(r2)*np.sin(-self.angle_wedge)]))).astype(int))
+        self.ptWedge1_2x = tuple((np.array([x, y]) + np.dot(self.R, np.array([2*r1*np.cos(self.angle_wedge),  -(2*r2)*np.sin(self.angle_wedge)]))).astype(int))
+        self.ptWedge2_2x = tuple((np.array([x, y]) + np.dot(self.R, np.array([2*r1*np.cos(-self.angle_wedge), -(2*r2)*np.sin(-self.angle_wedge)]))).astype(int))
         
         
     def update_roi(self, image):
@@ -1127,8 +1127,8 @@ class Bodypart(object):
         
         # Show the image.
         #(img,iGood) = self.collapse_vertical_bands(self.imgRoi2MaskedPolarCropped)
-        #img = self.imgRoi2MaskedPolarCroppedHanned
-        img = self.imgRoi2MaskedPolarCropped
+        img = self.imgRoi2MaskedPolarCroppedHanned
+        #img = self.imgRoi2MaskedPolarCropped
         #img = self.imgRoi2MaskedPolarCroppedHannedInitial
         #img = self.imgRoi1Background
         self.windowPolar.set_image(img)
@@ -1181,7 +1181,9 @@ class Bodypart(object):
         imgNow = self.imgRoi2MaskedPolarCroppedHanned
         imgPrior = self.imgRoi2MaskedPolarCroppedHannedInitial
         statePrior = self.stateInitial
-        self.windowTest.set_image(cv2.absdiff(imgNow,imgPrior))
+        
+        if (imgNow is not None) and (imgPrior is not None):
+            self.windowTest.set_image(cv2.absdiff(imgNow,imgPrior))
         
         # Get the rotation & expansion between images.
         if (imgNow is not None) and (imgPrior is not None):
@@ -2070,6 +2072,8 @@ class MainWindow:
         btn = Button(pt=[x,y], scale=self.scale, type='checkbox', name='extra_windows', text='windows', state=self.params['extra_windows'])
         self.buttons.append(btn)
 
+        self.yToolbar = btn.bottom + 1
+
 
         # user callbacks
         cv.SetMouseCallback(self.window_name, self.onMouse, param=None)
@@ -2131,6 +2135,7 @@ class MainWindow:
         self.set_dict_with_preserve(self.params, rospy.get_param('strokelitude'))
         rospy.set_param('strokelitude', self.params)
         rosparam.dump_params(self.parameterfile, 'strokelitude')
+        
         
     def scale_params(self, paramsIn, scale):
 		paramsOut = copy.deepcopy(paramsIn)
@@ -2493,7 +2498,7 @@ class MainWindow:
 
 
             if (tagSelected=='radius_axial'): 
-                params[bodypartSelected]['radius_axial'] = float(np.linalg.norm(np.array([params[bodypartSelected]['x'],params[bodypartSelected]['y']]) - ptMouse))
+                params[bodypartSelected]['radius_axial'] = max(float(np.linalg.norm(np.array([params[bodypartSelected]['x'],params[bodypartSelected]['y']]) - ptMouse))-10,0)
                 params[bodypartSelected]['radius_ortho'] = params[bodypartSelected]['radius_axial'] # Force it to be circular. 
             if (tagSelected=='radius_ortho'): 
                 params[bodypartSelected]['radius_ortho'] = float(np.linalg.norm(np.array([params[bodypartSelected]['x'],params[bodypartSelected]['y']]) - ptMouse))
@@ -2623,7 +2628,7 @@ class MainWindow:
                         
         elif (self.uiSelected=='handle'):
             # Set the new params.
-            self.update_params_from_handle(self.bodypartSelected, self.tagSelected, ptMouse)
+            self.update_params_from_handle(self.bodypartSelected, self.tagSelected, ptMouse.clip((0,self.yToolbar), (self.shapeImage[1],self.shapeImage[0])))
             self.fly.set_params(self.scale_params(self.params, self.scale))
         
             # Save the results.
