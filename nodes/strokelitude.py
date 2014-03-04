@@ -430,7 +430,7 @@ class Bodypart(object):
         self.windowPolar = ImageWindow(False, self.name+'Polar')
         self.windowBG    = ImageWindow(False, self.name+'BG')
         self.windowFG    = ImageWindow(False, self.name+'FG')
-        self.windowTest    = ImageWindow(True, 'Test')
+        self.windowTest  = ImageWindow(False, 'Test')
 
         self.state = Struct()
         self.state.mass = 0.0
@@ -884,7 +884,7 @@ class Bodypart(object):
         
 
     # create_mask()
-    # Create an elliptical mask, and a Hanning window.
+    # Create elliptical wedge masks, and Hanning windows.
     #
     def create_mask(self, shape):
         # Create the 1x sized mask.
@@ -1001,6 +1001,7 @@ class Bodypart(object):
             r2 = self.roi1[2]-self.roi2[2]
             r3 = self.roi1[3]-self.roi2[3]
             self.imgRoi1Background = self.imgRoi2Background[r1:r3, r0:r2]
+            self.minRoi1Background = np.min(self.imgRoi1Background)
             
         dt = max(0, self.dt.to_sec())
         alphaBackground = 1.0 - np.exp(-dt / self.rc_background)
@@ -1027,9 +1028,9 @@ class Bodypart(object):
         
         
         self.handles['center'].pt       = np.array([x, y])
-        self.handles['radius_axial'].pt = np.array([x, y]) + (r1 * np.array([self.cosAngleBodyOutward,self.sinAngleBodyOutward]))
+        self.handles['radius_axial'].pt = np.array([x, y]) + ((r1+10) * np.array([self.cosAngleBodyOutward,self.sinAngleBodyOutward]))
         #self.handles['radius_ortho'].pt = np.array([x, y]) + (r2 * np.array([-self.sinAngleBodyOutward,self.cosAngleBodyOutward]))
-        self.handles['angle_wedge'].pt  = np.array([x, y]) + np.dot(self.R, np.array([(r1+10)*np.cos(angle), -(r2+10)*np.sin(angle)]))
+        self.handles['angle_wedge'].pt  = np.array([x, y]) + np.dot(self.R, np.array([(r1+0)*np.cos(angle), -(r2+0)*np.sin(angle)]))
 
         self.ptWedge1    = tuple((np.array([x, y]) + np.dot(self.R, np.array([  (r1)*np.cos(self.angle_wedge),   -(r2)*np.sin(self.angle_wedge)]))).astype(int))
         self.ptWedge2    = tuple((np.array([x, y]) + np.dot(self.R, np.array([  (r1)*np.cos(-self.angle_wedge),   -(r2)*np.sin(-self.angle_wedge)]))).astype(int))
@@ -1048,7 +1049,7 @@ class Bodypart(object):
         self.imgRoi1_0 = image[self.roi1[1]:self.roi1[3], self.roi1[0]:self.roi1[2]]
         self.imgRoi2_0 = image[self.roi2[1]:self.roi2[3],   self.roi2[0]:self.roi2[2]]
 
-        # Background Subtraction.
+        # Background Subtraction, or just subtract off the min value (i.e. equalizeHist())
         if (self.params[self.name]['subtract_bg']):
             if (self.imgRoi1Background is not None):
                 self.imgRoi1 = cv2.absdiff(self.imgRoi1_0, self.imgRoi1Background.astype(np.uint8))
@@ -1058,6 +1059,11 @@ class Bodypart(object):
         else:
             self.imgRoi1 = self.imgRoi1_0
             self.imgRoi2 = self.imgRoi2_0
+            
+        # Rerange the images to black & white.
+        self.imgRoi2 -= np.min(self.imgRoi2)
+        max2 = np.max(self.imgRoi2)
+        self.imgRoi2 *= (255.0/float(max2))
         
         self.windowFG.set_image(self.imgRoi2) #(self.maskRoiEllipse2)# 
         
@@ -1312,15 +1318,15 @@ class Bodypart(object):
 
     
             # Draw the bodypart center of mass.    
-            ptCOM_i = (int(a*self.ptCOM[0]+self.params[self.name]['x']), int(a*self.ptCOM[1]+self.params[self.name]['y'])) 
-            cv2.ellipse(image,
-                        ptCOM_i,
-                        (2,2),
-                        0,
-                        0,
-                        360,
-                        bgra_dict['blue'], 
-                        1)
+#             ptCOM_i = (int(a*self.ptCOM[0]+self.params[self.name]['x']), int(a*self.ptCOM[1]+self.params[self.name]['y'])) 
+#             cv2.ellipse(image,
+#                         ptCOM_i,
+#                         (2,2),
+#                         0,
+#                         0,
+#                         360,
+#                         bgra_dict['blue'], 
+#                         1)
             
             # Draw the bodypart state position.
             cv2.ellipse(image,
@@ -2098,25 +2104,20 @@ class MainWindow:
             rospy.signal_shutdown('User requested exit.')
         
         
-        if (self.command == 'setsymmetry'):
-            self.params['symmetric'] = (msg.arg1 > 0)#not self.params['symmetric']
-            
-            
-        if (self.command == 'setinvertcolor'):
-            self.params['invertcolor'] = (msg.arg1 > 0)#not self.params['invertcolor']
-            
-            
         if (self.command == 'save_background'):
             self.save_background()
+            
+        
+        if (self.command == 'use_gui'):
+            self.params['use_gui'] = (msg.arg1 > 0)
             
         
         if (self.command == 'help'):
             rospy.logwarn('The strokelitude/command topic accepts the following string commands:')
             rospy.logwarn('  help                 This message.')
-            rospy.logwarn('  setsymmetry N        Set(1) or unset(0) symmetry when mousing the handles.')
-            rospy.logwarn('  setinvertcolor N     Set blackonwhite or whiteonblack, 0 or 1.')
             rospy.logwarn('  save_background      Save the instant camera image to disk for')
             rospy.logwarn('                       background subtraction.')
+            rospy.logwarn('  use_gui #            Turn off|on the user windows (#=0|1).')
             rospy.logwarn('  exit                 Exit the program.')
             rospy.logwarn('')
             rospy.logwarn('You can send the above commands at the shell prompt via:')
@@ -2656,10 +2657,10 @@ class MainWindow:
 
 
                 if (self.nameSelected == self.nameSelectedNow == 'invertcolor'):
-                    self.pubCommand.publish(MsgCommand('setinvertcolor',self.buttons[self.iButtonSelected].state))
+                    self.params['invertcolor'] = self.buttons[self.iButtonSelected].state
                     
                 elif (self.nameSelected == self.nameSelectedNow == 'symmetry'):
-                    self.pubCommand.publish(MsgCommand('setsymmetry',self.buttons[self.iButtonSelected].state))
+                    self.params['symmetric'] = self.buttons[self.iButtonSelected].state
                     
                 elif (self.nameSelected == self.nameSelectedNow == 'subtract_bg'):
                     if (self.imgFullBackground is None):
@@ -2668,25 +2669,23 @@ class MainWindow:
 
                     self.params['left']['subtract_bg'] = self.buttons[iButtonSelected].state
                     self.params['right']['subtract_bg'] = self.buttons[iButtonSelected].state
-                    self.fly.set_params(self.scale_params(self.params, self.scale))
                     
                 elif (self.nameSelected == self.nameSelectedNow == 'head'):
                     self.params['head']['track'] = self.buttons[iButtonSelected].state
-                    self.fly.set_params(self.scale_params(self.params, self.scale))
                     
                 elif (self.nameSelected == self.nameSelectedNow == 'abdomen'):
                     self.params['abdomen']['track'] = self.buttons[iButtonSelected].state
-                    self.fly.set_params(self.scale_params(self.params, self.scale))
 
                 elif (self.nameSelected == self.nameSelectedNow == 'wings'):
                     self.params['right']['track'] = self.buttons[iButtonSelected].state
                     self.params['left']['track']  = self.buttons[iButtonSelected].state
-                    self.fly.set_params(self.scale_params(self.params, self.scale))
 
                 elif (self.nameSelected == self.nameSelectedNow == 'extra_windows'):
                     self.params['extra_windows'] = self.buttons[iButtonSelected].state
-                    self.fly.set_params(self.scale_params(self.params, self.scale))
 
+
+            self.fly.set_params(self.scale_params(self.params, self.scale))
+            self.fly.create_masks(self.shapeImage)
 
             self.bMousing           = False
             self.nameSelected       = None
