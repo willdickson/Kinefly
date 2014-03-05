@@ -58,8 +58,19 @@ class Strokelitude2PhidgetsAnalog:
         # Connect to the Phidget.
         self.analog = Phidgets.Devices.Analog.Analog()
         self.analog.openPhidget()
-        self.analog.setOnAttachHandler(self.attach_callback)
-        self.analog.setOnDetachHandler(self.detach_callback)
+        #self.analog.setOnAttachHandler(self.attach_callback)
+        #self.analog.setOnDetachHandler(self.detach_callback)
+
+        while (True):
+            rospy.logwarn('Waiting for PhidgetsAnalog device...')
+            try:
+                self.analog.waitForAttach(1000)
+            except Phidgets.PhidgetException.PhidgetException:
+                pass
+            
+            if (self.analog.isAttached()):
+                self.bAttached = True
+                break
         
         
         self.bInitialized = True
