@@ -1046,10 +1046,10 @@ class Bodypart(object):
         self.shape = image.shape
         
         # Extract the ROI images.
-        self.imgRoi1_0 = image[self.roi1[1]:self.roi1[3], self.roi1[0]:self.roi1[2]]
-        self.imgRoi2_0 = image[self.roi2[1]:self.roi2[3],   self.roi2[0]:self.roi2[2]]
+        self.imgRoi2_0 = copy.deepcopy(image[self.roi2[1]:self.roi2[3], self.roi2[0]:self.roi2[2]])
+        self.imgRoi1_0 = self.imgRoi2_0[(self.roi1[1]-self.roi2[1]):(self.roi1[3]-self.roi2[3]), (self.roi1[0]-self.roi2[0]):(self.roi1[2]-self.roi2[2])]
 
-        # Background Subtraction, or just subtract off the min value (i.e. equalizeHist())
+        # Background Subtraction.
         if (self.params[self.name]['subtract_bg']):
             if (self.imgRoi1Background is not None):
                 self.imgRoi1 = cv2.absdiff(self.imgRoi1_0, self.imgRoi1Background.astype(np.uint8))
@@ -1614,16 +1614,12 @@ class Wing(object):
     # Set the given image as the background image.
     #                
     def set_background(self, image):
-        if (self.params[self.name]['subtract_bg']):
-            self.imgFullBackground = image.astype(np.float32)
-            self.imgRoiBackground = None
-        else:
-            self.imgFullBackground = None
-            self.imgRoiBackground = None
+        self.imgFullBackground = image.astype(np.float32)
+        self.imgRoiBackground = None
         
         
     def update_background(self):
-        if (self.imgRoiBackground is None) and (self.imgFullBackground is not None) and (self.roi is not None):
+        if (self.imgRoiBackground is None) and (self.params[self.name]['subtract_bg']) and (self.roi is not None):
             self.imgRoiBackground = copy.deepcopy(self.imgFullBackground[self.roi[1]:self.roi[3], self.roi[0]:self.roi[2]])
         
         dt = max(0, self.dt.to_sec())
