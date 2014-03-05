@@ -21,6 +21,7 @@ class Strokelitude2PhidgetsAnalog:
     def __init__(self):
         self.bInitialized = False
         self.iCount = 0
+        self.bAttached = False
         
         # initialize
         rospy.init_node('strokelitude2phidgetsanalog', anonymous=True)
@@ -57,23 +58,25 @@ class Strokelitude2PhidgetsAnalog:
         # Connect to the Phidget.
         self.analog = Phidgets.Devices.Analog.Analog()
         self.analog.openPhidget()
-        while (True):
-            rospy.logwarn('Waiting for PhidgetsAnalog device...')
-            try:
-                self.analog.waitForAttach(1000)
-            except Phidgets.PhidgetException.PhidgetException:
-                pass
-            
-            if (self.analog.isAttached()):
-                break
-            
-        rospy.logwarn('Attached to: %s, ID=%s' % (self.analog.getDeviceName(), self.analog.getDeviceID()))
+        self.analog.setOnAttachHandler(self.attach_callback)
+        self.analog.setOnDetachHandler(self.detach_callback)
         
-        for i in range(4):
-            self.analog.setEnabled(i, self.enable[i])
         
         self.bInitialized = True
         
+        
+    def attach_callback(self, phidget):
+        for i in range(4):
+            self.analog.setEnabled(i, self.enable[i])
+
+        rospy.logwarn('PhidgetAnalog Attached to: %s, ID=%s' % (self.analog.getDeviceName(), self.analog.getDeviceID()))
+        self.bAttached = True
+        
+
+    def detach_callback(self, phidget):
+        rospy.logwarn ('PhidgetAnalog:  Detached.')
+        self.bAttached = False
+
 
     def update_coefficients(self):
         if (not self.params['autorange']):
@@ -148,8 +151,12 @@ class Strokelitude2PhidgetsAnalog:
         if (self.analog.isAttached()):
             voltages = self.voltages_from_flystate(flystate)
             for i in range(4):
-                if (self.enable[i]):
-                    self.analog.setVoltage(i, voltages[i])
+                if (self.enable[i]) and (self.bAttached):
+#                    rospy.logwarn(self.analog.getEnabled(i))
+                    try:
+                        self.analog.setVoltage(i, voltages[i])
+                    except Phidgets.PhidgetException.PhidgetException:
+                        pass
     
     
     # get_voltages()
