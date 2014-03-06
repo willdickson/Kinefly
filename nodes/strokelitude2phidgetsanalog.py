@@ -44,35 +44,23 @@ class Strokelitude2PhidgetsAnalog:
         rospy.set_param('strokelitude/phidgetsanalog', self.params)
         
 
-        self.fMin = np.array([ np.inf,  np.inf,  np.inf,  np.inf,  np.inf,  np.inf,  np.inf,  np.inf,  np.inf])
-        self.fMax = np.array([-np.inf, -np.inf, -np.inf, -np.inf, -np.inf, -np.inf, -np.inf, -np.inf, -np.inf])
+        self.stateMin = np.array([ np.inf,  np.inf,  np.inf,  np.inf,  np.inf,  np.inf,  np.inf,  np.inf,  np.inf])
+        self.stateMax = np.array([-np.inf, -np.inf, -np.inf, -np.inf, -np.inf, -np.inf, -np.inf, -np.inf, -np.inf])
         
         self.update_coefficients()
         
         
+        # Connect to the Phidget.
+        self.analog = Phidgets.Devices.Analog.Analog()
+        self.analog.openPhidget()
+        self.analog.setOnAttachHandler(self.attach_callback)
+        self.analog.setOnDetachHandler(self.detach_callback)
+
         # Subscriptions.        
         self.subFlystate = rospy.Subscriber('strokelitude/flystate', MsgFlystate, self.flystate_callback)
         self.subCommand  = rospy.Subscriber('strokelitude2phidgetsanalog/command', String, self.command_callback)
         rospy.sleep(1) # Allow time to connect publishers & subscribers.
 
-        # Connect to the Phidget.
-        self.analog = Phidgets.Devices.Analog.Analog()
-        self.analog.openPhidget()
-        #self.analog.setOnAttachHandler(self.attach_callback)
-        #self.analog.setOnDetachHandler(self.detach_callback)
-
-        while (True):
-            rospy.logwarn('Waiting for PhidgetsAnalog device...')
-            try:
-                self.analog.waitForAttach(1000)
-            except Phidgets.PhidgetException.PhidgetException:
-                pass
-            
-            if (self.analog.isAttached()):
-                self.bAttached = True
-                break
-        
-        
         self.bInitialized = True
         
         
@@ -121,12 +109,12 @@ class Strokelitude2PhidgetsAnalog:
     # Set the voltage outputs 0,1,2,3 to L, R, L-R, L+R, respectively, such that they each span the voltage range [-10,+10].
     # 
     def update_coefficients_from_autorange(self):
-        lmax = self.fMax[1]
-        lmin = self.fMin[1]
+        lmax = self.stateMax[1]
+        lmin = self.stateMin[1]
         lmean = (lmax-lmin)/2
 
-        rmax = self.fMax[3]
-        rmin = self.fMin[3]
+        rmax = self.stateMax[3]
+        rmin = self.stateMin[3]
         rmean = (rmax-rmin)/2
 
         # From Matlab:
@@ -159,46 +147,60 @@ class Strokelitude2PhidgetsAnalog:
         
     def flystate_callback(self, flystate):
         self.iCount += 1
-        if (self.analog.isAttached()):
+        
+        
+        if (self.bAttached):
             voltages = self.voltages_from_flystate(flystate)
             for i in range(4):
-                if (self.enable[i]) and (self.bAttached):
+                if (self.enable[i]):
 #                    rospy.logwarn(self.analog.getEnabled(i))
                     try:
                         self.analog.setVoltage(i, voltages[i])
                     except Phidgets.PhidgetException.PhidgetException:
                         pass
+        else:
+            #rospy.logwarn('Waiting for PhidgetsAnalog device...')
+            try:
+                self.analog.waitForAttach(10) # 10ms
+            except Phidgets.PhidgetException.PhidgetException:
+                pass
+            
+            if (self.analog.isAttached()):
+                self.bAttached = True
+        
+        
+            
     
     
     # get_voltages()
     #
     def voltages_from_flystate(self, flystate):
-        f = np.array([1.0,
-                      flystate.left.angle1,
-                      flystate.left.angle2,
-                      flystate.right.angle1,
-                      flystate.right.angle2,
-                      flystate.head.angle,
-                      flystate.head.radius,
-                      flystate.abdomen.angle,
-                      flystate.abdomen.radius
-                      ], dtype=np.float32)
+        state = np.array([1.0,
+                          flystate.left.angle1,
+                          flystate.left.angle2,
+                          flystate.right.angle1,
+                          flystate.right.angle2,
+                          flystate.head.angle,
+                          flystate.head.radius,
+                          flystate.abdomen.angle,
+                          flystate.abdomen.radius
+                          ], dtype=np.float32)
         
         if (self.iCount>10):
-            self.fMin = np.min([self.fMin, f], 0)
-            self.fMax = np.max([f, self.fMax], 0)
+            self.stateMin = np.min([self.stateMin, state], 0)
+            self.stateMax = np.max([state, self.stateMax], 0)
 
             # Decay toward the mean.
-            fMean = (self.fMin + self.fMax) * 0.5
-            d = (self.fMax - fMean) * 0.001
-            self.fMax -= d
-            self.fMin += d
+            stateMean = (self.stateMin + self.stateMax) * 0.5
+            d = (self.stateMax - stateMean) * 0.001
+            self.stateMax -= d
+            self.stateMin += d
             
-        #rospy.logwarn((self.fMin,self.fMax))
+        #rospy.logwarn((self.stateMin,self.stateMax))
         if (self.params['autorange']):
             self.update_coefficients_from_autorange()
             
-        voltages = np.dot(self.a, f)
+        voltages = np.dot(self.a, state)
         
         # L1,L2,R1,R2,HA,AA are all in radians.
         # v00,v0l1,v0l2,v0r1,v0r2,v0ha,v0hr,v0aa,v0ar are coefficients to convert to voltage.
