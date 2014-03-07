@@ -22,6 +22,8 @@ from StrokelitudeROS.msg import float32list as float32list_msg
 from StrokelitudeROS.msg import MsgFlystate, MsgWing, MsgBodypart, MsgCommand
 from StrokelitudeROS.cfg import strokelitudeConfig
 
+gOffsetHandle = 10
+
 
 # A class to help with debugging.  It just draws an image.
 class ImageWindow:
@@ -325,6 +327,8 @@ class Fly(object):
 
 
     def set_params(self, params):
+        self.params = params
+        
         self.head.set_params(params)
         self.abdomen.set_params(params)
             
@@ -383,26 +387,37 @@ class Fly(object):
         
     
     def publish(self):
-#         pt = self.head.ptCenter_i - self.head.ptHinge_i + self.head.state.pt # The head COM point relative to the hinge.
-#         angleHead = -(np.arctan2(pt[1], pt[0]) - self.angleBody_i)# + np.pi/2.0)
-#         angleHead = (angleHead + np.pi) % (2.0*np.pi) - np.pi
-#         radiusHead = np.linalg.norm(pt)
-#         
-#         pt = self.abdomen.ptCenter_i - self.abdomen.ptHinge_i + self.abdomen.state.pt # The abdomen COM point relative to the abdomen hinge.
-#         angleAbdomen = -(np.arctan2(pt[1], pt[0]) - self.angleBody_i)# + np.pi/2.0)
-#         angleAbdomen = (angleAbdomen + np.pi) % (2.0*np.pi) - np.pi
-#         radiusAbdomen = np.linalg.norm(pt)
-        
         flystate              = MsgFlystate()
         flystate.header       = Header(seq=self.iCount, stamp=self.stamp, frame_id='Fly')
-        flystate.left         = MsgWing(mass=self.wing_l.mass, angle1=self.wing_l.angle_leading_b, angle2=self.wing_l.angle_trailing_b)
-        flystate.right        = MsgWing(mass=self.wing_r.mass, angle1=self.wing_r.angle_leading_b, angle2=self.wing_r.angle_trailing_b)
-        flystate.head         = MsgBodypart(mass   = self.head.state.mass,    
-                                            radius = self.head.state.radius,    
-                                            angle  = self.head.state.angle)
-        flystate.abdomen      = MsgBodypart(mass   = self.abdomen.state.mass, 
-                                            radius = self.abdomen.state.radius, 
-                                            angle  = self.abdomen.state.angle)
+        if (self.params['left']['track']):
+            flystate.left         = MsgWing(mass=self.wing_l.mass, 
+                                            angle1=self.wing_l.angle_leading_b, 
+                                            angle2=self.wing_l.angle_trailing_b)
+        else:
+            flystate.left         = MsgWing(mass=0.0, angle1=0.0, angle2=0.0)
+            
+        if (self.params['right']['track']):
+            flystate.right        = MsgWing(mass=self.wing_r.mass, 
+                                            angle1=self.wing_r.angle_leading_b, 
+                                            angle2=self.wing_r.angle_trailing_b)
+        else:
+            flystate.right         = MsgWing(mass=0.0, angle1=0.0, angle2=0.0)
+            
+        if (self.params['head']['track']):
+            flystate.head         = MsgBodypart(mass   = self.head.state.mass,    
+                                                radius = self.head.state.radius,    
+                                                angle  = self.head.state.angle)
+        else:
+            flystate.head         = MsgBodypart(mass=0.0, angle=0.0, radius=0.0)
+
+        if (self.params['abdomen']['track']):
+            flystate.abdomen      = MsgBodypart(mass   = self.abdomen.state.mass, 
+                                                radius = self.abdomen.state.radius, 
+                                                angle  = self.abdomen.state.angle)
+        else:
+            flystate.abdomen      = MsgBodypart(mass=0.0, angle=0.0, radius=0.0)
+
+
         self.iCount += 1
         
         self.pubFlystate.publish(flystate)
@@ -422,7 +437,7 @@ class Bodypart(object):
         self.name = name
 
         self.bgra     = bgra_dict[color]
-        self.bgra_dim = tuple(np.array(bgra_dict[color])/3)
+        self.bgra_dim = tuple(np.array(bgra_dict[color])/2)
         self.bgra_state = bgra_dict['red']
         self.pixelmax = 255.0
         self._transforms = {}
@@ -430,58 +445,51 @@ class Bodypart(object):
         self.windowPolar = ImageWindow(False, self.name+'Polar')
         self.windowBG    = ImageWindow(False, self.name+'BG')
         self.windowFG    = ImageWindow(False, self.name+'FG')
-        self.windowTest  = ImageWindow(True, 'Test')
+        self.windowTest  = ImageWindow(False, 'Test')
 
-        self.state = Struct()
-        self.stateInitial = Struct()
-        self.stateMin = Struct()
-        self.stateMax = Struct()
+        self.state           = Struct()
+        self.stateOrigin       = Struct()
+        self.stateOriginOffset = Struct()
+        self.stateLo         = Struct()
+        self.stateHi         = Struct()
 
         self.stampPrev = None
         self.dt = rospy.Time(0)
 
-        self.handles = {'center':Handle(np.array([0,0]), self.bgra),
-                        #'radius_ortho':Handle(np.array([0,0]), self.bgra),
+        self.handles = {'hinge':Handle(np.array([0,0]), self.bgra),
                         'radius_axial':Handle(np.array([0,0]), self.bgra),
                         'angle_wedge':Handle(np.array([0,0]), self.bgra)
                         }
 
         self.shape = (np.inf, np.inf)
-        self.ptCOM        = np.array([0.0, 0.0])
-        self.ptCenter_i   = np.array([0,0])
+        self.ptCOM       = np.array([0.0, 0.0])
+        self.ptCenter_i  = np.array([0,0])
         
-        self.roi1 = None
-        self.roi2 = None
+        self.roi = None
         self.roiClipped = np.array([0,0,0,0])
         
         self.imgFullBackground                     = None
         
         # Size 2x region of interest.
-        self.imgRoi2_0                             = None # Untouched roi image.
-        self.imgRoi2                               = None # Background subtracted.
-        self.imgRoi2Windowed                       = None
-        self.imgRoi2WindowedPrev                   = None
-        self.imgRoi2Masked                         = None
-        self.imgRoi2MaskedPolar                    = None
-        self.imgRoi2MaskedPolarCropped             = None
-        self.imgRoi2MaskedPolarCroppedWindowed     = None
-        self.imgRoi2MaskedPolarCroppedWindowedPrev = None
-        self.imgRoi2MaskedPolarCroppedWindowedInitial = None
+        self.imgRoi_0                             = None # Untouched roi image.
+        self.imgRoi                               = None # Background subtracted.
+        self.imgRoiWindowed                       = None
+        self.imgRoiWindowedPrev                   = None
+        self.imgRoiMasked                         = None
+        self.imgRoiMaskedPolar                    = None
+        self.imgRoiMaskedPolarCropped             = None
+        self.imgRoiMaskedPolarCroppedWindowed     = None
+        self.imgRoiMaskedPolarCroppedWindowedPrev = None
+        self.imgOffset = None
 
-        self.imgRoi2Background                     = None
-        
-        # Size 1x region of interest.
-        self.imgRoi1_0                           = None # Untouched roi image.
-        self.imgRoi1                             = None # Background subtracted.
-        self.imgRoi1Masked                       = None
-        self.imgRoi1Background                   = None
+        self.imgRoiBackground                     = None
         
         self.create_wfn                          = self.create_wfn_tukey
-        self.wfnRoi2                             = None
-        self.wfnRoi2MaskedPolarCropped           = None
+        self.wfnRoi                             = None
+        self.wfnRoiMaskedPolarCropped           = None
         
-        self.maskRoiEllipse1                     = None
-        self.maskRoiEllipse2                     = None
+#         self.maskRoiEllipse1                     = None
+        self.maskRoiEllipse                     = None
         
         self.set_params(params)
         self.pubAngle = rospy.Publisher('strokelitude/'+self.name+'/angle', Float32)
@@ -496,7 +504,7 @@ class Bodypart(object):
         self.angleBody_i = self.get_bodyangle_i()
         self.ptCenter_i = np.array([self.params[self.name]['x'], self.params[self.name]['y']])
         
-        # Compute the body-outward-facing angle, which is the angle from the body center to the bodypart center.
+        # Compute the body-outward-facing angle, which is the angle from the body center to the bodypart hinge.
         ptBodyCenter_i = (np.array([self.params['head']['x'], self.params['head']['y']]) + np.array([self.params['abdomen']['x'], self.params['abdomen']['y']])) / 2
         self.angleBodyOutward_i = np.arctan2(self.ptCenter_i[1]-ptBodyCenter_i[1], self.ptCenter_i[0]-ptBodyCenter_i[0])
 #         r = self.params[self.name]['radius_axial']
@@ -519,29 +527,30 @@ class Bodypart(object):
         self.sinAngleBodyOutward = np.sin(self.angleBodyOutward_i)
         self.R = np.array([[self.cosAngleBodyOutward, -self.sinAngleBodyOutward], [self.sinAngleBodyOutward, self.cosAngleBodyOutward]])
 
-        self.imgRoi2MaskedPolarCroppedWindowedInitial = None
-        self.iInitial = 0
+        self.imgOffset = None
         self.iCount = 0
-        self.p = 0.5
 
-        self.stateInitial.mass = 0.0
-        self.stateInitial.angle = 0.0
-        self.stateInitial.radius = self.params[self.name]['radius_axial']
+        self.stateOrigin.mass = 0.0
+        self.stateOrigin.angle = 0.0
+        self.stateOrigin.radius = 0.0
+
+        self.stateOriginOffset.mass = 0.0
+        self.stateOriginOffset.angle = 0.0
+        self.stateOriginOffset.radius = float(self.params[self.name]['radius_axial'])
 
         self.state.mass = 0.0
         self.state.angle = 0.0
         self.state.radius = 0.0
 
-        self.stateMin.mass = np.inf
-        self.stateMin.angle = np.inf
-        self.stateMin.radius = np.inf
+        self.stateLo.mass = np.inf
+        self.stateLo.angle = np.inf
+        self.stateLo.radius = np.inf
 
-        self.stateMax.mass = -np.inf
-        self.stateMax.angle = -np.inf
-        self.stateMax.radius = -np.inf
+        self.stateHi.mass = -np.inf
+        self.stateHi.angle = -np.inf
+        self.stateHi.radius = -np.inf
 
-        self.imgRoi1Background = None
-        self.imgRoi2Background = None
+        self.imgRoiBackground = None
         
         angle = self.params[self.name]['angle_wedge'] # Range is on [0,+2pi]
         
@@ -612,18 +621,18 @@ class Bodypart(object):
     
     # transform_polar_log()
     # Remap an image into log-polar coordinates, where (i_0,j_0) is the (y,x) origin in the original image.
-    # nRho:     Number of radial (vert) pixels in the output image.
-    # aRho:     Multiplier of vertical output dimension instead of nRho.
-    # nTheta:   Number of angular (horiz) pixels in the output image.
-    # aTheta:   Multiplier of horizontal output dimension instead of nTheta.
-    # theta_0:  Starting angle.
-    # theta_1:  Ending angle.
-    # scale:    0.0=Include to the nearest side (all pixels in output image are valid); 1.0=Include to the 
-    #           farthest corner (some pixels in output image from outside the input image). 
+    # nRho:         Number of radial (vert) pixels in the output image.
+    # amplifyRho:   Multiplier of vertical output dimension instead of nRho.
+    # nTheta:       Number of angular (horiz) pixels in the output image.
+    # amplifyTheta: Multiplier of horizontal output dimension instead of nTheta.
+    # theta_0:      Starting angle.
+    # theta_1:      Ending angle.
+    # scale:        0.0=Include to the nearest side (all pixels in output image are valid); 1.0=Include to the 
+    #               farthest corner (some pixels in output image from outside the input image). 
     #
     # Credit to http://machineawakening.blogspot.com/2012/02
     #
-    def transform_polar_log(self, image, i_0, j_0, nRho=None, aRho=1.0, nTheta=None, aTheta=1.0, theta_0=0.0, theta_1=2.0*np.pi, scale=0.0):
+    def transform_polar_log(self, image, i_0, j_0, nRho=None, amplifyRho=1.0, nTheta=None, amplifyTheta=1.0, theta_0=0.0, theta_1=2.0*np.pi, scale=0.0):
         (i_n, j_n) = image.shape[:2]
         
         i_c = max(i_0, i_n - i_0)
@@ -633,11 +642,11 @@ class Bodypart(object):
         d = scale*d_c + (1.0-scale)*d_s
         
         if (nRho == None):
-            nRho = int(np.ceil(d*aRho))
+            nRho = int(np.ceil(d*amplifyRho))
         
         if (nTheta == None):
-            #nTheta = int(np.ceil(j_n * aTheta))
-            nTheta = int(aTheta * 2*np.pi*np.sqrt((i_n**2 + j_n**2)/2)) # Approximate circumference of ellipse in the roi.
+            #nTheta = int(np.ceil(j_n * amplifyTheta))
+            nTheta = int(amplifyTheta * 2*np.pi*np.sqrt((i_n**2 + j_n**2)/2)) # Approximate circumference of ellipse in the roi.
         
         dRho = np.log(d) / nRho
         
@@ -651,9 +660,9 @@ class Bodypart(object):
         return imgTransformed
 
 
-    def _get_transform_polar_elliptical(self, i_0, j_0, i_n, j_n, (r1, r2), angleEllipse, nRho, nTheta, theta_0, theta_1, rClip):
+    def _get_transform_polar_elliptical(self, i_0, j_0, i_n, j_n, (raxial, rortho), drStrip, angleEllipse, nRho, nTheta, theta_0, theta_1, rClip):
         nTheta = max(1,nTheta)
-        transform = self._transforms.get((i_0, j_0, i_n, j_n, nRho, nTheta, theta_0, theta_1))
+        transform = self._transforms.get((i_0, j_0, i_n, j_n, nRho, drStrip, nTheta, theta_0, theta_1))
     
         if (transform == None):
             i_k     = []
@@ -662,12 +671,19 @@ class Bodypart(object):
             theta_k = []
 
 #             # Convert from circular angles to elliptical angles.
-#             xy_c = np.array([r1*np.cos(theta_0), r2*np.sin(theta_0)])
+#             xy_c = np.array([raxial*np.cos(theta_0), rortho*np.sin(theta_0)])
 #             theta_0e = np.arctan2(xy_c[1], xy_c[0])
-#             xy_c = np.array([r1*np.cos(theta_1), r2*np.sin(theta_1)])
+#             xy_c = np.array([raxial*np.cos(theta_1), rortho*np.sin(theta_1)])
 #             theta_1e = np.arctan2(xy_c[1], xy_c[0])
 
-            R = np.array([[np.cos(-angleEllipse), -np.sin(-angleEllipse)], [np.sin(-angleEllipse), np.cos(-angleEllipse)]])    
+            # Radii of the inner and outer ellipses.
+            raxial_outer = raxial + drStrip
+            rortho_outer = raxial + drStrip
+            raxial_inner = raxial - drStrip
+            rortho_inner = raxial - drStrip
+            
+            R = np.array([[np.cos(-angleEllipse), -np.sin(-angleEllipse)], 
+                          [np.sin(-angleEllipse), np.cos(-angleEllipse)]])    
             dTheta = (theta_1 - theta_0) / nTheta
             
             # Step through the wedge from theta_0 to theta_1.
@@ -675,18 +691,20 @@ class Bodypart(object):
                 theta = theta_0 + iTheta * dTheta
 
                 # Convert from circular angles to elliptical angles.
-                xy_c = np.array([r1*np.cos(theta), r2*np.sin(theta)])
+                xy_c = np.array([raxial*np.cos(theta), rortho*np.sin(theta)])
                 theta_e = np.arctan2(xy_c[1], xy_c[0])
 
-                # Radius of the ellipse at this angle.
-                rho_e = np.linalg.norm([2*r1*np.cos(theta), 2*r2*np.sin(theta)])
-                dRho = rho_e / nRho
+                # Radii of ellipses at this angle.
+                #rho_e = np.linalg.norm([2*raxial*np.cos(theta), 2*rortho*np.sin(theta)])
+                rho_e_inner = np.linalg.norm([raxial_inner*np.cos(theta), rortho_inner*np.sin(theta)])
+                rho_e_outer = np.linalg.norm([raxial_outer*np.cos(theta), rortho_outer*np.sin(theta)])
+                dRho = (rho_e_outer - rho_e_inner) / nRho
                 
-                # Step along the radius from the origin to the ellipse.  rClip is a clip factor on range [0,1]
+                # Step along the radius from the inner to the outer ellipse.  rClip is a clip factor on range [0,1]
                 for iRho in range(0, int(rClip*nRho)):
-                    rho = (iRho * dRho)
+                    rho = rho_e_inner + iRho * dRho
 
-                    # i,j points on an upright ellipse, 2*r1 horiz, 2*r2 vert.
+                    # i,j points on an upright ellipse.
                     i_e = rho * np.sin(theta_e)
                     j_e = rho * np.cos(theta_e)
                     
@@ -706,17 +724,18 @@ class Bodypart(object):
                         theta_k.append(iTheta)
     
             transform = ((np.array(rho_k), np.array(theta_k)), (np.array(i_k), np.array(j_k)))
-            self._transforms[i_0, j_0, i_n, j_n, nRho, nTheta, theta_0, theta_1] = transform
+            self._transforms[i_0, j_0, i_n, j_n, nRho, drStrip, nTheta, theta_0, theta_1] = transform
     
         return transform
     
     # transform_polar_elliptical()
     # Remap an image into linear-polar coordinates, where (i_0,j_0) is the (y,x) origin in the original image.
     # nRho:         Number of radial (vert) pixels in the output image.
-    # aRho:         Multiplier of vertical output dimension instead of nRho.
-    # radii:        Tuple (r1,r2) of ellipse radii.
+    # amplifyRho:   Multiplier of vertical output dimension instead of nRho.
+    # radiiEllipse: Tuple (raxial,rortho) of ellipse radii.
+    # dradiusStrip: Half-width of the mask strip in the axial direction.
     # nTheta:       Number of angular (horiz) pixels in the output image.
-    # aTheta:       Multiplier of horizontal output dimension instead of nTheta.
+    # amplifyTheta: Multiplier of horizontal output dimension instead of nTheta.
     # angleEllipse: Axis of ellipse rotation.
     # theta_0:      Circular angle to one side of ellipse angle.
     # theta_1:      Circular angle to other side of ellipse angle.
@@ -724,34 +743,60 @@ class Bodypart(object):
     #               farthest corner (some pixels in output image from outside the input image). 
     #
     #
-    def transform_polar_elliptical(self, image, i_0, j_0, nRho=None, aRho=1.0, radii=None, angleEllipse=0.0, nTheta=None, aTheta=1.0, theta_0=-np.pi, theta_1=np.pi):
+    def transform_polar_elliptical(self, image, i_0, j_0, raxial=None, rortho=None, dradiusStrip=None, nRho=None, amplifyRho=1.0, angleEllipse=0.0, theta_0=-np.pi, theta_1=np.pi, nTheta=None, amplifyTheta=1.0):
         (i_n, j_n) = image.shape[:2]
-        if (radii is None):
-            r1 = i_n / 2
-            r2 = j_n / 2
-        else:
-            (r1,r2) = radii
+        if (raxial is None):
+            raxial = i_n / 2
+        if (rortho is None):
+            rortho = j_n / 2
+            
+        if (dradiusStrip is None):
+            dradiusStrip = raxial-5
         
 #         i_c = max(i_0, i_n-i_0)
 #         j_c = max(j_0, j_n-j_0)
 #         
-#         d_c = (i_c ** 2 + j_c ** 2) ** 0.5      # Distance to the farthest image corner.
-#         d_s_near = min(i_0, i_n-i_0, j_0, j_n-j_0)  # Distance to the nearest image side.
-#         d_s_far = max(i_0, i_n-i_0, j_0, j_n-j_0)  # Distance to the farthest image side.
-        
-        # Nearest nonzero distance to a side.
-        d_sides = [i_0, i_n-i_0, j_0, j_n-j_0]
-        d_nonzero = d_sides[np.where(d_sides>0)[0]]
-        d_s_0 = d_nonzero.min()
-        
-        # Distance to ellipse.
-        d_e_r1 = 2*r1
-        d_e_r2 = 2*r2
-        d_e_wedge = np.linalg.norm([2*r1*np.cos(theta_0), 2*r2*np.sin(theta_0)])
+#         d_c = (i_c ** 2 + j_c ** 2) ** 0.5            # Distance to the farthest image corner.
+#         d_s_near = min(i_0, i_n-i_0, j_0, j_n-j_0)    # Distance to the nearest image side.
+#         d_s_far = max(i_0, i_n-i_0, j_0, j_n-j_0)     # Distance to the farthest image side.
 
-        d_e_min = min(d_e_r1, d_e_wedge, d_e_r2)
-        d = d_e_min
         
+        # Radii of the inner and outer ellipses.
+        raxial_outer = raxial + dradiusStrip
+        rortho_outer = raxial + dradiusStrip
+        raxial_inner = raxial - dradiusStrip
+        rortho_inner = raxial - dradiusStrip
+
+            
+        # Nearest nonzero distance of point (i_0,j_0) to a side.
+        #d_sides = [i_0, i_n-i_0, j_0, j_n-j_0]
+        #d_nonzero = d_sides[np.where(d_sides>0)[0]]
+        #d_s_0 = d_nonzero.min()
+        
+
+        # Distance to nearest point of outer elliptical wedge of point (i_0,j_0).
+        d_e_raxial_outer = raxial_outer # Distance to the axial point.
+        d_e_rortho_outer = rortho_outer # Distance to the ortho point.
+        d_e_wedge_outer = np.linalg.norm([raxial_outer*np.cos(theta_0), rortho_outer*np.sin(theta_0)]) # Distance to the theta_0 wedge point.
+        if (np.abs(theta_0) >= np.pi/2.0):
+            d_e_min_outer = min(d_e_raxial_outer, d_e_wedge_outer, d_e_rortho_outer) # Nearest of the three.
+        else:
+            d_e_min_outer = min(d_e_raxial_outer, d_e_wedge_outer) # Nearest of the three.
+
+        # Distance to nearest point of inner elliptical wedge of point (i_0,j_0).
+        d_e_raxial_inner = raxial_inner # Distance to the axial point.
+        d_e_rortho_inner = rortho_inner # Distance to the ortho point.
+        d_e_wedge_inner = np.linalg.norm([raxial_inner*np.cos(theta_0), rortho_inner*np.sin(theta_0)]) # Distance to the theta_0 wedge point.
+        if (np.abs(theta_0) >= np.pi/2.0):
+            d_e_min_inner = min(d_e_raxial_inner, d_e_wedge_inner, d_e_rortho_inner) # Nearest of the three.
+        else:
+            d_e_min_inner = min(d_e_raxial_inner, d_e_wedge_inner) # Nearest of the three.
+
+        
+        d = d_e_min_outer - d_e_min_inner 
+        
+        
+        # Determine how much of the bottom of the polar image to trim off (i.e. rClip) based on if the ellipse is partially offscreen.
         (rClip0, rClip1, rClip2, rClip3) = (1.0, 1.0, 1.0, 1.0)
         if (self.roiClipped[0]>0):
             rClip0 = 1.0 - (float(self.roiClipped[0])/float(j_0))
@@ -765,25 +810,26 @@ class Bodypart(object):
         rClip = np.min([rClip0, rClip1, rClip2, rClip3])
         
         # Convert from circular angles to elliptical angles.
-        xy_c = np.array([r1*np.cos(theta_0), r2*np.sin(theta_0)])
+        xy_c = np.array([raxial*np.cos(theta_0), rortho*np.sin(theta_0)])
         theta_0e = np.arctan2(xy_c[1], xy_c[0])
-        xy_c = np.array([r1*np.cos(theta_1), r2*np.sin(theta_1)])
+        xy_c = np.array([raxial*np.cos(theta_1), rortho*np.sin(theta_1)])
         theta_1e = np.arctan2(xy_c[1], xy_c[0])
         
         
         if (nRho == None):
-            nRho = int(np.ceil(d * aRho))
+            nRho = int(np.ceil(d * amplifyRho))
         
-        # Number of theta steps depends on the number of pixels along the elliptical arc, ideally 1 step per pixel.
+        # Number of angular steps depends on the number of pixels along the elliptical arc, ideally 1 step per pixel.
         if (nTheta == None):
-            circumference = 2*np.pi*np.sqrt(((r1)**2 + (r2)**2)) # Approximate circumference of ellipse.
+            circumference = 2*np.pi*np.sqrt(((raxial)**2 + (rortho)**2)) # Approximate circumference of ellipse.
             fraction_wedge = np.abs(theta_1e - theta_0e)/(2*np.pi) # Approximate fraction that is the wedge of interest.
-            nTheta = int(aTheta * circumference * fraction_wedge)  
+            nTheta = int(amplifyTheta * circumference * fraction_wedge)  
         
-        #rospy.logwarn (((i_n,j_n), (i_0, j_0), d, nRho, (r1,r2), angleEllipse, nTheta, (theta_0e, theta_1e)))
+        #rospy.logwarn (((i_n,j_n), (i_0, j_0), d, nRho, (raxial,rortho), angleEllipse, nTheta, (theta_0e, theta_1e)))
         (pt, ij) = self._get_transform_polar_elliptical(i_0, j_0, 
                                            i_n, j_n,
-                                           (r1, r2),
+                                           (raxial, rortho),
+                                           dradiusStrip,
                                            angleEllipse, 
                                            nRho, 
                                            nTheta, theta_0, theta_1, rClip)
@@ -893,32 +939,35 @@ class Bodypart(object):
             #rospy.logwarn((iShift,jShift))
 
             # Get weighted centroid of a region around the peak, for sub-pixel accuracy.
-#             w = 7
-#             r = int((w-1)/2)
-#             i0 = clip(iShift-r, 0, shift00.shape[0]-1)
-#             i1 = clip(iShift+r, 0, shift00.shape[0]-1)+1
-#             j0 = clip(jShift-r, 0, shift00.shape[1]-1)
-#             j1 = clip(jShift+r, 0, shift00.shape[1]-1)+1
-#             peak = shift00[i0:i1].T[j0:j1].T
-#             moments = cv2.moments(peak, binaryImage=False)
-#                       
-#             if (moments['m00'] != 0.0):
-#                 iShift = moments['m01']/moments['m00'] + float(i0)
-#                 jShift = moments['m10']/moments['m00'] + float(j0)
+            w = 7
+            r = int((w-1)/2)
+            i0 = clip(iShift-r, 0, shift00.shape[0]-1)
+            i1 = clip(iShift+r, 0, shift00.shape[0]-1)+1
+            j0 = clip(jShift-r, 0, shift00.shape[1]-1)
+            j1 = clip(jShift+r, 0, shift00.shape[1]-1)+1
+            peak = shift00[i0:i1].T[j0:j1].T
+            moments = cv2.moments(peak, binaryImage=False)
+                       
+            if (moments['m00'] != 0.0):
+                iShiftSubpixel = moments['m01']/moments['m00'] + float(i0)
+                jShiftSubpixel = moments['m10']/moments['m00'] + float(j0)
+            else:
+                iShiftSubpixel = float(shift.shape[0])/2.0
+                jShiftSubpixel = float(shift.shape[1])/2.0
             
-            #rospy.logwarn((iShift,jShift))
+            #rospy.logwarn((iShiftSubpixel,jShiftSubpixel))
 
             # Accomodate the matrix roll we did above.
-            iShift -= int(shift.shape[0]/2)#float(shift.shape[0])/2.0
-            jShift -= int(shift.shape[1]/2)#float(shift.shape[1])/2.0
+            iShiftSubpixel -= float(shift.shape[0])/2.0
+            jShiftSubpixel -= float(shift.shape[1])/2.0
 
             # Convert unsigned shifts to signed shifts. 
-            height = shift00.shape[0]
-            width  = shift00.shape[1]
-            iShift  = ((iShift+height/2) % height) - height/2 
-            jShift  = ((jShift+width/2) % width) - width/2
+            height = float(shift00.shape[0])
+            width  = float(shift00.shape[1])
+            iShiftSubpixel  = ((iShiftSubpixel+height/2.0) % height) - height/2.0
+            jShiftSubpixel  = ((jShiftSubpixel+width/2.0) % width) - width/2.0
             
-            rv = np.array([iShift, jShift])
+            rv = np.array([iShiftSubpixel, jShiftSubpixel])
             
         else:
             rv = np.array([0.0, 0.0])
@@ -938,48 +987,29 @@ class Bodypart(object):
     # Create elliptical wedge masks, and window functions.
     #
     def create_mask(self, shape):
-        # Create the 1x sized mask.
-        mask1 = np.zeros(shape, dtype=np.uint8)
-        cv2.ellipse(mask1,
-                    (int(self.params[self.name]['x']), int(self.params[self.name]['y'])),
-                    (int(self.params[self.name]['radius_axial']), int(self.params[self.name]['radius_ortho'])),
-                    np.rad2deg(self.angleBodyOutward_i),
-                    np.rad2deg(self.angle_wedge),
-                    np.rad2deg(-self.angle_wedge),
-                    bgra_dict['white'], 
-                    cv.CV_FILLED)
+        # Create the mask (for polar images the line-of-interest is at the midpoint).
+        mask = np.zeros(shape, dtype=np.uint8)
+        
+        # Args for the two ellipse calls.
+        x = int(self.params[self.name]['x'])
+        y = int(self.params[self.name]['y'])
+        raxial_outer = int(self.params[self.name]['radius_outer'])
+        rortho_outer = int(self.params[self.name]['radius_outer'])
+        raxial_inner = int(2*self.params[self.name]['radius_axial']-self.params[self.name]['radius_outer'])
+        rortho_inner = int(2*self.params[self.name]['radius_ortho']-self.params[self.name]['radius_outer'])
+        angle = int(np.rad2deg(self.angleBodyOutward_i))
+        angle_wedge1 = int(np.rad2deg(self.angle_wedge))
+        angle_wedge2 = int(np.rad2deg(-self.angle_wedge))
+        bgra = bgra_dict['white']
+        
+        # Draw the mask.
+        cv2.ellipse(mask, (x, y), (raxial_outer, rortho_outer), angle, angle_wedge1, angle_wedge2, bgra, cv.CV_FILLED)
+        cv2.ellipse(mask, (x, y), (raxial_inner, rortho_inner), angle, 0, 360, bgra_dict['black'], cv.CV_FILLED)
         
         # Find the ROI of the mask.
         b=0 # Border
-        xSum = np.sum(mask1, 0)
-        ySum = np.sum(mask1, 1)
-        xMin = np.where(xSum>0)[0][0]  - b
-        xMax = np.where(xSum>0)[0][-1] + b+1
-        yMin = np.where(ySum>0)[0][0]  - b
-        yMax = np.where(ySum>0)[0][-1] + b+1
-        
-        xMin = np.max([0,xMin])
-        yMin = np.max([0,yMin])
-        xMax = np.min([xMax, shape[1]-1])
-        yMax = np.min([yMax, shape[0]-1])
-        self.roi1 = np.array([xMin, yMin, xMax, yMax])
-        self.maskRoiEllipse1 = mask1[yMin:yMax, xMin:xMax]
-        
-        # Create the 2x sized mask (for polar images, so the line-of-interest is at the midpoint).
-        mask2 = np.zeros(shape, dtype=np.uint8)
-        cv2.ellipse(mask2,
-                    (int(self.params[self.name]['x']), int(self.params[self.name]['y'])),
-                    (2*int(self.params[self.name]['radius_axial']), 2*int(self.params[self.name]['radius_ortho'])),
-                    int(np.rad2deg(self.angleBodyOutward_i)),
-                    int(np.rad2deg(self.angle_wedge)),
-                    int(np.rad2deg(-self.angle_wedge)),
-                    bgra_dict['white'], 
-                    cv.CV_FILLED)
-        
-        # Find the ROI of the mask.
-        b=0 # Border
-        xSum = np.sum(mask2, 0)
-        ySum = np.sum(mask2, 1)
+        xSum = np.sum(mask, 0)
+        ySum = np.sum(mask, 1)
         
         # Dilate with a border.
         xMin0 = np.where(xSum>0)[0][0]  - b
@@ -993,24 +1023,21 @@ class Bodypart(object):
         xMax = np.min([xMax0, shape[1]-1])
         yMax = np.min([yMax0, shape[0]-1])
         
-        self.roi2 = np.array([xMin, yMin, xMax, yMax])
-        self.maskRoiEllipse2 = mask2[yMin:yMax, xMin:xMax]
+        self.roi = np.array([xMin, yMin, xMax, yMax])
+        self.maskRoiEllipse = mask[yMin:yMax, xMin:xMax]
         
-        self.wfnRoi2 = None
-        self.wfnRoi2MaskedPolarCropped = None
+        self.wfnRoi = None
+        self.wfnRoiMaskedPolarCropped = None
         self.bInitializedMasks = True
 
 
         # Find where the mask might be clipped.  First, draw an unclipped ellipse.        
         delta = 1
-        isClosed = True
-        pts = cv2.ellipse2Poly((int(self.params[self.name]['x']), int(self.params[self.name]['y'])),
-                    (2*int(self.params[self.name]['radius_axial']), 2*int(self.params[self.name]['radius_ortho'])),
-                    int(np.rad2deg(self.angleBodyOutward_i)),
-                    int(np.rad2deg(self.angle_wedge)),
-                    int(np.rad2deg(-self.angle_wedge)),
-                    delta)
-        pts = np.append(pts,[[int(self.params[self.name]['x']), int(self.params[self.name]['y'])]],0)
+        pts =                cv2.ellipse2Poly((x, y), (raxial_outer, rortho_outer), angle, angle_wedge1, angle_wedge2, delta)
+        pts = np.append(pts, cv2.ellipse2Poly((x, y), (raxial_inner, rortho_inner), angle, angle_wedge1, angle_wedge2, delta), 0)
+        #pts = np.append(pts, [list of line1 pixels connecting the two arcs], 0) 
+        #pts = np.append(pts, [list of line2 pixels connecting the two arcs], 0) 
+
 
         # These are the unclipped locations.        
         min0 = pts.min(0)
@@ -1034,37 +1061,27 @@ class Bodypart(object):
     def set_background(self, image):
         if (self.params[self.name]['subtract_bg']):
             self.imgFullBackground = image.astype(np.float32)
-            self.imgRoi1Background = None
-            self.imgRoi2Background = None
+            self.imgRoiBackground = None
         else:
             self.imgFullBackground = None
-            self.imgRoi1Background = None
-            self.imgRoi2Background = None
+            self.imgRoiBackground = None
         
         
     def update_background(self):
-        if (self.imgRoi2Background is None) and (self.imgFullBackground is not None) and (self.roi2 is not None):
-            self.imgRoi2Background = copy.deepcopy(self.imgFullBackground[self.roi2[1]:self.roi2[3], self.roi2[0]:self.roi2[2]])
+        if (self.imgRoiBackground is None) and (self.imgFullBackground is not None) and (self.roi is not None):
+            self.imgRoiBackground = copy.deepcopy(self.imgFullBackground[self.roi[1]:self.roi[3], self.roi[0]:self.roi[2]])
         
-        if (self.imgRoi1Background is None) and (self.imgRoi2Background is not None) and (self.roi1 is not None) and (self.roi2 is not None):
-            r0 = self.roi1[0]-self.roi2[0]
-            r1 = self.roi1[1]-self.roi2[1]
-            r2 = self.roi1[2]-self.roi2[2]
-            r3 = self.roi1[3]-self.roi2[3]
-            self.imgRoi1Background = self.imgRoi2Background[r1:r3, r0:r2]
-            self.minRoi1Background = np.min(self.imgRoi1Background)
-            
         dt = max(0, self.dt.to_sec())
         alphaBackground = 1.0 - np.exp(-dt / self.rc_background)
 
-        if (self.imgRoi2Background is not None) and (self.imgRoi2_0 is not None):
-            if (self.imgRoi2Background.size==self.imgRoi2_0.size):
-                cv2.accumulateWeighted(self.imgRoi2_0.astype(np.float32), self.imgRoi2Background, alphaBackground)
+        if (self.imgRoiBackground is not None) and (self.imgRoi_0 is not None):
+            if (self.imgRoiBackground.size==self.imgRoi_0.size):
+                cv2.accumulateWeighted(self.imgRoi_0.astype(np.float32), self.imgRoiBackground, alphaBackground)
             else:
-                self.imgRoi2Background = None
-                self.imgRoi2_0 = None
+                self.imgRoiBackground = None
+                self.imgRoi_0 = None
                 
-        self.windowBG.set_image(self.imgRoi2Background)
+        self.windowBG.set_image(self.imgRoiBackground)
         
     # update_handle_points()
     # Update the dictionary of handle point names and locations.
@@ -1073,133 +1090,129 @@ class Bodypart(object):
     def update_handle_points (self):
         x = self.params[self.name]['x']
         y = self.params[self.name]['y']
-        r1 = self.params[self.name]['radius_axial']
-        r2 = self.params[self.name]['radius_ortho']
+        router = self.params[self.name]['radius_outer']
+        rinner = 2*self.params[self.name]['radius_axial']-self.params[self.name]['radius_outer']
+        raxial = self.params[self.name]['radius_axial']
+        rortho = self.params[self.name]['radius_ortho']
+        dr = router-raxial
         angle = self.params[self.name]['angle_wedge']
         
         
-        self.handles['center'].pt       = np.array([x, y])
-        self.handles['radius_axial'].pt = np.array([x, y]) + ((r1+10) * np.array([self.cosAngleBodyOutward,self.sinAngleBodyOutward]))
-        #self.handles['radius_ortho'].pt = np.array([x, y]) + (r2 * np.array([-self.sinAngleBodyOutward,self.cosAngleBodyOutward]))
-        self.handles['angle_wedge'].pt  = np.array([x, y]) + np.dot(self.R, np.array([r1*np.cos(angle), -r2*np.sin(angle)]))
+        self.handles['hinge'].pt       = np.array([x, y])
+        self.handles['radius_axial'].pt = np.array([x, y]) + ((raxial+gOffsetHandle) * np.array([self.cosAngleBodyOutward,self.sinAngleBodyOutward]))
+        self.handles['angle_wedge'].pt  = np.array([x, y]) + np.dot(self.R, np.array([(raxial+dr)*np.cos(angle), -(rortho+dr)*np.sin(angle)]))
 
-        self.ptWedge1    = tuple((np.array([x, y]) + np.dot(self.R, np.array([  r1*np.cos(self.angle_wedge),    -(r2)*np.sin(self.angle_wedge)]))).astype(int))
-        self.ptWedge2    = tuple((np.array([x, y]) + np.dot(self.R, np.array([  r1*np.cos(-self.angle_wedge),   -(r2)*np.sin(-self.angle_wedge)]))).astype(int))
-        self.ptWedge1_2x = tuple((np.array([x, y]) + np.dot(self.R, np.array([2*r1*np.cos(self.angle_wedge),  -(2*r2)*np.sin(self.angle_wedge)]))).astype(int))
-        self.ptWedge2_2x = tuple((np.array([x, y]) + np.dot(self.R, np.array([2*r1*np.cos(-self.angle_wedge), -(2*r2)*np.sin(-self.angle_wedge)]))).astype(int))
+        self.ptWedge1_axial = tuple((np.array([x, y]) + np.dot(self.R, np.array([raxial*np.cos(self.angle_wedge),  -(rortho)*np.sin(self.angle_wedge)]))).astype(int))
+        self.ptWedge2_axial = tuple((np.array([x, y]) + np.dot(self.R, np.array([raxial*np.cos(-self.angle_wedge), -(rortho)*np.sin(-self.angle_wedge)]))).astype(int))
+        self.ptWedge1_outer = tuple((np.array([x, y]) + np.dot(self.R, np.array([router*np.cos(self.angle_wedge),  -(router)*np.sin(self.angle_wedge)]))).astype(int))
+        self.ptWedge2_outer = tuple((np.array([x, y]) + np.dot(self.R, np.array([router*np.cos(-self.angle_wedge), -(router)*np.sin(-self.angle_wedge)]))).astype(int))
+        self.ptWedge1_inner = tuple((np.array([x, y]) + np.dot(self.R, np.array([rinner*np.cos(self.angle_wedge),  -(rinner)*np.sin(self.angle_wedge)]))).astype(int))
+        self.ptWedge2_inner = tuple((np.array([x, y]) + np.dot(self.R, np.array([rinner*np.cos(-self.angle_wedge), -(rinner)*np.sin(-self.angle_wedge)]))).astype(int))
         
         
     def update_roi(self, image):
         # Save the prior images.
-        if (self.imgRoi2Windowed is not None):
-            self.imgRoi2WindowedPrev = self.imgRoi2Windowed
+        if (self.imgRoiWindowed is not None):
+            self.imgRoiWindowedPrev = self.imgRoiWindowed
             
         self.shape = image.shape
         
         # Extract the ROI images.
-        self.imgRoi2_0 = copy.deepcopy(image[self.roi2[1]:self.roi2[3], self.roi2[0]:self.roi2[2]])
-        self.imgRoi1_0 = self.imgRoi2_0[(self.roi1[1]-self.roi2[1]):(self.roi1[3]-self.roi2[1]), (self.roi1[0]-self.roi2[0]):(self.roi1[2]-self.roi2[0])]
+        self.imgRoi_0 = copy.deepcopy(image[self.roi[1]:self.roi[3], self.roi[0]:self.roi[2]])
 
         # Background Subtraction.
         if (self.params[self.name]['subtract_bg']):
-            if (self.imgRoi1Background is not None):
-                self.imgRoi1 = cv2.absdiff(self.imgRoi1_0, self.imgRoi1Background.astype(np.uint8))
-                 
-            if (self.imgRoi2Background is not None):
-                self.imgRoi2 = cv2.absdiff(self.imgRoi2_0, self.imgRoi2Background.astype(np.uint8))
+            if (self.imgRoiBackground is not None):
+                self.imgRoi = cv2.absdiff(self.imgRoi_0, self.imgRoiBackground.astype(np.uint8))
         else:
-            self.imgRoi1 = self.imgRoi1_0
-            self.imgRoi2 = self.imgRoi2_0
+            self.imgRoi = self.imgRoi_0
             
         # Rerange the images to black & white.
-        self.imgRoi2 -= np.min(self.imgRoi2)
-        max2 = np.max(self.imgRoi2)
-        self.imgRoi2 *= (255.0/float(max2))
+        self.imgRoi -= np.min(self.imgRoi)
+        max2 = np.max(self.imgRoi)
+        self.imgRoi *= (255.0/float(max2))
         
-        self.windowFG.set_image(self.imgRoi2) #(self.maskRoiEllipse2)# 
+        self.windowFG.set_image(self.imgRoi) #(self.maskRoiEllipse)# 
         
         # Apply the mask.
-        if (self.maskRoiEllipse1 is not None) and (self.imgRoi1 is not None):
-            self.imgRoi1Masked = cv2.bitwise_and(self.imgRoi1, self.maskRoiEllipse1)
-
-        if (self.maskRoiEllipse2 is not None) and (self.imgRoi2 is not None):
-            self.imgRoi2Masked = self.imgRoi2#cv2.bitwise_and(self.imgRoi2, self.maskRoiEllipse2)
-            #self.imgRoiMasked  = cv2.multiply(self.imgRoi.astype(np.float32), self.wfnRoi2)
+        if (self.maskRoiEllipse is not None) and (self.imgRoi is not None):
+            self.imgRoiMasked = self.imgRoi#cv2.bitwise_and(self.imgRoi, self.maskRoiEllipse)
+            #self.imgRoiMasked  = cv2.multiply(self.imgRoi.astype(np.float32), self.wfnRoi)
 
             
     def update_polar(self):
-        if (self.imgRoi2 is not None):
-            xOrigin = self.params[self.name]['x'] - self.roi2[0] #int(self.imgRoi2.shape[1]/2)
-            yOrigin = self.params[self.name]['y'] - self.roi2[1] #int(self.imgRoi2.shape[0]/2)
-            xMax = self.imgRoi2.shape[1]-1
-            yMax = self.imgRoi2.shape[0]-1
+        if (self.imgRoi is not None):
+            xOrigin = self.params[self.name]['x'] - self.roi[0] #int(self.imgRoi.shape[1]/2)
+            yOrigin = self.params[self.name]['y'] - self.roi[1] #int(self.imgRoi.shape[0]/2)
+            xMax = self.imgRoi.shape[1]-1
+            yMax = self.imgRoi.shape[0]-1
             
             theta_0a = -self.angle_wedge
             theta_1a = self.angle_wedge
             
-            #rospy.logwarn(((self.params[self.name]['x'], self.params[self.name]['y']), self.roi2, (xOrigin, yOrigin), theta_0a, theta_1a))
-            self.imgRoi2MaskedPolar  = self.transform_polar_elliptical(self.imgRoi2Masked, 
+            #rospy.logwarn(((self.params[self.name]['x'], self.params[self.name]['y']), self.roi, (xOrigin, yOrigin), theta_0a, theta_1a))
+            self.imgRoiMaskedPolar  = self.transform_polar_elliptical(self.imgRoiMasked, 
                                                      yOrigin, 
                                                      xOrigin, 
-                                                     aRho = 1.0,
-                                                     radii=(self.params[self.name]['radius_axial'], self.params[self.name]['radius_ortho']),
+                                                     raxial=self.params[self.name]['radius_axial'], 
+                                                     rortho=self.params[self.name]['radius_ortho'],
+                                                     dradiusStrip=int(self.params[self.name]['radius_outer']-self.params[self.name]['radius_axial']),
+                                                     amplifyRho = 1.0,
                                                      angleEllipse=self.angleBodyOutward_i,
-                                                     aTheta = 1.0,
                                                      theta_0 = min(theta_0a,theta_1a), 
-                                                     theta_1 = max(theta_0a,theta_1a))
+                                                     theta_1 = max(theta_0a,theta_1a),
+                                                     amplifyTheta = 1.0)
                 
             # Find the y value where the black band should be cropped out.
-            sumY = np.sum(self.imgRoi2MaskedPolar,1)
+            sumY = np.sum(self.imgRoiMaskedPolar,1)
             iSumY = np.where(sumY==0)[0]
             if (len(iSumY)>0):
                 iMinY = np.min(iSumY)
             else:
-                iMinY = self.imgRoi2MaskedPolar.shape[0]
+                iMinY = self.imgRoiMaskedPolar.shape[0]
 
-            self.imgRoi2MaskedPolarCropped = self.imgRoi2MaskedPolar[0:iMinY]
+            self.imgRoiMaskedPolarCropped = self.imgRoiMaskedPolar[0:iMinY]
     
              
             if (self.bInitializedMasks):
-                if (self.imgRoi2MaskedPolarCroppedWindowed is not None):
-                    self.imgRoi2MaskedPolarCroppedWindowedPrev = self.imgRoi2MaskedPolarCroppedWindowed
+                if (self.imgRoiMaskedPolarCroppedWindowed is not None):
+                    self.imgRoiMaskedPolarCroppedWindowedPrev = self.imgRoiMaskedPolarCroppedWindowed
         
-                if (self.wfnRoi2 is None) or (self.imgRoi2.shape != self.wfnRoi2.shape):
-                    self.wfnRoi2 = self.create_wfn(self.imgRoi2.shape)
+                if (self.wfnRoi is None) or (self.imgRoi.shape != self.wfnRoi.shape):
+                    self.wfnRoi = self.create_wfn(self.imgRoi.shape)
                 
-                if (self.wfnRoi2MaskedPolarCropped is None) or (self.imgRoi2MaskedPolarCropped.shape != self.wfnRoi2MaskedPolarCropped.shape):
-                    self.wfnRoi2MaskedPolarCropped = self.create_wfn(self.imgRoi2MaskedPolarCropped.shape)
+                if (self.wfnRoiMaskedPolarCropped is None) or (self.imgRoiMaskedPolarCropped.shape != self.wfnRoiMaskedPolarCropped.shape):
+                    self.wfnRoiMaskedPolarCropped = self.create_wfn(self.imgRoiMaskedPolarCropped.shape)
                 
-                self.imgRoi2Windowed                   = cv2.multiply(self.imgRoi2.astype(np.float32), self.wfnRoi2)
-                self.imgRoi2MaskedPolarCroppedWindowed = cv2.multiply(self.imgRoi2MaskedPolarCropped.astype(np.float32), self.wfnRoi2MaskedPolarCropped)
+                self.imgRoiWindowed                   = cv2.multiply(self.imgRoi.astype(np.float32), self.wfnRoi)
+                self.imgRoiMaskedPolarCroppedWindowed = cv2.multiply(self.imgRoiMaskedPolarCropped.astype(np.float32), self.wfnRoiMaskedPolarCropped)
 
             
-        if (self.imgRoi2MaskedPolarCroppedWindowedInitial is None):
-            self.imgRoi2MaskedPolarCroppedWindowedInitial = self.imgRoi2MaskedPolarCroppedWindowed
-            self.iInitial = 1
+        if (self.imgOffset is None):
+            self.imgOffset = self.imgRoiMaskedPolarCroppedWindowed
         
         # Show the image.
-        #(img,iGood) = self.collapse_vertical_bands(self.imgRoi2MaskedPolarCropped)
-        img = self.imgRoi2MaskedPolarCroppedWindowed
-        #img = self.imgRoi2MaskedPolarCropped
-        #img = self.imgRoi2MaskedPolarCroppedWindowedInitial
-        #img = self.imgRoi1Background
+        #(img,iGood) = self.collapse_vertical_bands(self.imgRoiMaskedPolarCropped)
+        img = self.imgRoiMaskedPolarCroppedWindowed
+        #img = self.imgRoiMaskedPolarCropped
+        #img = self.imgOffset
         self.windowPolar.set_image(img)
         
 
     # update_center_of_mass()
     # Update the bodypart center-of-mass.
     #
-    def update_center_of_mass(self):
-        if (self.imgRoi1Masked is not None):
-            moments = cv2.moments(self.imgRoi1Masked, binaryImage=False)
-            
-            if (moments['m00'] != 0.0):
-                self.mass  = moments['m00'] / self.pixelmax
-                self.ptCOM = np.array([moments['m10']/moments['m00'] - self.params[self.name]['x'] + self.roi1[0], 
-                                       moments['m01']/moments['m00'] - self.params[self.name]['y'] + self.roi1[1]])
-            else:
-                self.mass = 0.0
-                self.ptCOM = np.array([0,0])
+#     def update_center_of_mass(self):
+#         if (self.imgRoi1Masked is not None):
+#             moments = cv2.moments(self.imgRoi1Masked, binaryImage=False)
+#             
+#             if (moments['m00'] != 0.0):
+#                 self.mass  = moments['m00'] / self.pixelmax
+#                 self.ptCOM = np.array([moments['m10']/moments['m00'] - self.params[self.name]['x'] + self.roi1[0], 
+#                                        moments['m01']/moments['m00'] - self.params[self.name]['y'] + self.roi1[1]])
+#             else:
+#                 self.mass = 0.0
+#                 self.ptCOM = np.array([0,0])
             
     
     # update_state_using_moments()
@@ -1215,95 +1228,79 @@ class Bodypart(object):
     #
     def update_state_using_phasecorr_cartpolar(self): # This is the older version using both the cartesian and polar images.
         # Get the (x,y) translation between successive images.
-        (iShift, jShift) = self.get_shift_from_phasecorr(self.imgRoi2Windowed, self.imgRoi2WindowedPrev) # as [x,y]
+        (iShift, jShift) = self.get_shift_from_phasecorr(self.imgRoiWindowed, self.imgRoiWindowedPrev) # as [x,y]
         ptCartesian = np.array([jShift, iShift])
         ptErr = self.state.pt - self.ptCOM
         self.state.pt += ptCartesian #- 0.005*ptErr # Correct for drift error due to integrating the shifts; pull gently toward the COM.
 
         # Get the rotation & expansion between successive images.
-        if (self.imgRoi2MaskedPolarCroppedWindowed is not None):
-            (rShift, aShift) = self.get_shift_from_phasecorr(self.imgRoi2MaskedPolarCroppedWindowed, self.imgRoi2MaskedPolarCroppedWindowedPrev) # as [angle,radius]
-            dAngle = aShift * np.abs(2*self.angle_wedge) / self.imgRoi2MaskedPolarCroppedWindowed.shape[1]
-            dRadius = rShift
-            self.state.angle += dAngle
+        if (self.imgRoiMaskedPolarCroppedWindowed is not None):
+            (rShift, aShift) = self.get_shift_from_phasecorr(self.imgRoiMaskedPolarCroppedWindowed, self.imgRoiMaskedPolarCroppedWindowedPrev) # as [angle,radius]
+            dAngleOffset = aShift * np.abs(2*self.angle_wedge) / self.imgRoiMaskedPolarCroppedWindowed.shape[1]
+            dRadiusOffset = rShift
+            self.state.angle += dAngleOffset
 
         self.state.mass = 0.0
+        
         
     def update_state_using_phasecorr(self): # New version using just the polar image.
-        imgNow = self.imgRoi2MaskedPolarCroppedWindowed
-        imgPrior = self.imgRoi2MaskedPolarCroppedWindowedInitial
-        statePrior = self.stateInitial
-        
-#         if (imgNow is not None) and (imgPrior is not None):
-#             self.windowTest.set_image(cv2.absdiff(imgNow,imgPrior))
+        imgNow = self.imgRoiMaskedPolarCroppedWindowed
         
         # Get the rotation & expansion between images.
-        if (imgNow is not None) and (imgPrior is not None):
-            (rShift, aShift) = self.get_shift_from_phasecorr(imgNow, imgPrior)
-            dAngle = aShift * np.abs(2*self.angle_wedge) / float(imgNow.shape[1])
-            dRadius = rShift
-            self.state.angle  = statePrior.angle + dAngle
-            self.state.radius = statePrior.radius + dRadius
+        if (imgNow is not None) and (self.imgOffset is not None):
+            (rShift, aShift) = self.get_shift_from_phasecorr(imgNow, self.imgOffset)
+            dAngleOffset = aShift * np.abs(2*self.angle_wedge) / float(imgNow.shape[1])
+            dRadiusOffset = rShift
+            self.state.angle  = self.stateOrigin.angle  + self.stateOriginOffset.angle  + dAngleOffset
+            self.state.radius = self.stateOrigin.radius + self.stateOriginOffset.radius + dRadiusOffset
             
             # Get min,max's
-            self.stateMin.angle  = min(self.stateMin.angle, self.state.angle)
-            self.stateMax.angle  = max(self.stateMax.angle, self.state.angle)
-            self.stateMin.radius = min(self.stateMin.radius, self.state.radius)
-            self.stateMax.radius = max(self.stateMax.radius, self.state.radius)
+            self.stateLo.angle  = min(self.stateLo.angle, self.state.angle)
+            self.stateHi.angle  = max(self.stateHi.angle, self.state.angle)
+            self.stateLo.radius = min(self.stateLo.radius, self.state.radius)
+            self.stateHi.radius = max(self.stateHi.radius, self.state.radius)
             
-            # Decay min,max values toward the current value.
-            RC = 100.0
-            a = 1.0-np.exp(-self.dt.to_sec()/RC)
-            self.stateMin.angle  += a*(self.state.angle - self.stateMin.angle)
-            self.stateMax.angle  -= a*(self.stateMax.angle - self.state.angle)
-            self.stateMin.radius += a*(self.state.radius - self.stateMin.radius)
-            self.stateMax.radius -= a*(self.stateMax.radius - self.state.radius)
+            # Decay hi,lo values toward the mean value.
+#             RC = 100.0
+#             a = 1.0-np.exp(-self.dt.to_sec()/RC)
+#             d = a*(self.stateHi.angle - self.stateLo.angle)/2.0
+#             self.stateLo.angle  += d
+#             self.stateHi.angle  -= d
+#             self.stateLo.radius += d
+#             self.stateHi.radius -= d
             
-            # If angle and radius are near their mean values, then take a new initial image, and set the origin.
-            meanAngle = (self.stateMax.angle + self.stateMin.angle)/2.0
-            meanRadius = (self.stateMax.radius + self.stateMin.radius)/2.0
-            pAngle = np.abs(self.state.angle-meanAngle) / np.abs(self.stateMax.angle-meanAngle)
-            pRadius = np.abs(self.state.radius-meanRadius) / np.abs(self.stateMax.radius-meanRadius)
-            if (pAngle<self.p) and (pRadius<self.p) and (self.iCount>100):
-                self.p *= 0.8 
-                rospy.logwarn('Set origin, %s: % 0.3f, % 0.3f' % (self.name, self.state.angle, self.state.radius))
-                self.iInitial += 1
-                a = 1.0 #1.0/self.iInitial
-                self.imgRoi2MaskedPolarCroppedWindowedInitial = (1.0-a)*self.imgRoi2MaskedPolarCroppedWindowedInitial + a*self.imgRoi2MaskedPolarCroppedWindowed
-                #self.windowTest.set_image(self.imgRoi2MaskedPolarCroppedWindowedInitial)
-                self.stateMin.angle += self.state.angle
-                self.stateMax.angle += self.state.angle
-                self.state.angle = 0.0
-                self.stateMin.radius += self.state.radius-self.params[self.name]['radius_axial']
-                self.stateMax.radius += self.state.radius-self.params[self.name]['radius_axial']
-                self.state.radius = self.params[self.name]['radius_axial']
+            # Control the (angle,radius) offset to be at the midpoint of loangle, hiangle
+            # Whenever an image appears that is closer to the midpoint of loangle, hiangle, then
+            # take that image as the new comparison image.  Thus driving the comparison image 
+            # toward the midpoint image over time.
+            if (self.iCount>100):
+                # If angle and radius are near their mean values, then take a new initial image, and set the origin.
+                refAngle = (self.stateHi.angle + self.stateLo.angle)/2.0
+                
+#                 if (self.name=='head'):
+#                     rospy.logwarn('lo:% 0.4f, ref:% 0.4f, hi:% 0.4f, offset:% 0.4f, angle:% 0.4f' % (self.stateLo.angle, refAngle, self.stateHi.angle, self.stateOriginOffset.angle, self.state.angle))
 
-        #self.windowTest.set_image(np.roll(self.imgRoi2MaskedPolar, -int(aShift), 1))
-        self.state.mass = 0.0
-        
-        
-    # update_state_using_features()
-    # Update the bodypart translation & rotation.
-    #
-    def update_state_using_features(self):
-        imgNow = self.imgRoi2MaskedPolarCroppedWindowed
-        imgPrior = self.imgRoi2MaskedPolarCroppedWindowedPrev
-        RT = cv2.estimateRigidTransform(imgNow.astype(np.uint8), imgPrior.astype(np.uint8), fullAffine=False)
-            
-        # Get the (x,y) translation between successive images.
-        (iShift, jShift) = (RT[0,2], RT[1,2])
-        ptCartesian = np.array([jShift, iShift])
-        ptErr = self.state.pt - self.ptCOM
-        self.state.pt += ptCartesian #- 0.005*ptErr # Correct for drift error due to integrating the shifts; pull gently toward the COM.
-        self.state.angle += np.arctan2(RT[1,0], RT[0,0])
-        
-#         # Get the rotation & expansion between successive images.
-#         if (self.imgRoi2MaskedPolarCroppedWindowed is not None):
-#             (rShift, aShift) = self.get_shift_from_phasecorr(self.imgRoi2MaskedPolarCroppedWindowed, self.imgRoi2MaskedPolarCroppedWindowedPrev) # as [angle,radius]
-#             dAngle = aShift * np.abs(2*self.angle_wedge) / self.imgRoi2MaskedPolarCroppedWindowed.shape[1]
-#             dRadius = rShift
-#             self.state.angle += dAngle
+                if (refAngle < self.state.angle < self.stateOriginOffset.angle) or (self.stateOriginOffset.angle < self.state.angle < refAngle):
+#                     rospy.logwarn('Set Origin, %s: old (angle=% 0.3f, radius=% 0.3f), new (angle=% 0.3f, radius=% 0.3f)' % (self.name, 
+#                                                                                                                             self.state.angle, 
+#                                                                                                                             self.state.radius, 
+#                                                                                                                             0.0, 
+#                                                                                                                             self.params[self.name]['radius_axial']))
+                    self.imgOffset = self.imgRoiMaskedPolarCroppedWindowed
+                    #self.windowTest.set_image(self.imgOffset)
 
+                    # Converge the offset to the reference...
+                    #self.stateOriginOffset.angle = self.state.angle
+                    #self.stateOriginOffset.radius = self.state.radius+0.5
+                    # ...or converge the angle to zero.
+                    self.stateLo.angle -= self.state.angle
+                    self.stateHi.angle -= self.state.angle
+                    self.state.angle = 0.0
+                    
+                    #self.stateLo.radius -= self.state.radius-self.params[self.name]['radius_axial']
+                    #self.stateHi.radius -= self.state.radius-self.params[self.name]['radius_axial']
+
+        #self.windowTest.set_image(np.roll(self.imgRoiMaskedPolar, -int(aShift), 1))
         self.state.mass = 0.0
         
         
@@ -1326,7 +1323,7 @@ class Bodypart(object):
             self.update_roi(image)
             self.update_background()
             self.update_polar()
-            self.update_center_of_mass()
+            #self.update_center_of_mass()
             self.update_state_using_phasecorr()
             #self.update_state_using_features()
             
@@ -1346,7 +1343,7 @@ class Bodypart(object):
                     tag = tagHandle
                     break
         else:
-            tagHandle,handle = ('center',self.handles['center'])
+            tagHandle,handle = ('hinge',self.handles['hinge'])
             if (handle.hit_test(ptMouse)):
                 tag = tagHandle
             
@@ -1355,12 +1352,12 @@ class Bodypart(object):
     
 
     def draw_handles(self, image):
-        # Draw all handle points, or only just the center handle.
+        # Draw all handle points, or only just the hinge handle.
         if (self.params[self.name]['track']):
             for tagHandle,handle in self.handles.iteritems():
                 handle.draw(image)
         else:
-            tagHandle,handle = ('center',self.handles['center'])
+            tagHandle,handle = ('hinge',self.handles['hinge'])
             handle.draw(image)
 
     
@@ -1368,18 +1365,15 @@ class Bodypart(object):
     # Draw the outline.
     #
     def draw(self, image):
-        self.draw_handles(image)
-
         if (self.params[self.name]['track']):
-            a=1.0 # Amount to amplify the visual display.
             ptCenter0_i = (int(self.params[self.name]['x']), int(self.params[self.name]['y']))
             
             pt = self.R.dot([self.state.radius*np.cos(self.state.angle), 
                              self.state.radius*np.sin(self.state.angle)]) 
-            ptState_i = (int(a*pt[0]+self.params[self.name]['x']), 
-                         int(a*pt[1]+self.params[self.name]['y'])) 
+            ptState_i = (int(pt[0]+self.params[self.name]['x']), 
+                         int(pt[1]+self.params[self.name]['y'])) 
             
-            # Draw the outline.
+            # Draw the 1x arc.
             cv2.ellipse(image,
                         (int(self.params[self.name]['x']), int(self.params[self.name]['y'])),
                         (int(self.params[self.name]['radius_axial']), int(self.params[self.name]['radius_ortho'])),
@@ -1389,9 +1383,31 @@ class Bodypart(object):
                         self.bgra, 
                         1)
 
+            # Draw the 2x arc.
+#             cv2.ellipse(image,
+#                         (int(self.params[self.name]['x']), int(self.params[self.name]['y'])),
+#                         (2*int(self.params[self.name]['radius_axial']), 2*int(self.params[self.name]['radius_ortho'])),
+#                         np.rad2deg(self.angleBodyOutward_i),
+#                         np.rad2deg(self.angle_wedge),
+#                         np.rad2deg(-self.angle_wedge),
+#                         self.bgra_dim, 
+#                         1)
+    
+            # Draw the outer arc.
             cv2.ellipse(image,
                         (int(self.params[self.name]['x']), int(self.params[self.name]['y'])),
-                        (2*int(self.params[self.name]['radius_axial']), 2*int(self.params[self.name]['radius_ortho'])),
+                        (int(self.params[self.name]['radius_outer']), int(self.params[self.name]['radius_outer'])),
+                        np.rad2deg(self.angleBodyOutward_i),
+                        np.rad2deg(self.angle_wedge),
+                        np.rad2deg(-self.angle_wedge),
+                        self.bgra_dim, 
+                        1)
+    
+            # Draw the inner arc.
+            cv2.ellipse(image,
+                        (int(self.params[self.name]['x']), int(self.params[self.name]['y'])),
+                        (2*int(self.params[self.name]['radius_axial'])-int(self.params[self.name]['radius_outer']), 
+                         2*int(self.params[self.name]['radius_axial'])-int(self.params[self.name]['radius_outer'])),
                         np.rad2deg(self.angleBodyOutward_i),
                         np.rad2deg(self.angle_wedge),
                         np.rad2deg(-self.angle_wedge),
@@ -1399,14 +1415,14 @@ class Bodypart(object):
                         1)
     
             # Draw wedge.        
-            cv2.line(image, self.ptWedge1, ptCenter0_i, self.bgra, 1)
-            cv2.line(image, self.ptWedge2, ptCenter0_i, self.bgra, 1)
-            cv2.line(image, self.ptWedge1_2x, self.ptWedge1, self.bgra_dim, 1)
-            cv2.line(image, self.ptWedge2_2x, self.ptWedge2, self.bgra_dim, 1)
+            #cv2.line(image, self.ptWedge1_inner, ptCenter0_i, self.bgra, 1)
+            #cv2.line(image, self.ptWedge2_inner, ptCenter0_i, self.bgra, 1)
+            cv2.line(image, self.ptWedge1_inner, self.ptWedge1_outer, self.bgra_dim, 1)
+            cv2.line(image, self.ptWedge2_inner, self.ptWedge2_outer, self.bgra_dim, 1)
 
     
             # Draw the bodypart center of mass.    
-#             ptCOM_i = (int(a*self.ptCOM[0]+self.params[self.name]['x']), int(a*self.ptCOM[1]+self.params[self.name]['y'])) 
+#             ptCOM_i = (int(self.ptCOM[0]+self.params[self.name]['x']), int(self.ptCOM[1]+self.params[self.name]['y'])) 
 #             cv2.ellipse(image,
 #                         ptCOM_i,
 #                         (2,2),
@@ -1425,6 +1441,24 @@ class Bodypart(object):
                         360,
                         self.bgra_state, 
                         1)
+            
+            # Draw the min/max state position.
+            try:
+                pt = self.R.dot([self.state.radius*np.cos(self.stateLo.angle), 
+                                 self.state.radius*np.sin(self.stateLo.angle)]) 
+                ptStateLo_i = (int(pt[0]+self.params[self.name]['x']), 
+                               int(pt[1]+self.params[self.name]['y'])) 
+                
+                pt = self.R.dot([self.state.radius*np.cos(self.stateHi.angle), 
+                                 self.state.radius*np.sin(self.stateHi.angle)]) 
+                ptStateHi_i = (int(pt[0]+self.params[self.name]['x']), 
+                               int(pt[1]+self.params[self.name]['y'])) 
+                
+                image[int(ptStateLo_i[1])][int(ptStateLo_i[0])] = 0
+                image[int(ptStateHi_i[1])][int(ptStateHi_i[0])] = 0
+            except ValueError:
+                pass
+
             
             # Draw the bodypart state angle.
 #             r = 20
@@ -1447,7 +1481,7 @@ class Bodypart(object):
                         self.bgra, 
                         1)
     
-            # Draw line from hinge to center.        
+            # Draw line from hinge to state point.        
             cv2.line(image, ptHinge_i, ptState_i, self.bgra_state, 1)
             
             self.windowPolar.show()
@@ -1455,6 +1489,8 @@ class Bodypart(object):
             self.windowFG.show()
             self.windowTest.show()
         
+        self.draw_handles(image)
+
 # end class Bodypart
 
     
@@ -2053,16 +2089,18 @@ class MainWindow:
                                'subtract_bg':False,        # Use background subtraction?
                                'x':300,
                                'y':150,
-                               'radius_ortho':50,
+                               'radius_outer':100,
                                'radius_axial':50,
+                               'radius_ortho':50,
                                'angle_wedge':0},
                     'abdomen':{'track':True,
                                'autozero':True,
                                'subtract_bg':False,     # Use background subtraction?
                                'x':300,
                                'y':250,
+                               'radius_outer':120,
+                               'radius_axial':60,
                                'radius_ortho':60,
-                               'radius_axial':70,
                                'angle_wedge':0},
                     'left':   {'track':True,
                                'autozero':False,
@@ -2224,20 +2262,21 @@ class MainWindow:
         
         
     def scale_params(self, paramsIn, scale):
-		paramsOut = copy.deepcopy(paramsIn)
-		for wing in ['left', 'right']:
-			paramsOut[wing]['hinge']['x'] = (paramsIn[wing]['hinge']['x']*scale)  
-			paramsOut[wing]['hinge']['y'] = (paramsIn[wing]['hinge']['y']*scale)  
-			paramsOut[wing]['radius_outer'] = (paramsIn[wing]['radius_outer']*scale)  
-			paramsOut[wing]['radius_inner'] = (paramsIn[wing]['radius_inner']*scale)  
+        paramsScaled = copy.deepcopy(paramsIn)
+        for wing in ['left', 'right']:
+            paramsScaled[wing]['hinge']['x'] = (paramsIn[wing]['hinge']['x']*scale)  
+            paramsScaled[wing]['hinge']['y'] = (paramsIn[wing]['hinge']['y']*scale)  
+            paramsScaled[wing]['radius_outer'] = (paramsIn[wing]['radius_outer']*scale)  
+            paramsScaled[wing]['radius_inner'] = (paramsIn[wing]['radius_inner']*scale)  
 
-		for bodypart in ['head', 'abdomen']:
-			paramsOut[bodypart]['x'] = (paramsIn[bodypart]['x']*scale) 
-			paramsOut[bodypart]['y'] = (paramsIn[bodypart]['y']*scale)  
-			paramsOut[bodypart]['radius_ortho'] = (paramsIn[bodypart]['radius_ortho']*scale)  
-			paramsOut[bodypart]['radius_axial'] = (paramsIn[bodypart]['radius_axial']*scale)
+        for bodypart in ['head', 'abdomen']:
+            paramsScaled[bodypart]['x'] = (paramsIn[bodypart]['x']*scale) 
+            paramsScaled[bodypart]['y'] = (paramsIn[bodypart]['y']*scale)  
+            paramsScaled[bodypart]['radius_outer'] = (paramsIn[bodypart]['radius_outer']*scale)  
+            paramsScaled[bodypart]['radius_axial'] = (paramsIn[bodypart]['radius_axial']*scale)
+            paramsScaled[bodypart]['radius_ortho'] = (paramsIn[bodypart]['radius_ortho']*scale)  
 			
-		return paramsOut  
+        return paramsScaled  
 	
 	
     # set_dict(self, dTarget, dSource, bPreserve)
@@ -2540,65 +2579,75 @@ class MainWindow:
     def update_params_from_handle(self, bodypartSelected, tagSelected, ptMouse):             
         bodypartSlave = 'right' if (self.bodypartSelected=='left') else 'left'
                     
-        params = self.scale_params(self.params, self.scale) 
+        paramsScaled = self.scale_params(self.params, self.scale) 
         
         # Head or Abdomen points
         if (bodypartSelected=='head') or (bodypartSelected=='abdomen'):
-            if (tagSelected=='center'): 
+            if (tagSelected=='hinge'): 
 
                 # Get the hinge points pre-move.
-                if (params['symmetric']):
-                    ptHead = np.array([params['head']['x'], params['head']['y']])
-                    ptAbdomen = np.array([params['abdomen']['x'], params['abdomen']['y']])
+                if (paramsScaled['symmetric']):
+                    ptHead = np.array([paramsScaled['head']['x'], paramsScaled['head']['y']])
+                    ptAbdomen = np.array([paramsScaled['abdomen']['x'], paramsScaled['abdomen']['y']])
                     ptCenterPre = (ptHead + ptAbdomen) / 2
                     ptBodyPre = ptHead - ptAbdomen
                     angleBodyPre = np.arctan2(ptBodyPre[1], ptBodyPre[0])
-                    ptLeft = np.array([params['left']['hinge']['x'], params['left']['hinge']['y']])
-                    ptRight = np.array([params['right']['hinge']['x'], params['right']['hinge']['y']])
+                    ptLeft = np.array([paramsScaled['left']['hinge']['x'], paramsScaled['left']['hinge']['y']])
+                    ptRight = np.array([paramsScaled['right']['hinge']['x'], paramsScaled['right']['hinge']['y']])
                     ptLC = ptLeft-ptCenterPre
                     ptRC = ptRight-ptCenterPre
                     rL = np.linalg.norm(ptLC)
-                    aL = np.arctan2(ptLC[1], ptLC[0]) - angleBodyPre # angle from center to hinge in body axis coords.
+                    aL = np.arctan2(ptLC[1], ptLC[0]) - angleBodyPre # angle from body center to hinge in body axis coords.
                     rR = np.linalg.norm(ptRC)
                     aR = np.arctan2(ptRC[1], ptRC[0]) - angleBodyPre
 
                 # Move the selected body point.
                 pt = ptMouse
-                params[bodypartSelected]['x'] = float(pt[0])
-                params[bodypartSelected]['y'] = float(pt[1])
+                paramsScaled[bodypartSelected]['x'] = float(pt[0])
+                paramsScaled[bodypartSelected]['y'] = float(pt[1])
                 
                 # Now move the hinge points relative to the new body points.
-                if (params['symmetric']):
-                    ptHead = np.array([params['head']['x'], params['head']['y']])
-                    ptAbdomen = np.array([params['abdomen']['x'], params['abdomen']['y']])
+                if (paramsScaled['symmetric']):
+                    ptHead = np.array([paramsScaled['head']['x'], paramsScaled['head']['y']])
+                    ptAbdomen = np.array([paramsScaled['abdomen']['x'], paramsScaled['abdomen']['y']])
                     ptCenterPost = (ptHead + ptAbdomen) / 2
                     ptBodyPost = ptHead - ptAbdomen
                     angleBodyPost = np.arctan2(ptBodyPost[1], ptBodyPost[0])
                     ptLeft = ptCenterPost + rL * np.array([np.cos(aL+angleBodyPost), np.sin(aL+angleBodyPost)])
                     ptRight = ptCenterPost + rR * np.array([np.cos(aR+angleBodyPost), np.sin(aR+angleBodyPost)])
-                    params['left']['hinge']['x'] = float(ptLeft[0])
-                    params['left']['hinge']['y'] = float(ptLeft[1])
-                    params['right']['hinge']['x'] = float(ptRight[0])
-                    params['right']['hinge']['y'] = float(ptRight[1])
+                    paramsScaled['left']['hinge']['x'] = float(ptLeft[0])
+                    paramsScaled['left']['hinge']['y'] = float(ptLeft[1])
+                    paramsScaled['right']['hinge']['x'] = float(ptRight[0])
+                    paramsScaled['right']['hinge']['y'] = float(ptRight[1])
                     
 
 
             if (tagSelected=='radius_axial'): 
-                params[bodypartSelected]['radius_axial'] = max(float(np.linalg.norm(np.array([params[bodypartSelected]['x'],params[bodypartSelected]['y']]) - ptMouse))-10,0)
-                params[bodypartSelected]['radius_ortho'] = params[bodypartSelected]['radius_axial'] # Force it to be circular. 
+                dr = paramsScaled[bodypartSelected]['radius_outer'] - paramsScaled[bodypartSelected]['radius_axial']
+                r = float(np.linalg.norm(np.array([paramsScaled[bodypartSelected]['x'],paramsScaled[bodypartSelected]['y']]) - ptMouse))-gOffsetHandle
+                paramsScaled[bodypartSelected]['radius_axial'] = max(r, dr+5)
+                paramsScaled[bodypartSelected]['radius_outer'] = paramsScaled[bodypartSelected]['radius_axial'] + dr
+                paramsScaled[bodypartSelected]['radius_ortho'] = paramsScaled[bodypartSelected]['radius_axial'] # Force it to be circular. 
             if (tagSelected=='radius_ortho'): 
-                params[bodypartSelected]['radius_ortho'] = float(np.linalg.norm(np.array([params[bodypartSelected]['x'],params[bodypartSelected]['y']]) - ptMouse))
+                paramsScaled[bodypartSelected]['radius_ortho'] = float(np.linalg.norm(np.array([paramsScaled[bodypartSelected]['x'],paramsScaled[bodypartSelected]['y']]) - ptMouse))
             if (tagSelected=='angle_wedge'):
-                ptBodyCenter_i = (np.array([self.params['head']['x'], self.params['head']['y']]) + np.array([self.params['abdomen']['x'], self.params['abdomen']['y']])) / 2
-                angleBodyOutward_i = np.arctan2(params[bodypartSelected]['y']-ptBodyCenter_i[1], params[bodypartSelected]['x']-ptBodyCenter_i[0])
+                # radius_outer
+                r = float(np.linalg.norm(np.array([paramsScaled[bodypartSelected]['x'],paramsScaled[bodypartSelected]['y']]) - ptMouse))-gOffsetHandle
+                paramsScaled[bodypartSelected]['radius_outer'] = int(np.clip(r,
+                                                                             paramsScaled[bodypartSelected]['radius_axial']+5,
+                                                                             2*paramsScaled[bodypartSelected]['radius_axial']-5))
+
+                # angle_wedge
+                ptBodyCenter_i = (np.array([paramsScaled['head']['x'], paramsScaled['head']['y']]) + np.array([paramsScaled['abdomen']['x'], paramsScaled['abdomen']['y']])) / 2
+                angleBodyOutward_i = np.arctan2(paramsScaled[bodypartSelected]['y']-ptBodyCenter_i[1], paramsScaled[bodypartSelected]['x']-ptBodyCenter_i[0])
 
                 cosAngleBodyOutward = np.cos(angleBodyOutward_i)
                 sinAngleBodyOutward = np.sin(angleBodyOutward_i)
                 R = np.array([[cosAngleBodyOutward, -sinAngleBodyOutward], [sinAngleBodyOutward, cosAngleBodyOutward]])
-                r1 = params[bodypartSelected]['radius_axial']
-                r2 = params[bodypartSelected]['radius_ortho']
-                y = (ptMouse[1]-params[bodypartSelected]['y'])
-                x = (ptMouse[0]-params[bodypartSelected]['x'])
+                r1 = paramsScaled[bodypartSelected]['radius_axial']
+                r2 = paramsScaled[bodypartSelected]['radius_ortho']
+                y = (ptMouse[1]-paramsScaled[bodypartSelected]['y'])
+                x = (ptMouse[0]-paramsScaled[bodypartSelected]['x'])
                 xy = np.dot(np.linalg.inv(R), np.array([x,y]))
                 
                 angle = float(-np.arctan2(xy[1]/r2, xy[0]/r1)) % (2*np.pi)
@@ -2607,53 +2656,53 @@ class MainWindow:
                     angle = np.pi
                 if (np.abs(angle)<0.02):
                     angle = 0.0
-                params[bodypartSelected]['angle_wedge'] = angle
-                #rospy.logwarn(params[bodypartSelected]['angle_wedge'])
+                paramsScaled[bodypartSelected]['angle_wedge'] = angle
+                #rospy.logwarn(paramsScaled[bodypartSelected]['angle_wedge'])
 
 
         # Wing points.
         elif (bodypartSelected=='left') or (bodypartSelected=='right'):
             # Hinge point.
             if (tagSelected=='hinge'): 
-                params[bodypartSelected]['hinge']['x'] = float(ptMouse[0])
-                params[bodypartSelected]['hinge']['y'] = float(ptMouse[1])
+                paramsScaled[bodypartSelected]['hinge']['x'] = float(ptMouse[0])
+                paramsScaled[bodypartSelected]['hinge']['y'] = float(ptMouse[1])
 
-                if (params['symmetric']):
+                if (paramsScaled['symmetric']):
                     ptSlave = self.get_reflection_across_bodyaxis(ptMouse)
-                    params[bodypartSlave]['hinge']['x'] = float(ptSlave[0])
-                    params[bodypartSlave]['hinge']['y'] = float(ptSlave[1])
+                    paramsScaled[bodypartSlave]['hinge']['x'] = float(ptSlave[0])
+                    paramsScaled[bodypartSlave]['hinge']['y'] = float(ptSlave[1])
 
 
             # High angle.
             elif (tagSelected=='angle_hi'): 
                 pt = ptMouse - self.wingSelected.ptHinge
-                params[bodypartSelected]['angle_hi'] = float(self.wingSelected.transform_angle_b_from_i(np.arctan2(pt[1], pt[0])))
-                params[bodypartSelected]['radius_outer'] = float(max(self.wingSelected.params[bodypartSelected]['radius_inner']+2, 
+                paramsScaled[bodypartSelected]['angle_hi'] = float(self.wingSelected.transform_angle_b_from_i(np.arctan2(pt[1], pt[0])))
+                paramsScaled[bodypartSelected]['radius_outer'] = float(max(self.wingSelected.paramsScaled[bodypartSelected]['radius_inner']+2, 
                                                                           np.linalg.norm(self.wingSelected.ptHinge - ptMouse))) # Outer radius > inner radius.
-                if (params['symmetric']):
-                    params[bodypartSlave]['angle_hi']     = params[bodypartSelected]['angle_hi']
-                    params[bodypartSlave]['radius_outer'] = params[bodypartSelected]['radius_outer']
+                if (paramsScaled['symmetric']):
+                    paramsScaled[bodypartSlave]['angle_hi']     = paramsScaled[bodypartSelected]['angle_hi']
+                    paramsScaled[bodypartSlave]['radius_outer'] = paramsScaled[bodypartSelected]['radius_outer']
                   
                   
             # Low angle.
             elif (tagSelected=='angle_lo'): 
                 pt = ptMouse - self.wingSelected.ptHinge
-                params[bodypartSelected]['angle_lo'] = float(self.wingSelected.transform_angle_b_from_i(np.arctan2(pt[1], pt[0])))
-                params[bodypartSelected]['radius_outer'] = float(max(self.wingSelected.params[bodypartSelected]['radius_inner']+2, 
+                paramsScaled[bodypartSelected]['angle_lo'] = float(self.wingSelected.transform_angle_b_from_i(np.arctan2(pt[1], pt[0])))
+                paramsScaled[bodypartSelected]['radius_outer'] = float(max(self.wingSelected.paramsScaled[bodypartSelected]['radius_inner']+2, 
                                                                           np.linalg.norm(self.wingSelected.ptHinge - ptMouse)))
-                if (params['symmetric']):
-                    params[bodypartSlave]['angle_lo']     = params[bodypartSelected]['angle_lo']
-                    params[bodypartSlave]['radius_outer'] = params[bodypartSelected]['radius_outer']
+                if (paramsScaled['symmetric']):
+                    paramsScaled[bodypartSlave]['angle_lo']     = paramsScaled[bodypartSelected]['angle_lo']
+                    paramsScaled[bodypartSlave]['radius_outer'] = paramsScaled[bodypartSelected]['radius_outer']
                   
                   
             # Inner radius.
             elif (tagSelected=='inner'): 
-                params[bodypartSelected]['radius_inner'] = float(min(np.linalg.norm(self.wingSelected.ptHinge - ptMouse), 
-                                                                          self.wingSelected.params[bodypartSelected]['radius_outer']-2))
-                if (params['symmetric']):
-                    params[bodypartSlave]['radius_inner'] = params[bodypartSelected]['radius_inner']
+                paramsScaled[bodypartSelected]['radius_inner'] = float(min(np.linalg.norm(self.wingSelected.ptHinge - ptMouse), 
+                                                                          self.wingSelected.paramsScaled[bodypartSelected]['radius_outer']-2))
+                if (paramsScaled['symmetric']):
+                    paramsScaled[bodypartSlave]['radius_inner'] = paramsScaled[bodypartSelected]['radius_inner']
                 
-        self.params = self.scale_params(params, 1/self.scale) 
+        self.params = self.scale_params(paramsScaled, 1/self.scale) 
 
                 
     # onMouse()
