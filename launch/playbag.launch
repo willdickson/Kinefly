@@ -5,7 +5,7 @@
 
 
     <include file="$(find StrokelitudeROS)/launch/params_strokelitude.launch" />
-    <include file="$(find StrokelitudeROS)/launch/camera_playbag.launch" />
+    <include file="$(find StrokelitudeROS)/launch/camera_playbag.launch" /> 
 
     <node name="strokelitude"                 pkg="StrokelitudeROS"  type="strokelitude.py" required="true"      />
     <node name="strokelitude2phidgetsanalog"  pkg="StrokelitudeROS"  type="strokelitude2phidgetsanalog.py"  />
