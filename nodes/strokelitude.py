@@ -10,11 +10,10 @@ import cv2
 import numpy as np
 import os
 import sys
-import time
+import threading
 import dynamic_reconfigure.server
 
 from cv_bridge import CvBridge, CvBridgeError
-from optparse import OptionParser
 from sensor_msgs.msg import Image
 from std_msgs.msg import Float32, Header, String
 from StrokelitudeROS.srv import *
@@ -701,7 +700,7 @@ class Bodypart(object):
                 dRho = (rho_e_outer - rho_e_inner) / nRho
                 
                 # Step along the radius from the inner to the outer ellipse.  rClip is a clip factor on range [0,1]
-                for iRho in range(0, int(rClip*nRho)):
+                for iRho in range(0, int(np.ceil(rClip*nRho))):
                     rho = rho_e_inner + iRho * dRho
 
                     # i,j points on an upright ellipse.
@@ -1300,7 +1299,8 @@ class Bodypart(object):
                     #self.stateLo.radius -= self.state.radius-self.params[self.name]['radius_axial']
                     #self.stateHi.radius -= self.state.radius-self.params[self.name]['radius_axial']
 
-        #self.windowTest.set_image(np.roll(self.imgRoiMaskedPolar, -int(aShift), 1))
+        if (self.name=='head'):
+            self.windowTest.set_image(np.roll(self.imgRoiMaskedPolar, -int(aShift), 1))
         self.state.mass = 0.0
         
         
@@ -2056,22 +2056,24 @@ class MainWindow:
         self.bInitialized = False
         self.stampPrev = None
         self.dt = rospy.Time(0)
+        self.lock = threading.Lock()
         
         # initialize
         rospy.init_node('strokelitude', anonymous=True)
         
         # initialize display
         self.window_name = 'Strokelitude'
-        cv.NamedWindow(self.window_name,1)
+        cv2.namedWindow(self.window_name,1)
         self.cvbridge = CvBridge()
         
         # Load the parameters yaml file.
         self.parameterfile = os.path.expanduser(rospy.get_param('strokelitude_parameterfile', '~/strokelitude.yaml'))
-        try:
-            self.params = rosparam.load_file(self.parameterfile)[0][0]
-        except (rosparam.RosParamException, IndexError), e:
-            rospy.logwarn('%s.  Using default values.' % e)
-            self.params = {}
+        with self.lock:
+            try:
+                self.params = rosparam.load_file(self.parameterfile)[0][0]
+            except (rosparam.RosParamException, IndexError), e:
+                rospy.logwarn('%s.  Using default values.' % e)
+                self.params = {}
             
         defaults = {'filenameBackground':'~/strokelitude.png',
                     'image_topic':'/camera/image_raw',
@@ -2123,6 +2125,7 @@ class MainWindow:
 
                     }
         self.set_dict_with_preserve(self.params, defaults)
+        self.params = self.legalizeParams(self.params)
         rospy.set_param('strokelitude', self.params)
         
         # initialize wings and body
@@ -2130,7 +2133,7 @@ class MainWindow:
         
         # Background image.
         self.filenameBackground = os.path.expanduser(self.params['filenameBackground'])
-        self.imgFullBackground  = cv2.imread(self.filenameBackground, cv.CV_LOAD_IMAGE_GRAYSCALE)
+        self.imgFullBackground  = cv2.imread(self.filenameBackground, cv2.CV_LOAD_IMAGE_GRAYSCALE)
         if (self.imgFullBackground is not None):
             self.fly.set_background(self.imgFullBackground)
         
@@ -2150,7 +2153,7 @@ class MainWindow:
         self.pubCommand            = rospy.Publisher('strokelitude/command', MsgCommand)
 
         # Subscriptions.        
-        self.subImageRaw           = rospy.Subscriber(self.params['image_topic'], Image, self.image_callback)
+        self.subImageRaw           = rospy.Subscriber(self.params['image_topic'], Image, self.image_callback, queue_size=2)
         self.subCommand            = rospy.Subscriber('strokelitude/command', MsgCommand, self.command_callback)
 
         self.w_gap = int(10 * self.scale)
@@ -2200,9 +2203,34 @@ class MainWindow:
 
 
         # user callbacks
-        cv.SetMouseCallback(self.window_name, self.onMouse, param=None)
+        cv2.setMouseCallback(self.window_name, self.onMouse, param=None)
         
         self.reconfigure = dynamic_reconfigure.server.Server(strokelitudeConfig, self.reconfigure_callback)
+        
+        
+    # legalizeParams()
+    # Make sure that all the parameters contain legal values.
+    #
+    def legalizeParams(self, params):
+        paramsOut = copy.copy(params)
+        for part in ['head','abdomen']:
+            if (part in paramsOut):
+                if ('x' in paramsOut[part]):
+                    paramsOut[part]['x'] = max(0, paramsOut[part]['x'])
+    
+                if ('y' in paramsOut[part]):
+                    paramsOut[part]['y'] = max(0, paramsOut[part]['y'])
+    
+                if ('radius_ortho' in paramsOut[part]):
+                    paramsOut[part]['radius_ortho'] = max(5, paramsOut[part]['radius_ortho'])
+                    
+                if ('radius_axial' in paramsOut[part]):
+                    paramsOut[part]['radius_axial'] = max(5, paramsOut[part]['radius_axial'])
+    
+                if ('radius_outer' in paramsOut[part]) and ('radius_axial' in paramsOut[part]):
+                    paramsOut[part]['radius_outer'] = int(np.clip(paramsOut[part]['radius_outer'], paramsOut[part]['radius_axial'], 2*paramsOut[part]['radius_axial']-5))
+
+        return paramsOut
         
         
     def reconfigure_callback(self, config, level):
@@ -2217,7 +2245,8 @@ class MainWindow:
         
         # Set it into the wings.
         self.fly.set_params(self.scale_params(self.params, self.scale))
-        rosparam.dump_params(self.parameterfile, 'strokelitude')
+        with self.lock:
+            rosparam.dump_params(self.parameterfile, 'strokelitude')
         
         return config
 
@@ -2258,7 +2287,8 @@ class MainWindow:
         self.fly.set_params(self.scale_params(self.params, self.scale))
         self.set_dict_with_preserve(self.params, rospy.get_param('strokelitude'))
         rospy.set_param('strokelitude', self.params)
-        rosparam.dump_params(self.parameterfile, 'strokelitude')
+        with self.lock:
+            rosparam.dump_params(self.parameterfile, 'strokelitude')
         
         
     def scale_params(self, paramsIn, scale):
@@ -2366,7 +2396,7 @@ class MainWindow:
                                 
             if (self.params['use_gui']):
         
-                imgOutput = cv2.cvtColor(imgForeground, cv.CV_GRAY2RGB)
+                imgOutput = cv2.cvtColor(imgForeground, cv2.COLOR_GRAY2RGB)
                 self.fly.draw(imgOutput)
                 self.draw_buttons(imgOutput)
             
@@ -2712,7 +2742,7 @@ class MainWindow:
         ptMouse = np.array([x, y]).clip((0,0), (self.shapeImage[1],self.shapeImage[0]))
 
         # Keep track of which UI element is selected.
-        if (event==cv.CV_EVENT_LBUTTONDOWN):
+        if (event==cv2.EVENT_LBUTTONDOWN):
             self.bMousing = True
             
             # Get the name and ui nearest the current point.
@@ -2744,7 +2774,7 @@ class MainWindow:
             # Set selected button to 'down', others to 'up'.
             for iButton in range(len(self.buttons)):
                 if (self.buttons[iButton].type=='pushbutton'):
-                    if (iButton==self.iButtonSelectedNow==self.iButtonSelected) and not (event==cv.CV_EVENT_LBUTTONUP):
+                    if (iButton==self.iButtonSelectedNow==self.iButtonSelected) and not (event==cv2.EVENT_LBUTTONUP):
                         self.buttons[iButton].state = True # 'down'
                     else:
                         self.buttons[iButton].state = False # 'up'
@@ -2767,10 +2797,11 @@ class MainWindow:
             self.fly.set_params(self.scale_params(self.params, self.scale))
         
             # Save the results.
-            if (event==cv.CV_EVENT_LBUTTONUP):
+            if (event==cv2.EVENT_LBUTTONUP):
                 self.set_dict_with_preserve(self.params, rospy.get_param('strokelitude'))
                 rospy.set_param('strokelitude', self.params)
-                rosparam.dump_params(self.parameterfile, 'strokelitude')
+                with self.lock:
+                    rosparam.dump_params(self.parameterfile, 'strokelitude')
                 
                 self.fly.create_masks(self.shapeImage)
                 self.set_dict_with_preserve(self.params, rospy.get_param('strokelitude'))
@@ -2779,7 +2810,7 @@ class MainWindow:
         # end if (self.uiSelected=='handle'):
             
 
-        if (event==cv.CV_EVENT_LBUTTONUP):
+        if (event==cv2.EVENT_LBUTTONUP):
             # If the mouse is on the same button at mouseup, then do the action.
             if (self.uiSelected=='pushbutton'):
                 if (self.nameSelected == self.nameSelectedNow == 'save_bg'):
@@ -2842,7 +2873,8 @@ class MainWindow:
 
         self.set_dict_with_preserve(self.params, rospy.get_param('strokelitude'))
         rospy.set_param('strokelitude', self.params)
-        rosparam.dump_params(self.parameterfile, 'strokelitude')
+        with self.lock:
+            rosparam.dump_params(self.parameterfile, 'strokelitude')
 
         cv2.destroyAllWindows()
 

@@ -63,8 +63,8 @@ class Strokelitude2Ledpanels:
         rospy.sleep(1) # Time to connect publishers & subscribers.
 
 
-        self.pubPanelsCommand.publish(MsgPanelsCommand(command='set_posfunc_id',  arg1=1,                         arg2=0, arg3=0, arg4=0, arg5=0, arg6=0)) # Set default function.
-        self.pubPanelsCommand.publish(MsgPanelsCommand(command='set_posfunc_id',  arg1=2,                         arg2=0, arg3=0, arg4=0, arg5=0, arg6=0)) # Set default function.
+        self.pubPanelsCommand.publish(MsgPanelsCommand(command='set_posfunc_id',  arg1=1,                         arg2=0, arg3=0, arg4=0, arg5=0, arg6=0)) # Set default function ch1.
+        self.pubPanelsCommand.publish(MsgPanelsCommand(command='set_posfunc_id',  arg1=2,                         arg2=0, arg3=0, arg4=0, arg5=0, arg6=0)) # Set default function ch2.
         self.pubPanelsCommand.publish(MsgPanelsCommand(command='set_pattern_id',  arg1=self.params['pattern_id'], arg2=0, arg3=0, arg4=0, arg5=0, arg6=0))
         self.pubPanelsCommand.publish(MsgPanelsCommand(command='set_mode',        arg1=0,                         arg2=0, arg3=0, arg4=0, arg5=0, arg6=0)) # xvel=funcx, yvel=funcy
         self.pubPanelsCommand.publish(MsgPanelsCommand(command='set_position',    arg1=0,                         arg2=0, arg3=0, arg4=0, arg5=0, arg6=0)) # Set position to 0
