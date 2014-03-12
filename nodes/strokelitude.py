@@ -390,15 +390,15 @@ class Fly(object):
         flystate.header       = Header(seq=self.iCount, stamp=self.stamp, frame_id='Fly')
         if (self.params['left']['track']):
             flystate.left         = MsgWing(mass=self.wing_l.mass, 
-                                            angle1=self.wing_l.angle_leading_b, 
-                                            angle2=self.wing_l.angle_trailing_b)
+                                            angle1=-self.wing_l.angle_leading_b, 
+                                            angle2=-self.wing_l.angle_trailing_b)
         else:
             flystate.left         = MsgWing(mass=0.0, angle1=0.0, angle2=0.0)
             
         if (self.params['right']['track']):
             flystate.right        = MsgWing(mass=self.wing_r.mass, 
-                                            angle1=self.wing_r.angle_leading_b, 
-                                            angle2=self.wing_r.angle_trailing_b)
+                                            angle1=-self.wing_r.angle_leading_b, 
+                                            angle2=-self.wing_r.angle_trailing_b)
         else:
             flystate.right         = MsgWing(mass=0.0, angle1=0.0, angle2=0.0)
             
@@ -2067,7 +2067,7 @@ class MainWindow:
         self.cvbridge = CvBridge()
         
         # Load the parameters yaml file.
-        self.parameterfile = os.path.expanduser(rospy.get_param('strokelitude_parameterfile', '~/strokelitude.yaml'))
+        self.parameterfile = os.path.expanduser(rospy.get_param('strokelitude/parameterfile', '~/strokelitude.yaml'))
         with self.lock:
             try:
                 self.params = rosparam.load_file(self.parameterfile)[0][0]
@@ -2125,6 +2125,7 @@ class MainWindow:
 
                     }
         self.set_dict_with_preserve(self.params, defaults)
+        self.set_dict_with_preserve(self.params, rospy.get_param('strokelitude'))
         self.params = self.legalizeParams(self.params)
         rospy.set_param('strokelitude', self.params)
         
@@ -2451,10 +2452,10 @@ class MainWindow:
                 if (self.params['right']['track']):
                     if (self.fly.wing_l.angle_amplitude is not None):
                         if (self.params['n_edges']==1):
-                            s = 'L:% 7.4f' % (self.fly.wing_l.angle_leading_b)
+                            s = 'L:% 7.4f' % (-self.fly.wing_l.angle_leading_b)
                             w = 65
                         else:
-                            s = 'L:% 7.4f,% 7.4f' % (self.fly.wing_l.angle_leading_b,self.fly.wing_l.angle_trailing_b)
+                            s = 'L:% 7.4f,% 7.4f' % (-self.fly.wing_l.angle_leading_b,-self.fly.wing_l.angle_trailing_b)
                             w = 120
                         cv2.putText(imgOutput, s, (x, y_bottom), self.fontface, self.scaleText, self.fly.wing_l.bgra)
                         w_text = int(w * self.scale)
@@ -2462,10 +2463,10 @@ class MainWindow:
                     
                     if (self.fly.wing_r.angle_amplitude is not None):
                         if (self.params['n_edges']==1):
-                            s = 'R:% 7.4f' % (self.fly.wing_r.angle_leading_b)
+                            s = 'R:% 7.4f' % (-self.fly.wing_r.angle_leading_b)
                             w = 65
                         else:
-                            s = 'R:% 7.4f,% 7.4f' % (self.fly.wing_r.angle_leading_b,self.fly.wing_r.angle_trailing_b)
+                            s = 'R:% 7.4f,% 7.4f' % (-self.fly.wing_r.angle_leading_b,-self.fly.wing_r.angle_trailing_b)
                             w = 120
                         cv2.putText(imgOutput, s, (x, y_bottom), self.fontface, self.scaleText, self.fly.wing_r.bgra)
                         w_text = int(w * self.scale)
@@ -2475,8 +2476,8 @@ class MainWindow:
                     # Output sum of WBA
                     if (self.fly.wing_l.angle_amplitude is not None) and (self.fly.wing_r.angle_amplitude is not None):
                         leftplusright = self.fly.wing_l.angle_amplitude + self.fly.wing_r.angle_amplitude
-                        #s = 'L+R:% 7.1f' % np.rad2deg(leftplusright)
-                        s = 'L+R:% 7.4f' % leftplusright
+                        #s = 'L+R:% 7.1f' % -np.rad2deg(leftplusright)
+                        s = 'L+R:% 7.4f' % -leftplusright
                         cv2.putText(imgOutput, s, (x, y_bottom), self.fontface, self.scaleText, bgra_dict['magenta'])
                         w_text = int(82 * self.scale)
                         x += w_text+self.w_gap
@@ -2485,8 +2486,8 @@ class MainWindow:
                     # Output difference in WBA
                     if (self.fly.wing_l.angle_amplitude is not None) and (self.fly.wing_r.angle_amplitude is not None):
                         leftminusright = self.fly.wing_l.angle_amplitude - self.fly.wing_r.angle_amplitude
-                        #s = 'L-R:% 7.1f' % np.rad2deg(leftminusright)
-                        s = 'L-R:% 7.4f' % leftminusright
+                        #s = 'L-R:% 7.1f' % -np.rad2deg(leftminusright)
+                        s = 'L-R:% 7.4f' % -leftminusright
                         cv2.putText(imgOutput, s, (x, y_bottom), self.fontface, self.scaleText, bgra_dict['magenta'])
                         w_text = int(82 * self.scale)
                         x += w_text+self.w_gap
@@ -2707,7 +2708,7 @@ class MainWindow:
             elif (tagSelected=='angle_hi'): 
                 pt = ptMouse - self.wingSelected.ptHinge
                 paramsScaled[bodypartSelected]['angle_hi'] = float(self.wingSelected.transform_angle_b_from_i(np.arctan2(pt[1], pt[0])))
-                paramsScaled[bodypartSelected]['radius_outer'] = float(max(self.wingSelected.paramsScaled[bodypartSelected]['radius_inner']+2, 
+                paramsScaled[bodypartSelected]['radius_outer'] = float(max(self.wingSelected.params[bodypartSelected]['radius_inner']+2, 
                                                                           np.linalg.norm(self.wingSelected.ptHinge - ptMouse))) # Outer radius > inner radius.
                 if (paramsScaled['symmetric']):
                     paramsScaled[bodypartSlave]['angle_hi']     = paramsScaled[bodypartSelected]['angle_hi']
@@ -2718,7 +2719,7 @@ class MainWindow:
             elif (tagSelected=='angle_lo'): 
                 pt = ptMouse - self.wingSelected.ptHinge
                 paramsScaled[bodypartSelected]['angle_lo'] = float(self.wingSelected.transform_angle_b_from_i(np.arctan2(pt[1], pt[0])))
-                paramsScaled[bodypartSelected]['radius_outer'] = float(max(self.wingSelected.paramsScaled[bodypartSelected]['radius_inner']+2, 
+                paramsScaled[bodypartSelected]['radius_outer'] = float(max(self.wingSelected.params[bodypartSelected]['radius_inner']+2, 
                                                                           np.linalg.norm(self.wingSelected.ptHinge - ptMouse)))
                 if (paramsScaled['symmetric']):
                     paramsScaled[bodypartSlave]['angle_lo']     = paramsScaled[bodypartSelected]['angle_lo']
@@ -2728,7 +2729,7 @@ class MainWindow:
             # Inner radius.
             elif (tagSelected=='inner'): 
                 paramsScaled[bodypartSelected]['radius_inner'] = float(min(np.linalg.norm(self.wingSelected.ptHinge - ptMouse), 
-                                                                          self.wingSelected.paramsScaled[bodypartSelected]['radius_outer']-2))
+                                                                          self.wingSelected.params[bodypartSelected]['radius_outer']-2))
                 if (paramsScaled['symmetric']):
                     paramsScaled[bodypartSlave]['radius_inner'] = paramsScaled[bodypartSelected]['radius_inner']
                 

@@ -156,6 +156,8 @@ class Strokelitude2PhidgetsAnalog:
 #                    rospy.logwarn(self.analog.getEnabled(i))
                     try:
                         self.analog.setVoltage(i, voltages[i])
+                        #if (i==2):
+                        #    rospy.logwarn('% 4.1f' % voltages[i])
                     except Phidgets.PhidgetException.PhidgetException:
                         pass
         else:

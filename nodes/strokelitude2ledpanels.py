@@ -26,27 +26,39 @@ class Strokelitude2Ledpanels:
         
         # Load the parameters.
         self.params = rospy.get_param('strokelitude/ledpanels', {})
-        self.defaults = {'mode': 'velocity',
+        self.defaults = {'method': 'voltage', # 'voltage' or 'usb';        How we communicate with the panel controller.
                          'pattern_id': 1,
-                         'x0': 0.0,
-                         'xl1':1.0,
-                         'xl2':0.0,
-                         'xr1':-1.0,
-                         'xr2':0.0,
-                         'xha':0.0,
-                         'xhr':0.0,
-                         'xaa':0.0,
-                         'xar':0.0,
-                         'y0': 0.0,
-                         'yl1':0.0,
-                         'yl2':0.0,
-                         'yr1':0.0,
-                         'yr2':0.0,
-                         'yha':0.0,
-                         'yhr':0.0,
-                         'yaa':0.0,
-                         'yar':0.0,
-                        }
+                         'mode': 'velocity',  # 'velocity' or 'position';  Fly is controlling vel or pos.
+                         'axis': 'x',         # 'x' or 'y';               The axis on which the frames move.
+                         'coeff_voltage':{
+                             'adc0':1,  # When using voltage method, coefficients adc0-3 and funcx,y determine how the panels controller interprets its input voltage(s).
+                             'adc1':0,  # e.g. xvel = adc0*bnc0 + adc1*bnc1 + adc2*bnc2 + adc3*bnc3 + funcx*f(x) + funcy*f(y); valid on [-128,+127], and 10 corresponds to 1.0.
+                             'adc2':0,
+                             'adc3':0,
+                             'funcx':0,
+                             'funcy':0,
+                             },
+                         'coeff_usb':{  # When using usb method, coefficients x0,xl1,...,yaa,yar determine the pos or vel command sent to the controller over USB.
+                             'x0': 0.0,
+                             'xl1':1.0,
+                             'xl2':0.0,
+                             'xr1':-1.0,
+                             'xr2':0.0,
+                             'xha':0.0,
+                             'xhr':0.0,
+                             'xaa':0.0,
+                             'xar':0.0,
+                             'y0': 0.0,
+                             'yl1':0.0,
+                             'yl2':0.0,
+                             'yr1':0.0,
+                             'yr2':0.0,
+                             'yha':0.0,
+                             'yhr':0.0,
+                             'yaa':0.0,
+                             'yar':0.0,
+                             }
+                         }
         self.set_dict_with_preserve(self.params, self.defaults)
         self.update_coefficients_from_params()
         rospy.set_param('strokelitude/ledpanels', self.params)
@@ -71,74 +83,101 @@ class Strokelitude2Ledpanels:
         self.pubPanelsCommand.publish(MsgPanelsCommand(command='send_gain_bias',  arg1=0,                         arg2=0, arg3=0, arg4=0, arg5=0, arg6=0)) # Set vel to 0
         self.pubPanelsCommand.publish(MsgPanelsCommand(command='stop',            arg1=0,                         arg2=0, arg3=0, arg4=0, arg5=0, arg6=0))
         self.pubPanelsCommand.publish(MsgPanelsCommand(command='all_off',         arg1=0,                         arg2=0, arg3=0, arg4=0, arg5=0, arg6=0))
+
+        if (self.params['method']=='voltage'):
+            # Assemble a command:  set_mode_(pos|vel)_custom_(x|y) 
+            cmd = 'set_mode'
+            if (self.params['mode']=='velocity'):
+                cmd += '_vel'
+            elif (self.params['mode']=='position'):
+                cmd += '_pos'
+            else:
+                rospy.logwarn('strokelitude2ledpanels: mode must be ''velocity'' or ''position''.')
+            
+            if (self.params['axis']=='x'):
+                cmd += '_custom_x'
+            elif (self.params['axis']=='y'):
+                cmd += '_custom_y'
+            else:
+                rospy.logwarn('strokelitude2ledpanels: axis must be ''x'' or ''y''.')
+            
+            # Set the panels controller to the custom mode, with the specified coefficients.
+            self.pubPanelsCommand.publish(MsgPanelsCommand(command=cmd, arg1=self.params['coeff_voltage']['adc0'], 
+                                                                        arg2=self.params['coeff_voltage']['adc1'], 
+                                                                        arg3=self.params['coeff_voltage']['adc2'], 
+                                                                        arg4=self.params['coeff_voltage']['adc3'], 
+                                                                        arg5=self.params['coeff_voltage']['funcx'], 
+                                                                        arg6=self.params['coeff_voltage']['funcy']))
+        
+        
         self.bInitialized = True
         
 
+    # update_coefficients_from_params()
+    #
+    # Make a coefficients matrix out of the params dict values.
+    # There are two output channels (x,y), and each channel has 
+    # coefficients to make a user-specified setting from wing, head, and abdomen angles.
+    # 
     def update_coefficients_from_params(self):
-        self.x0  = self.params['x0']
-        self.xl1 = self.params['xl1']
-        self.xl2 = self.params['xl2']
-        self.xr1 = self.params['xr1']
-        self.xr2 = self.params['xr2']
-        self.xha = self.params['xha']
-        self.xhr = self.params['xhr']
-        self.xaa = self.params['xaa']
-        self.xar = self.params['xar']
-        
-        self.y0  = self.params['y0']
-        self.yl1 = self.params['yl1']
-        self.yl2 = self.params['yl2']
-        self.yr1 = self.params['yr1']
-        self.yr2 = self.params['yr2']
-        self.yha = self.params['yha']
-        self.yhr = self.params['yhr']
-        self.yaa = self.params['yaa']
-        self.yar = self.params['yar']
-        
-        
+        self.a = np.array([[self.params['coeff_usb']['x0'], 
+                            self.params['coeff_usb']['xl1'], self.params['coeff_usb']['xl2'], 
+                            self.params['coeff_usb']['xr1'], self.params['coeff_usb']['xr2'], 
+                            self.params['coeff_usb']['xha'], self.params['coeff_usb']['xhr'], 
+                            self.params['coeff_usb']['xaa'], self.params['coeff_usb']['xar']],
+                           [self.params['coeff_usb']['y0'], 
+                            self.params['coeff_usb']['yl1'], self.params['coeff_usb']['yl2'], 
+                            self.params['coeff_usb']['yr1'], self.params['coeff_usb']['yr2'], 
+                            self.params['coeff_usb']['yha'], self.params['coeff_usb']['yhr'], 
+                            self.params['coeff_usb']['yaa'], self.params['coeff_usb']['yar']]
+                          ],
+                          dtype=np.float32
+                          )
+            
+            
     def flystate_callback(self, flystate):
         if (self.bRunning):
-            #self.params = rospy.get_param('strokelitude/ledpanels', {})
-            #self.set_dict_with_preserve(self.params, self.defaults)
-            #self.update_coefficients_from_params()
+            self.params = rospy.get_param('strokelitude/ledpanels', {})
+            self.set_dict_with_preserve(self.params, self.defaults)
+            self.update_coefficients_from_params()
             
-            if (self.params['mode']=='velocity'):
-                msgVel = self.create_msgpanels_vel(flystate)
-                self.pubPanelsCommand.publish(msgVel)
-                #rospy.logwarn('vel: %s' % msgVel)
+            if (self.params['method']=='usb'):
+                if (self.params['mode']=='velocity'):
+                    msgVel = self.create_msgpanels_vel(flystate)
+                    self.pubPanelsCommand.publish(msgVel)
+                    #rospy.logwarn('vel: %s' % msgVel)
+                else:
+                    msgPos = self.create_msgpanels_pos(flystate)
+                    self.pubPanelsCommand.publish(msgPos)
+                    #rospy.logwarn('pos: %s' % msgPos)
+                    
+            elif (self.params['method']=='voltage'):
+                pass
+                
             else:
-                msgPos = self.create_msgpanels_pos(flystate)
-                self.pubPanelsCommand.publish(msgPos)
-                #rospy.logwarn('pos: %s' % msgPos)
+                rospy.logwarn('strokelitude2ledpanels: method must be ''usb'' or ''voltage''')
     
     
     # create_msgpanels_pos()
     # Return a message to set the panels position.
     #
     def create_msgpanels_pos(self, flystate):
-        L1 = flystate.left.angle1
-        L2 = flystate.left.angle2
-        R1 = flystate.right.angle1
-        R2 = flystate.right.angle2
-        HA = flystate.head.angle
-        HR = flystate.head.radius
-        AA = flystate.abdomen.angle
-        AR = flystate.abdomen.radius
+        state = np.array([1.0,
+                          flystate.left.angle1,
+                          flystate.left.angle2,
+                          flystate.right.angle1,
+                          flystate.right.angle2,
+                          flystate.head.angle,
+                          flystate.head.radius,
+                          flystate.abdomen.angle,
+                          flystate.abdomen.radius
+                          ], dtype=np.float32)
         
-        # L1,L2,R1,R2,HA,HR,AA,AR are all in radians.
-        # x0,xl1,xl2,xr1,xr2,xha,xhr,xaa,xar are coefficients to convert to frames.
-        xpos = self.x0 + self.xl1*L1 + self.xl2*L2 + \
-                         self.xr1*R1 + self.xr2*R2 + \
-                         self.xha*HA + self.xhr*HR + \
-                         self.xaa*AA + self.xar*AR # Angle + Radius
-        ypos = self.y0 + self.yl1*L1 + self.yl2*L2 + \
-                         self.yr1*R1 + self.yr2*R2 + \
-                         self.yha*HA + self.yhr*HR + \
-                         self.yaa*AA + self.yar*AR # Angle + Radius
+        pos = np.dot(self.a, state)
 
         # index is in frames.        
-        index_x = int(xpos)
-        index_y = int(ypos)
+        index_x = int(pos[0])
+        index_y = int(pos[1])
         
         msgPos = MsgPanelsCommand(command='set_position', 
                                   arg1=index_x, 
@@ -155,30 +194,23 @@ class Strokelitude2Ledpanels:
     # Return a message to set the panels velocity.
     #
     def create_msgpanels_vel(self, flystate):
-        L1 = flystate.left.angle1
-        L2 = flystate.left.angle2
-        R1 = flystate.right.angle1
-        R2 = flystate.right.angle2
-        HA = flystate.head.angle
-        HR = flystate.head.radius
-        AA = flystate.abdomen.angle
-        AR = flystate.abdomen.radius
+        state = np.array([1.0,
+                          flystate.left.angle1,
+                          flystate.left.angle2,
+                          flystate.right.angle1,
+                          flystate.right.angle2,
+                          flystate.head.angle,
+                          flystate.head.radius,
+                          flystate.abdomen.angle,
+                          flystate.abdomen.radius
+                          ], dtype=np.float32)
         
-        # L1,L2,R1,R2,HA,HR,AA,AR are all in radians.
-        # x0,xl1,xl2,xr1,xr2,xha,xhr,xaa,xar are coefficients to convert to frames per sec.
-        xvel = self.x0 + self.xl1*L1 + self.xl2*L2 + \
-                         self.xr1*R1 + self.xr2*R2 + \
-                         self.xha*HA + self.xhr*HR + \
-                         self.xaa*AA + self.xar*AR 
-        yvel = self.y0 + self.yl1*L1 + self.yl2*L2 + \
-                         self.yr1*R1 + self.yr2*R2 + \
-                         self.yha*HA + self.yhr*HR + \
-                         self.yaa*AA + self.yar*AR
+        vel = np.dot(self.a, state)
 
         # gain, bias are in frames per sec, times ten, i.e. 10=1.0, 127=12.7 
-        gain_x = (int(xvel) + 128) % 256 - 128
+        gain_x = (int(vel[0]) + 128) % 256 - 128
         bias_x = 0
-        gain_y = (int(yvel) + 128) % 256 - 128 # As if y were on a sphere, not a cylinder.
+        gain_y = (int(vel[1]) + 128) % 256 - 128 # As if y were on a sphere, not a cylinder.
         bias_y = 0
         
         msgVel = MsgPanelsCommand(command='send_gain_bias', 
@@ -207,6 +239,7 @@ class Strokelitude2Ledpanels:
 
         if (self.command == 'stop'):
             self.pubPanelsCommand.publish(MsgPanelsCommand(command='stop',      arg1=0, arg2=0, arg3=0, arg4=0, arg5=0, arg6=0))
+            self.pubPanelsCommand.publish(MsgPanelsCommand(command='all_off',   arg1=0, arg2=0, arg3=0, arg4=0, arg5=0, arg6=0))
             self.bRunning = False
             
         
@@ -265,6 +298,7 @@ class Strokelitude2Ledpanels:
 
     def run(self):
         rospy.spin()
+        self.pubPanelsCommand.publish(MsgPanelsCommand(command='all_off',   arg1=0, arg2=0, arg3=0, arg4=0, arg5=0, arg6=0))
 
 
 if __name__ == '__main__':
