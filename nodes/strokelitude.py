@@ -21,46 +21,9 @@ from StrokelitudeROS.msg import float32list as float32list_msg
 from StrokelitudeROS.msg import MsgFlystate, MsgWing, MsgBodypart, MsgCommand
 from StrokelitudeROS.cfg import strokelitudeConfig
 
-gOffsetHandle = 10
+gOffsetHandle = 10 # How far from the point-of-interest we place a handle.
 
 
-# A class to help with debugging.  It just draws an image.
-class ImageWindow:
-    def __init__(self, bEnable, name):
-        self.image = None
-        self.shape = (0,0)
-        self.name = name
-        self.bEnable = False
-        self.set_enable(bEnable)
-
-        
-    def set_shape(self, shape):
-        self.shape = shape
-        
-    def set_ravelled(self, ravel):
-        self.image = np.reshape(ravel, self.shape)
-        
-    def set_image(self, image):
-        if (image is not None):
-            self.image = image.astype(np.uint8)
-        
-    def show(self):
-        if (self.bEnable) and (self.image is not None) and (self.image.size>0):
-            cv2.imshow(self.name, self.image)
-        
-    def set_enable(self, bEnable):
-        if (self.bEnable and not bEnable):
-            cv2.destroyWindow(self.name)
-            
-        if (not self.bEnable and bEnable):
-            cv2.namedWindow(self.name)
-            
-        self.bEnable = bEnable
-        
-        
-gbImageWindowEnable = True   # Set to True to enable debugging output.
-        
-    
 
 # Colors.
 bgra_dict = {'black'         : cv.Scalar(0,0,0,0),
@@ -122,6 +85,56 @@ class Struct:
     pass
 
         
+
+###############################################################################
+###############################################################################
+# A class to just show an image.
+class ImageWindow:
+    def __init__(self, bEnable, name):
+        self.image = None
+        self.shape = (100,100)
+        self.name = name
+        self.bEnable = False
+        self.set_enable(bEnable)
+
+        
+    def set_shape(self, shape):
+        self.shape = shape
+        
+        
+    def set_ravelled(self, ravel):
+        self.image = np.reshape(ravel, self.shape)
+        
+        
+    def set_image(self, image):
+        if (image is not None):
+            self.image = image.astype(np.uint8)
+            self.shape = image.shape
+        else:
+            self.image = None
+        
+        
+    def show(self):
+        if (self.bEnable):
+            if (self.image is not None) and (self.image.size>0):
+                img = self.image
+            else:
+                img = np.zeros(self.shape)
+            
+            cv2.imshow(self.name, img)
+        
+        
+    def set_enable(self, bEnable):
+        if (self.bEnable and not bEnable):
+            cv2.destroyWindow(self.name)
+            
+        if (not self.bEnable and bEnable):
+            cv2.namedWindow(self.name)
+            
+        self.bEnable = bEnable
+        
+        
+    
 ###############################################################################
 ###############################################################################
 class Button:
@@ -305,6 +318,7 @@ class Fly(object):
         self.bgra_body = bgra_dict['light_gray']
         self.ptBody1 = None
         self.ptBody2 = None
+        self.bInvertcolor = False
         self.iCount  = 0
         self.stamp   = 0
 
@@ -335,10 +349,15 @@ class Fly(object):
         self.wing_r.set_params(params)
 
         self.angleBody_i = self.get_bodyangle_i()
-        ptBodyCenter_i = (np.array([params['head']['x'], params['head']['y']]) + np.array([params['abdomen']['x'], params['abdomen']['y']])) / 2
+        self.ptBodyCenter_i = (np.array([params['head']['x'], params['head']['y']]) + np.array([params['abdomen']['x'], params['abdomen']['y']])) / 2.0
         r = max(params['left']['radius_outer'], params['right']['radius_outer'])
-        self.ptBody1 = tuple((ptBodyCenter_i + r * np.array([np.cos(self.angleBody_i), np.sin(self.angleBody_i)])).astype(int))
-        self.ptBody2 = tuple((ptBodyCenter_i - r * np.array([np.cos(self.angleBody_i), np.sin(self.angleBody_i)])).astype(int))
+        self.ptBody1 = tuple((self.ptBodyCenter_i + r * np.array([np.cos(self.angleBody_i), np.sin(self.angleBody_i)])).astype(int))
+        self.ptBody2 = tuple((self.ptBodyCenter_i - r * np.array([np.cos(self.angleBody_i), np.sin(self.angleBody_i)])).astype(int))
+        
+        # Radius of an area approximately where the thorax would be.
+        self.rThorax = np.linalg.norm(np.array([params['head']['x'], params['head']['y']]) - np.array([params['abdomen']['x'], params['abdomen']['y']]))/2.0
+        self.bInvertColorValid = False
+        
     
             
     def get_bodyangle_i(self):
@@ -346,6 +365,25 @@ class Fly(object):
         angleBody  = (angle_i + np.pi) % (2.0*np.pi) - np.pi
          
         return angleBody
+        
+
+    # Calculate what we think the bInvertcolor flag should be to make white-on-black.        
+    def calc_invertcolor(self, image):
+        # Get a roi around the body center.
+        xMin = max(0,self.ptBodyCenter_i[0]-int(0.75*self.rThorax))
+        yMin = max(0,self.ptBodyCenter_i[1]-int(0.75*self.rThorax))
+        xMax = min(self.ptBodyCenter_i[0]+int(0.75*self.rThorax), image.shape[1]-1)
+        yMax = min(self.ptBodyCenter_i[1]+int(0.75*self.rThorax), image.shape[0]-1)
+        imgThorax = image[yMin:yMax, xMin:xMax]
+        
+        # If the roi is too light, then invert the color.
+        if (np.mean(imgThorax) <= 127.0):
+            self.bInvertcolor = True
+        else:
+            self.bInvertcolor = False
+            
+        self.bInvertColorValid = True
+        
         
                 
     def set_background(self, image):
@@ -363,19 +401,27 @@ class Fly(object):
         
 
     def update(self, header=None, image=None):
-        if (header is not None):
-            self.stamp = header.stamp
-        else:
-            self.stamp = rospy.Time.now()
-        
-        self.head.update(header, image)
-        self.abdomen.update(header, image)
-        self.wing_l.update(header, image)
-        self.wing_r.update(header, image)
+        if (image is not None):
+            if (not self.bInvertColorValid):
+                self.calc_invertcolor(image)
+            
+            if (self.bInvertcolor):
+                image = 255-image
+    
+            if (header is not None):
+                self.stamp = header.stamp
+            else:
+                self.stamp = rospy.Time.now()
+            
+            self.head.update(header, image)
+            self.abdomen.update(header, image)
+            self.wing_l.update(header, image)
+            self.wing_r.update(header, image)
+            
 
             
     def draw(self, image):
-        # Draw line to indicate the body.
+        # Draw line to indicate the body axis.
         cv2.line(image, self.ptBody1, self.ptBody2, self.bgra_body, 1) # Draw a line longer than just head-to-abdomen.
                 
         self.head.draw(image)
@@ -433,24 +479,25 @@ class Bodypart(object):
         self.bInitializedMasks = False
         self.bInitialized = False
 
-        self.name = name
+        self.name        = name
 
-        self.bgra     = bgra_dict[color]
-        self.bgra_dim = tuple(np.array(bgra_dict[color])/2)
-        self.bgra_state = bgra_dict['red']
-        self.pixelmax = 255.0
+        self.bgra        = bgra_dict[color]
+        self.bgra_dim    = tuple(np.array(bgra_dict[color])/2)
+        self.bgra_state  = bgra_dict['red']
+        self.pixelmax    = 255.0
         self._transforms = {}
     
-        self.windowPolar = ImageWindow(False, self.name+'Polar')
-        self.windowBG    = ImageWindow(False, self.name+'BG')
-        self.windowFG    = ImageWindow(False, self.name+'FG')
-        self.windowTest  = ImageWindow(False, 'Test')
+        self.windowPolar      = ImageWindow(False, self.name+'Polar')
+        self.windowBG         = ImageWindow(False, self.name+'BG')
+        self.windowFG         = ImageWindow(False, self.name+'FG')
+#         self.windowStabilized = ImageWindow(False, self.name+'Stable')
+        self.windowTest       = ImageWindow(False, self.name+'Test')
 
-        self.state           = Struct()
+        self.state             = Struct()
         self.stateOrigin       = Struct()
         self.stateOriginOffset = Struct()
-        self.stateLo         = Struct()
-        self.stateHi         = Struct()
+        self.stateLo           = Struct()
+        self.stateHi           = Struct()
 
         self.stampPrev = None
         self.dt = rospy.Time(0)
@@ -479,16 +526,16 @@ class Bodypart(object):
         self.imgRoiMaskedPolarCropped             = None
         self.imgRoiMaskedPolarCroppedWindowed     = None
         self.imgRoiMaskedPolarCroppedWindowedPrev = None
-        self.imgOffset = None
+        self.imgComparison = None
 
         self.imgRoiBackground                     = None
         
-        self.create_wfn                          = self.create_wfn_tukey
-        self.wfnRoi                             = None
-        self.wfnRoiMaskedPolarCropped           = None
+        self.create_wfn                           = self.create_wfn_tukey
+        self.wfnRoi                               = None
+        self.wfnRoiMaskedPolarCropped             = None
         
 #         self.maskRoiEllipse1                     = None
-        self.maskRoiEllipse                     = None
+        self.maskRoiEllipse                       = None
         
         self.set_params(params)
         self.pubAngle = rospy.Publisher('strokelitude/'+self.name+'/angle', Float32)
@@ -526,7 +573,9 @@ class Bodypart(object):
         self.sinAngleBodyOutward = np.sin(self.angleBodyOutward_i)
         self.R = np.array([[self.cosAngleBodyOutward, -self.sinAngleBodyOutward], [self.sinAngleBodyOutward, self.cosAngleBodyOutward]])
 
-        self.imgOffset = None
+        self.imgComparison = None
+        self.windowTest.set_image(self.imgComparison)
+        
         self.iCount = 0
 
         self.stateOrigin.mass = 0.0
@@ -576,6 +625,7 @@ class Bodypart(object):
         self.windowPolar.set_enable(self.params['extra_windows'] and self.params[self.name]['track'])
         self.windowBG.set_enable(self.params['extra_windows'] and self.params[self.name]['track'] and self.params[self.name]['subtract_bg'])
         self.windowFG.set_enable(self.params['extra_windows'] and self.params[self.name]['track'])
+#         self.windowStabilized.set_enable(self.params['extra_windows'] and self.params[self.name]['track'])
         
         
     def _get_transform_polar_log(self, i_0, j_0, i_n, j_n, nRho, dRho, nTheta, theta_0, theta_1):
@@ -846,15 +896,15 @@ class Bodypart(object):
     #
     def create_wfn_hanning(self, shape):
         (height,width) = shape
-        hanning = np.ones(shape, dtype=np.float32)
+        wfn = np.ones(shape, dtype=np.float32)
         if (height>1) and (width>1):
             for i in range(width):
                  for j in range(height):
                      x = 2*np.pi*i/(width-1) # x ranges 0 to 2pi across the image width
                      y = 2*np.pi*j/(height-1) # y ranges 0 to 2pi across the image height
-                     hanning[j][i] = 0.5*(1-np.cos(x)) * 0.5*(1-np.cos(y))
+                     wfn[j][i] = 0.5*(1-np.cos(x)) * 0.5*(1-np.cos(y))
                  
-        return hanning
+        return wfn
 
 
     # create_wfn_tukey()
@@ -924,18 +974,9 @@ class Bodypart(object):
             shift0  = np.roll(shift,  int(shift.shape[0]/2), 0)
             shift00 = np.roll(shift0, int(shift.shape[1]/2), 1) # Roll the matrix so 0,0 goes to the center of the image.
             
-#             if (self.name=='head'):
-#                 img = shift00-np.min(shift00)
-#                 img *= 1.0/np.max(img) 
-#                 img = np.exp(np.exp(np.exp(img)))
-#                 img -= np.min(img)
-#                 img *= 255.0/np.max(img) 
-#                 self.windowTest.set_image(img)
-            
             # Get the coordinates of the maximum shift.
             kShift = np.argmax(shift00)
             (iShift,jShift) = np.unravel_index(kShift, shift00.shape)
-            #rospy.logwarn((iShift,jShift))
 
             # Get weighted centroid of a region around the peak, for sub-pixel accuracy.
             w = 7
@@ -954,8 +995,6 @@ class Bodypart(object):
                 iShiftSubpixel = float(shift.shape[0])/2.0
                 jShiftSubpixel = float(shift.shape[1])/2.0
             
-            #rospy.logwarn((iShiftSubpixel,jShiftSubpixel))
-
             # Accomodate the matrix roll we did above.
             iShiftSubpixel -= float(shift.shape[0])/2.0
             jShiftSubpixel -= float(shift.shape[1])/2.0
@@ -1098,7 +1137,8 @@ class Bodypart(object):
         
         
         self.handles['hinge'].pt       = np.array([x, y])
-        self.handles['radius_axial'].pt = np.array([x, y]) + ((raxial+gOffsetHandle) * np.array([self.cosAngleBodyOutward,self.sinAngleBodyOutward]))
+        #self.handles['radius_axial'].pt = np.array([x, y]) + ((raxial+gOffsetHandle) * np.array([self.cosAngleBodyOutward,self.sinAngleBodyOutward]))
+        self.handles['radius_axial'].pt = np.array([x, y]) + ((raxial              ) * np.array([self.cosAngleBodyOutward,self.sinAngleBodyOutward]))
         self.handles['angle_wedge'].pt  = np.array([x, y]) + np.dot(self.R, np.array([(raxial+dr)*np.cos(angle), -(rortho+dr)*np.sin(angle)]))
 
         self.ptWedge1_axial = tuple((np.array([x, y]) + np.dot(self.R, np.array([raxial*np.cos(self.angle_wedge),  -(rortho)*np.sin(self.angle_wedge)]))).astype(int))
@@ -1187,14 +1227,13 @@ class Bodypart(object):
                 self.imgRoiMaskedPolarCroppedWindowed = cv2.multiply(self.imgRoiMaskedPolarCropped.astype(np.float32), self.wfnRoiMaskedPolarCropped)
 
             
-        if (self.imgOffset is None):
-            self.imgOffset = self.imgRoiMaskedPolarCroppedWindowed
+        if (self.imgComparison is None) and (self.iCount>1):
+            self.imgComparison = self.imgRoiMaskedPolarCroppedWindowed
+            self.windowTest.set_image(self.imgComparison)
         
         # Show the image.
-        #(img,iGood) = self.collapse_vertical_bands(self.imgRoiMaskedPolarCropped)
         img = self.imgRoiMaskedPolarCroppedWindowed
         #img = self.imgRoiMaskedPolarCropped
-        #img = self.imgOffset
         self.windowPolar.set_image(img)
         
 
@@ -1246,8 +1285,8 @@ class Bodypart(object):
         imgNow = self.imgRoiMaskedPolarCroppedWindowed
         
         # Get the rotation & expansion between images.
-        if (imgNow is not None) and (self.imgOffset is not None):
-            (rShift, aShift) = self.get_shift_from_phasecorr(imgNow, self.imgOffset)
+        if (imgNow is not None) and (self.imgComparison is not None):
+            (rShift, aShift) = self.get_shift_from_phasecorr(imgNow, self.imgComparison)
             dAngleOffset = aShift * np.abs(2*self.angle_wedge) / float(imgNow.shape[1])
             dRadiusOffset = rShift
             self.state.angle  = self.stateOrigin.angle  + self.stateOriginOffset.angle  + dAngleOffset
@@ -1280,13 +1319,13 @@ class Bodypart(object):
 #                     rospy.logwarn('lo:% 0.4f, ref:% 0.4f, hi:% 0.4f, offset:% 0.4f, angle:% 0.4f' % (self.stateLo.angle, refAngle, self.stateHi.angle, self.stateOriginOffset.angle, self.state.angle))
 
                 if (refAngle < self.state.angle < self.stateOriginOffset.angle) or (self.stateOriginOffset.angle < self.state.angle < refAngle):
-#                     rospy.logwarn('Set Origin, %s: old (angle=% 0.3f, radius=% 0.3f), new (angle=% 0.3f, radius=% 0.3f)' % (self.name, 
-#                                                                                                                             self.state.angle, 
-#                                                                                                                             self.state.radius, 
-#                                                                                                                             0.0, 
-#                                                                                                                             self.params[self.name]['radius_axial']))
-                    self.imgOffset = self.imgRoiMaskedPolarCroppedWindowed
-                    #self.windowTest.set_image(self.imgOffset)
+                    self.imgComparison = imgNow
+                    #rospy.logwarn('Set Origin, %s: old (angle=% 0.3f, radius=% 0.3f), new (angle=% 0.3f, radius=% 0.3f)' % (self.name, 
+                    #                                                                                                        self.state.angle, 
+                    #                                                                                                        self.state.radius, 
+                    #                                                                                                        0.0, 
+                    #                                                                                                        self.params[self.name]['radius_axial']))
+                    self.windowTest.set_image(self.imgComparison)
 
                     # Converge the offset to the reference...
                     #self.stateOriginOffset.angle = self.state.angle
@@ -1299,8 +1338,16 @@ class Bodypart(object):
                     #self.stateLo.radius -= self.state.radius-self.params[self.name]['radius_axial']
                     #self.stateHi.radius -= self.state.radius-self.params[self.name]['radius_axial']
 
-        if (self.name=='head'):
-            self.windowTest.set_image(np.roll(self.imgRoiMaskedPolar, -int(aShift), 1))
+
+            # Stabilized image.
+#             size = (self.imgRoiMaskedPolar.shape[1],
+#                     self.imgRoiMaskedPolar.shape[0])
+#             center = (self.imgRoiMaskedPolar.shape[1]/2.0+aShift, 
+#                       self.imgRoiMaskedPolar.shape[0]/2.0+rShift)
+#             self.imgStabilized = cv2.getRectSubPix(self.imgRoiMaskedPolar, size, center)
+#             
+#             self.windowStabilized.set_image(self.imgStabilized)
+            
         self.state.mass = 0.0
         
         
@@ -1365,6 +1412,8 @@ class Bodypart(object):
     # Draw the outline.
     #
     def draw(self, image):
+        self.draw_handles(image)
+
         if (self.params[self.name]['track']):
             ptCenter0_i = (int(self.params[self.name]['x']), int(self.params[self.name]['y']))
             
@@ -1487,10 +1536,9 @@ class Bodypart(object):
             self.windowPolar.show()
             self.windowBG.show()
             self.windowFG.show()
+#             self.windowStabilized.show()
             self.windowTest.show()
         
-        self.draw_handles(image)
-
 # end class Bodypart
 
     
@@ -1678,10 +1726,10 @@ class Wing(object):
         xNonzero = np.where(xSum>0)[0]
         yNonzero = np.where(ySum>0)[0]
         if (len(xNonzero) > 0) and (len(yNonzero) > 0):
-            xMin = xNonzero[0]  - 2
-            xMax = xNonzero[-1] + 3
-            yMin = yNonzero[0]  - 2
-            yMax = yNonzero[-1] + 3
+            xMin = max(0, xNonzero[0] - 2)
+            xMax = min(xNonzero[-1] + 3, shape[0])
+            yMin = max(0, yNonzero[0] - 2)
+            yMax = min(yNonzero[-1] + 3, shape[0])
         
             self.roi = np.array([xMin, yMin, xMax, yMax])
             self.ravelMaskRoi = np.ravel(mask[yMin:yMax, xMin:xMax])
@@ -2079,7 +2127,6 @@ class MainWindow:
                     'image_topic':'/camera/image_raw',
                     'use_gui':True,                     # You can turn off the GUI to speed the framerate.
                     'extra_windows':True,               # Show the helpful extra windows.
-                    'invertcolor':False,                # You want a light fly on a dark background.  Only needed if not using a background image.
                     'symmetric':True,                   # Forces the UI to remain symmetric.
                     'resolution_radians':0.0174532925,  # Coarser resolution will speed the framerate. 1 degree == 0.0174532925 radians.
                     'threshold_flight':0.1,
@@ -2173,18 +2220,6 @@ class MainWindow:
         self.buttons.append(btn)
         
         x = btn.right+1
-        btn = Button(pt=[x,y], scale=self.scale, type='checkbox', name='subtract_bg', text='subtractBG', state=self.params['right']['subtract_bg'])
-        self.buttons.append(btn)
-
-        x = btn.right+1
-        btn = Button(pt=[x,y], scale=self.scale, type='checkbox', name='invertcolor', text='invert', state=self.params['invertcolor'])
-        self.buttons.append(btn)
-
-        x = btn.right+1
-        btn = Button(pt=[x,y], scale=self.scale, type='checkbox', name='symmetry', text='symmetric', state=self.params['symmetric'])
-        self.buttons.append(btn)
-
-        x = btn.right+1
         btn = Button(pt=[x,y], scale=self.scale, type='checkbox', name='head', text='head', state=self.params['head']['track'])
         self.buttons.append(btn)
 
@@ -2194,6 +2229,14 @@ class MainWindow:
 
         x = btn.right+1
         btn = Button(pt=[x,y], scale=self.scale, type='checkbox', name='wings', text='wings', state=self.params['right']['track'])
+        self.buttons.append(btn)
+
+        x = btn.right+1
+        btn = Button(pt=[x,y], scale=self.scale, type='checkbox', name='subtract_bg', text='subtractBG', state=self.params['right']['subtract_bg'])
+        self.buttons.append(btn)
+
+        x = btn.right+1
+        btn = Button(pt=[x,y], scale=self.scale, type='checkbox', name='symmetry', text='symmetric', state=self.params['symmetric'])
         self.buttons.append(btn)
 
         x = btn.right+1
@@ -2357,10 +2400,7 @@ class MainWindow:
 
         # Receive an image:
         try:
-            if (not self.params['invertcolor']):
-                img = np.uint8(cv.GetMat(self.cvbridge.imgmsg_to_cv(rosimage, 'passthrough')))
-            else:
-                img = 255-np.uint8(cv.GetMat(self.cvbridge.imgmsg_to_cv(rosimage, 'passthrough')))
+            img = np.uint8(cv.GetMat(self.cvbridge.imgmsg_to_cv(rosimage, 'passthrough')))
             
         except CvBridgeError, e:
             rospy.logwarn ('Exception converting background image from ROS to opencv:  %s' % e)
@@ -2655,7 +2695,7 @@ class MainWindow:
 
             if (tagSelected=='radius_axial'): 
                 dr = paramsScaled[bodypartSelected]['radius_outer'] - paramsScaled[bodypartSelected]['radius_axial']
-                r = float(np.linalg.norm(np.array([paramsScaled[bodypartSelected]['x'],paramsScaled[bodypartSelected]['y']]) - ptMouse))-gOffsetHandle
+                r = float(np.linalg.norm(np.array([paramsScaled[bodypartSelected]['x'],paramsScaled[bodypartSelected]['y']]) - ptMouse))#-gOffsetHandle
                 paramsScaled[bodypartSelected]['radius_axial'] = max(r, dr+5)
                 paramsScaled[bodypartSelected]['radius_outer'] = paramsScaled[bodypartSelected]['radius_axial'] + dr
                 paramsScaled[bodypartSelected]['radius_ortho'] = paramsScaled[bodypartSelected]['radius_axial'] # Force it to be circular. 
@@ -2663,7 +2703,7 @@ class MainWindow:
                 paramsScaled[bodypartSelected]['radius_ortho'] = float(np.linalg.norm(np.array([paramsScaled[bodypartSelected]['x'],paramsScaled[bodypartSelected]['y']]) - ptMouse))
             if (tagSelected=='angle_wedge'):
                 # radius_outer
-                r = float(np.linalg.norm(np.array([paramsScaled[bodypartSelected]['x'],paramsScaled[bodypartSelected]['y']]) - ptMouse))-gOffsetHandle
+                r = float(np.linalg.norm(np.array([paramsScaled[bodypartSelected]['x'],paramsScaled[bodypartSelected]['y']]) - ptMouse))#-gOffsetHandle
                 paramsScaled[bodypartSelected]['radius_outer'] = int(np.clip(r,
                                                                              paramsScaled[bodypartSelected]['radius_axial']+5,
                                                                              2*paramsScaled[bodypartSelected]['radius_axial']-5))
@@ -2797,17 +2837,6 @@ class MainWindow:
             self.update_params_from_handle(self.bodypartSelected, self.tagSelected, ptMouse.clip((0,self.yToolbar), (self.shapeImage[1],self.shapeImage[0])))
             self.fly.set_params(self.scale_params(self.params, self.scale))
         
-            # Save the results.
-            if (event==cv2.EVENT_LBUTTONUP):
-                self.set_dict_with_preserve(self.params, rospy.get_param('strokelitude'))
-                rospy.set_param('strokelitude', self.params)
-                with self.lock:
-                    rosparam.dump_params(self.parameterfile, 'strokelitude')
-                
-                self.fly.create_masks(self.shapeImage)
-                self.set_dict_with_preserve(self.params, rospy.get_param('strokelitude'))
-                rospy.set_param('strokelitude', self.params)
-            
         # end if (self.uiSelected=='handle'):
             
 
@@ -2828,10 +2857,7 @@ class MainWindow:
                     self.buttons[self.iButtonSelected].state = self.stateSelected
 
 
-                if (self.nameSelected == self.nameSelectedNow == 'invertcolor'):
-                    self.params['invertcolor'] = self.buttons[self.iButtonSelected].state
-                    
-                elif (self.nameSelected == self.nameSelectedNow == 'symmetry'):
+                if (self.nameSelected == self.nameSelectedNow == 'symmetry'):
                     self.params['symmetric'] = self.buttons[self.iButtonSelected].state
                     
                 elif (self.nameSelected == self.nameSelectedNow == 'subtract_bg'):
@@ -2858,6 +2884,13 @@ class MainWindow:
 
             self.fly.set_params(self.scale_params(self.params, self.scale))
             self.fly.create_masks(self.shapeImage)
+
+            # Save the results.
+            self.set_dict_with_preserve(self.params, rospy.get_param('strokelitude'))
+            rospy.set_param('strokelitude', self.params)
+            with self.lock:
+                rosparam.dump_params(self.parameterfile, 'strokelitude')
+
 
             self.bMousing           = False
             self.nameSelected       = None
