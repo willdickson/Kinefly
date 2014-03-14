@@ -94,7 +94,7 @@ class Struct:
 ###############################################################################
 ###############################################################################
 # A class to just show an image.
-class ImageWindow:
+class ImageWindow(object):
     def __init__(self, bEnable, name):
         self.image = None
         self.shape = (100,100)
@@ -142,7 +142,7 @@ class ImageWindow:
     
 ###############################################################################
 ###############################################################################
-class Button:
+class Button(object):
     def __init__(self, name=None, text=None, pt=None, rect=None, scale=1.0, type='pushbutton', state=False):
         self.name = name
         self.pt = pt
@@ -287,7 +287,7 @@ class Button:
             
 ###############################################################################
 ###############################################################################
-class Handle:
+class Handle(object):
     def __init__(self, pt=np.array([0,0]), color=bgra_dict['white']):
         self.pt = pt
 
@@ -314,7 +314,7 @@ class Handle:
 
 ###############################################################################
 ###############################################################################
-class SetDict:
+class SetDict(object):
     # set_dict(self, dTarget, dSource, bPreserve)
     # Takes a target dictionary, and enters values from the source dictionary, overwriting or not, as asked.
     # For example,
@@ -350,7 +350,7 @@ class SetDict:
     
 ###############################################################################
 ###############################################################################
-class PolarTransforms:
+class PolarTransforms(object):
     def __init__(self):
         self._transforms = {}
 
@@ -605,10 +605,66 @@ class PolarTransforms:
         return imgTransformed
 
 
+
+class PhaseCorrelation(object):
+    # get_shift()
+    # Calculate the coordinate shift between the two images.
+    #
+    def get_shift(self, imgA, imgB):
+        if (imgA is not None) and (imgB is not None) and (imgA.shape==imgB.shape):
+            # Phase correlation.
+            A  = cv2.dft(imgA)
+            B  = cv2.dft(imgB)
+            AB = cv2.mulSpectrums(A, B, flags=0, conjB=True)
+            crosspower = AB / cv2.norm(AB)
+            shift = cv2.idft(crosspower)
+            shift0  = np.roll(shift,  int(shift.shape[0]/2), 0)
+            shift00 = np.roll(shift0, int(shift.shape[1]/2), 1) # Roll the matrix so 0,0 goes to the center of the image.
+            
+            # Get the coordinates of the maximum shift.
+            kShift = np.argmax(shift00)
+            (iShift,jShift) = np.unravel_index(kShift, shift00.shape)
+
+            # Get weighted centroid of a region around the peak, for sub-pixel accuracy.
+            w = 7
+            r = int((w-1)/2)
+            i0 = clip(iShift-r, 0, shift00.shape[0]-1)
+            i1 = clip(iShift+r, 0, shift00.shape[0]-1)+1
+            j0 = clip(jShift-r, 0, shift00.shape[1]-1)
+            j1 = clip(jShift+r, 0, shift00.shape[1]-1)+1
+            peak = shift00[i0:i1].T[j0:j1].T
+            moments = cv2.moments(peak, binaryImage=False)
+                       
+            if (moments['m00'] != 0.0):
+                iShiftSubpixel = moments['m01']/moments['m00'] + float(i0)
+                jShiftSubpixel = moments['m10']/moments['m00'] + float(j0)
+            else:
+                iShiftSubpixel = float(shift.shape[0])/2.0
+                jShiftSubpixel = float(shift.shape[1])/2.0
+            
+            # Accomodate the matrix roll we did above.
+            iShiftSubpixel -= float(shift.shape[0])/2.0
+            jShiftSubpixel -= float(shift.shape[1])/2.0
+
+            # Convert unsigned shifts to signed shifts. 
+            height = float(shift00.shape[0])
+            width  = float(shift00.shape[1])
+            iShiftSubpixel  = ((iShiftSubpixel+height/2.0) % height) - height/2.0
+            jShiftSubpixel  = ((jShiftSubpixel+width/2.0) % width) - width/2.0
+            
+            rv = np.array([iShiftSubpixel, jShiftSubpixel])
+            
+        else:
+            rv = np.array([0.0, 0.0])
+            
+        return rv
+        
+        
+
     
 ###############################################################################
 ###############################################################################
-class WindowFunctions:
+class WindowFunctions(object):
     # create_wfn_hanning()
     # Create a 2D Hanning window function.
     #
@@ -663,8 +719,8 @@ class WindowFunctions:
 ###############################################################################
 class Fly(object):
     def __init__(self, params={}):
-        self.head    = Bodypart(name='head',    params=params, color='cyan') 
-        self.abdomen = Bodypart(name='abdomen', params=params, color='magenta') 
+        self.head    = BodySegment(name='head',    params=params, color='cyan') 
+        self.abdomen = BodySegment(name='abdomen', params=params, color='magenta') 
         self.right  = Wing(name='right',       params=params, color='red')
         self.left  = Wing(name='left',        params=params, color='green')
         self.bgra_body = bgra_dict['light_gray']
@@ -828,78 +884,65 @@ class Fly(object):
         
 ###############################################################################
 ###############################################################################
-# Head or Abdomen.
-class Bodypart(object):
+# Contains the common behavior for tracking a bodypart via a polar coordinates transform, e.g. Head, Abdomen, or Wing.
+#
+class PolarTrackedBodypart(object):
     def __init__(self, name=None, params={}, color='white'):
-        self.bInitializedMasks = False
-        self.bInitialized = False
-
         self.name        = name
+
+        self.bInitializedMasks = False
 
         self.bgra        = bgra_dict[color]
         self.bgra_dim    = tuple(np.array(bgra_dict[color])/2)
         self.bgra_state  = bgra_dict['red']
         self.pixelmax    = 255.0
-    
-        self.windowPolar      = ImageWindow(False, self.name+'Polar')
-        self.windowBG         = ImageWindow(False, self.name+'BG')
-        self.windowFG         = ImageWindow(False, self.name+'FG')
-#         self.windowStabilized = ImageWindow(False, self.name+'Stable')
-        self.windowTest       = ImageWindow(False, self.name+'Test')
 
-        self.polartransforms   = PolarTransforms()
-        self.state             = Struct()
-        self.stateOrigin       = Struct()
-        self.stateOriginOffset = Struct()
-        self.stateLo           = Struct()
-        self.stateHi           = Struct()
-
+        self.shape     = (np.inf, np.inf)
+        self.ptHinge_i = np.array([0,0])
+        self.roi       = None
+        
+        self.create_wfn               = WindowFunctions().create_wfn_tukey
+        self.wfnRoi                   = None
+        self.wfnRoiMaskedPolarCropped = None
+        
+#         self.maskRoiEllipse1        = None
+        self.maskRoiEllipse           = None
+        
         self.stampPrev = None
         self.dt = rospy.Time(0)
+        self.polartransforms   = PolarTransforms()
 
+        self.params = {}
         self.handles = {'hinge':Handle(np.array([0,0]), self.bgra),
                         'radius_axial':Handle(np.array([0,0]), self.bgra),
                         'angle_wedge':Handle(np.array([0,0]), self.bgra)
                         }
+        
+        # Region of interest images.
+        self.imgFullBackground                  = None
+        self.imgRoiBackground                   = None
+        self.imgRoi                             = None # Untouched roi image.
+        self.imgRoiFg                           = None # Background subtracted.
+        self.imgRoiFgMasked                     = None
+        self.imgRoiFgMaskedPolar                = None
+        self.imgRoiFgMaskedPolarCropped         = None
+        self.imgRoiFgMaskedPolarCroppedWindowed = None
 
-        self.shape     = (np.inf, np.inf)
-        self.ptCOM     = np.array([0.0, 0.0])
-        self.ptHinge_i = np.array([0,0])
-        
-        self.roi = None
-        
-        self.imgFullBackground                     = None
-        
-        # Size 2x region of interest.
-        self.imgRoi_0                             = None # Untouched roi image.
-        self.imgRoi                               = None # Background subtracted.
-        self.imgRoiWindowed                       = None
-        self.imgRoiWindowedPrev                   = None
-        self.imgRoiMasked                         = None
-        self.imgRoiMaskedPolar                    = None
-        self.imgRoiMaskedPolarCropped             = None
-        self.imgRoiMaskedPolarCroppedWindowed     = None
-        self.imgRoiMaskedPolarCroppedWindowedPrev = None
-        self.imgComparison = None
 
-        self.imgRoiBackground                     = None
-        
-        self.create_wfn                           = WindowFunctions().create_wfn_tukey
-        self.wfnRoi                               = None
-        self.wfnRoiMaskedPolarCropped             = None
-        
-#         self.maskRoiEllipse1                     = None
-        self.maskRoiEllipse                       = None
-        
-        self.set_params(params)
-        self.pubAngle = rospy.Publisher('strokelitude/'+self.name+'/angle', Float32)
+        # Auxiliary windows.
+        self.windowBG         = ImageWindow(False, self.name+'BG')
+        self.windowFG         = ImageWindow(False, self.name+'FG')
+        self.windowPolar      = ImageWindow(False, self.name+'Polar')
+#         self.windowStabilized = ImageWindow(False, self.name+'Stable')
+
 
     
     # set_params()
-    # Set the given params dict into this object.
+    # Set the given params dict into this object, and cache a few values.
     #
     def set_params(self, params):
         self.params = params
+
         self.rc_background = self.params['rc_background']
         self.angleBody_i = self.get_bodyangle_i()
         self.ptHinge_i = np.array([self.params[self.name]['x'], self.params[self.name]['y']])
@@ -914,33 +957,12 @@ class Bodypart(object):
         self.sinAngleBodyOutward = np.sin(self.angleBodyOutward_i)
         self.R = np.array([[self.cosAngleBodyOutward, -self.sinAngleBodyOutward], [self.sinAngleBodyOutward, self.cosAngleBodyOutward]])
 
-        self.imgComparison = None
-        self.windowTest.set_image(self.imgComparison)
-        
-        self.iCount = 0
+        # Turn on/off the extra windows.
+        self.windowPolar.set_enable(self.params['extra_windows'] and self.params[self.name]['track'])
+        self.windowBG.set_enable(self.params['extra_windows'] and self.params[self.name]['track'] and self.params[self.name]['subtract_bg'])
+        self.windowFG.set_enable(self.params['extra_windows'] and self.params[self.name]['track'])
+#         self.windowStabilized.set_enable(self.params['extra_windows'] and self.params[self.name]['track'])
 
-        self.stateOrigin.mass = 0.0
-        self.stateOrigin.angle = 0.0
-        self.stateOrigin.radius = 0.0
-
-        self.stateOriginOffset.mass = 0.0
-        self.stateOriginOffset.angle = 0.0
-        self.stateOriginOffset.radius = float(self.params[self.name]['radius_axial'])
-
-        self.state.mass = 0.0
-        self.state.angle = 0.0
-        self.state.radius = 0.0
-
-        self.stateLo.mass = np.inf
-        self.stateLo.angle = np.inf
-        self.stateLo.radius = np.inf
-
-        self.stateHi.mass = -np.inf
-        self.stateHi.angle = -np.inf
-        self.stateHi.radius = -np.inf
-
-        self.imgRoiBackground = None
-        
         angle = self.params[self.name]['angle_wedge'] # Range is on [0,+2pi]
         
 #         # Convert from elliptical angle to circular angle.
@@ -958,70 +980,12 @@ class Bodypart(object):
         
         self.angle_wedge = angle
         
-
+        
         # Refresh the handle points.
         self.update_handle_points()
 
-        # Turn on/off the extra windows.
-        self.windowPolar.set_enable(self.params['extra_windows'] and self.params[self.name]['track'])
-        self.windowBG.set_enable(self.params['extra_windows'] and self.params[self.name]['track'] and self.params[self.name]['subtract_bg'])
-        self.windowFG.set_enable(self.params['extra_windows'] and self.params[self.name]['track'])
-#         self.windowStabilized.set_enable(self.params['extra_windows'] and self.params[self.name]['track'])
-        
-        
-    # get_shift_from_phasecorr()
-    # Calculate the coordinate shift between the two images.
-    #
-    def get_shift_from_phasecorr(self, imgA, imgB):
-        if (self.bInitialized) and (imgA is not None) and (imgB is not None) and (imgA.shape==imgB.shape):
-            # Phase correlation.
-            A  = cv2.dft(imgA)
-            B  = cv2.dft(imgB)
-            AB = cv2.mulSpectrums(A, B, flags=0, conjB=True)
-            crosspower = AB / cv2.norm(AB)
-            shift = cv2.idft(crosspower)
-            shift0  = np.roll(shift,  int(shift.shape[0]/2), 0)
-            shift00 = np.roll(shift0, int(shift.shape[1]/2), 1) # Roll the matrix so 0,0 goes to the center of the image.
-            
-            # Get the coordinates of the maximum shift.
-            kShift = np.argmax(shift00)
-            (iShift,jShift) = np.unravel_index(kShift, shift00.shape)
 
-            # Get weighted centroid of a region around the peak, for sub-pixel accuracy.
-            w = 7
-            r = int((w-1)/2)
-            i0 = clip(iShift-r, 0, shift00.shape[0]-1)
-            i1 = clip(iShift+r, 0, shift00.shape[0]-1)+1
-            j0 = clip(jShift-r, 0, shift00.shape[1]-1)
-            j1 = clip(jShift+r, 0, shift00.shape[1]-1)+1
-            peak = shift00[i0:i1].T[j0:j1].T
-            moments = cv2.moments(peak, binaryImage=False)
-                       
-            if (moments['m00'] != 0.0):
-                iShiftSubpixel = moments['m01']/moments['m00'] + float(i0)
-                jShiftSubpixel = moments['m10']/moments['m00'] + float(j0)
-            else:
-                iShiftSubpixel = float(shift.shape[0])/2.0
-                jShiftSubpixel = float(shift.shape[1])/2.0
-            
-            # Accomodate the matrix roll we did above.
-            iShiftSubpixel -= float(shift.shape[0])/2.0
-            jShiftSubpixel -= float(shift.shape[1])/2.0
 
-            # Convert unsigned shifts to signed shifts. 
-            height = float(shift00.shape[0])
-            width  = float(shift00.shape[1])
-            iShiftSubpixel  = ((iShiftSubpixel+height/2.0) % height) - height/2.0
-            jShiftSubpixel  = ((jShiftSubpixel+width/2.0) % width) - width/2.0
-            
-            rv = np.array([iShiftSubpixel, jShiftSubpixel])
-            
-        else:
-            rv = np.array([0.0, 0.0])
-            
-        return rv
-        
-        
     def get_bodyangle_i(self):
         angle_i = get_angle_from_points_i(np.array([self.params['abdomen']['x'], self.params['abdomen']['y']]), 
                                           np.array([self.params['head']['x'], self.params['head']['y']]))
@@ -1120,7 +1084,6 @@ class Bodypart(object):
         self.rClip = np.min([rClip0, rClip1, rClip2, rClip3])
         
         
-        
     # set_background()
     # Set the given image as the background image.
     #                
@@ -1140,15 +1103,91 @@ class Bodypart(object):
         dt = max(0, self.dt.to_sec())
         alphaBackground = 1.0 - np.exp(-dt / self.rc_background)
 
-        if (self.imgRoiBackground is not None) and (self.imgRoi_0 is not None):
-            if (self.imgRoiBackground.size==self.imgRoi_0.size):
-                cv2.accumulateWeighted(self.imgRoi_0.astype(np.float32), self.imgRoiBackground, alphaBackground)
+        if (self.imgRoiBackground is not None) and (self.imgRoi is not None):
+            if (self.imgRoiBackground.size==self.imgRoi.size):
+                cv2.accumulateWeighted(self.imgRoi.astype(np.float32), self.imgRoiBackground, alphaBackground)
             else:
                 self.imgRoiBackground = None
-                self.imgRoi_0 = None
+                self.imgRoi = None
                 
         self.windowBG.set_image(self.imgRoiBackground)
         
+
+    def update_roi(self, image):
+        self.shape = image.shape
+        
+        # Extract the ROI images.
+        self.imgRoi = copy.deepcopy(image[self.roi[1]:self.roi[3], self.roi[0]:self.roi[2]])
+
+        # Background Subtraction.
+        if (self.params[self.name]['subtract_bg']):
+            if (self.imgRoiBackground is not None):
+                self.imgRoiFg = cv2.absdiff(self.imgRoi, self.imgRoiBackground.astype(np.uint8))
+        else:
+            self.imgRoiFg = self.imgRoi
+            
+        # Rerange the images to black & white.
+        self.imgRoiFg -= np.min(self.imgRoiFg)
+        max2 = np.max(self.imgRoiFg)
+        self.imgRoiFg *= (255.0/float(max2))
+        
+        self.windowFG.set_image(self.imgRoiFg) 
+        
+
+            
+    def update_polar(self):
+        if (self.imgRoiFg is not None):
+            # Apply the mask.
+            if (self.maskRoiEllipse is not None):
+                self.imgRoiFgMasked = self.imgRoiFg#cv2.bitwise_and(self.imgRoiFg, self.maskRoiEllipse)
+                #self.imgRoiFgMasked  = cv2.multiply(self.imgRoiFg.astype(np.float32), self.wfnRoi)
+
+            xMax = self.imgRoiFg.shape[1]-1
+            yMax = self.imgRoiFg.shape[0]-1
+            
+            theta_0a = -self.angle_wedge
+            theta_1a = self.angle_wedge
+            
+            self.imgRoiFgMaskedPolar  = self.polartransforms.transform_polar_elliptical(self.imgRoiFgMasked, 
+                                                     self.i_0, 
+                                                     self.j_0, 
+                                                     raxial=self.params[self.name]['radius_axial'], 
+                                                     rortho=self.params[self.name]['radius_ortho'],
+                                                     dradiusStrip=int(self.params[self.name]['radius_outer']-self.params[self.name]['radius_axial']),
+                                                     amplifyRho = 1.0,
+                                                     rClip = self.rClip,
+                                                     angleEllipse=self.angleBodyOutward_i,
+                                                     theta_0 = min(theta_0a,theta_1a), 
+                                                     theta_1 = max(theta_0a,theta_1a),
+                                                     amplifyTheta = 1.0)
+                
+            # Find the y value where the black band should be cropped out.
+            sumY = np.sum(self.imgRoiFgMaskedPolar,1)
+            iSumY = np.where(sumY==0)[0]
+            if (len(iSumY)>0):
+                iMinY = np.min(iSumY)
+            else:
+                iMinY = self.imgRoiFgMaskedPolar.shape[0]
+
+            self.imgRoiFgMaskedPolarCropped = self.imgRoiFgMaskedPolar[0:iMinY]
+    
+             
+            if (self.bInitializedMasks):
+                if (self.wfnRoi is None) or (self.imgRoiFg.shape != self.wfnRoi.shape):
+                    self.wfnRoi = self.create_wfn(self.imgRoiFg.shape)
+                
+                if (self.wfnRoiMaskedPolarCropped is None) or (self.imgRoiFgMaskedPolarCropped.shape != self.wfnRoiMaskedPolarCropped.shape):
+                    self.wfnRoiMaskedPolarCropped = self.create_wfn(self.imgRoiFgMaskedPolarCropped.shape)
+                
+                self.imgRoiFgMaskedPolarCroppedWindowed = cv2.multiply(self.imgRoiFgMaskedPolarCropped.astype(np.float32), self.wfnRoiMaskedPolarCropped)
+
+            
+        # Show the image.
+        img = self.imgRoiFgMaskedPolarCroppedWindowed
+        #img = self.imgRoiFgMaskedPolarCropped
+        self.windowPolar.set_image(img)
+        
+
     # update_handle_points()
     # Update the dictionary of handle point names and locations.
     # Compute the various handle points.
@@ -1177,182 +1216,6 @@ class Bodypart(object):
         self.ptWedge2_inner = tuple((np.array([x, y]) + np.dot(self.R, np.array([rinner*np.cos(-self.angle_wedge), -(rinner)*np.sin(-self.angle_wedge)]))).astype(int))
         
         
-    def update_roi(self, image):
-        # Save the prior images.
-        if (self.imgRoiWindowed is not None):
-            self.imgRoiWindowedPrev = self.imgRoiWindowed
-            
-        self.shape = image.shape
-        
-        # Extract the ROI images.
-        self.imgRoi_0 = copy.deepcopy(image[self.roi[1]:self.roi[3], self.roi[0]:self.roi[2]])
-
-        # Background Subtraction.
-        if (self.params[self.name]['subtract_bg']):
-            if (self.imgRoiBackground is not None):
-                self.imgRoi = cv2.absdiff(self.imgRoi_0, self.imgRoiBackground.astype(np.uint8))
-        else:
-            self.imgRoi = self.imgRoi_0
-            
-        # Rerange the images to black & white.
-        self.imgRoi -= np.min(self.imgRoi)
-        max2 = np.max(self.imgRoi)
-        self.imgRoi *= (255.0/float(max2))
-        
-        self.windowFG.set_image(self.imgRoi) #(self.maskRoiEllipse)# 
-        
-        # Apply the mask.
-        if (self.maskRoiEllipse is not None) and (self.imgRoi is not None):
-            self.imgRoiMasked = self.imgRoi#cv2.bitwise_and(self.imgRoi, self.maskRoiEllipse)
-            #self.imgRoiMasked  = cv2.multiply(self.imgRoi.astype(np.float32), self.wfnRoi)
-
-            
-    def update_polar(self):
-        if (self.imgRoi is not None):
-            xMax = self.imgRoi.shape[1]-1
-            yMax = self.imgRoi.shape[0]-1
-            
-            theta_0a = -self.angle_wedge
-            theta_1a = self.angle_wedge
-            
-            self.imgRoiMaskedPolar  = self.polartransforms.transform_polar_elliptical(self.imgRoiMasked, 
-                                                     self.i_0, 
-                                                     self.j_0, 
-                                                     raxial=self.params[self.name]['radius_axial'], 
-                                                     rortho=self.params[self.name]['radius_ortho'],
-                                                     dradiusStrip=int(self.params[self.name]['radius_outer']-self.params[self.name]['radius_axial']),
-                                                     amplifyRho = 1.0,
-                                                     rClip = self.rClip,
-                                                     angleEllipse=self.angleBodyOutward_i,
-                                                     theta_0 = min(theta_0a,theta_1a), 
-                                                     theta_1 = max(theta_0a,theta_1a),
-                                                     amplifyTheta = 1.0)
-                
-            # Find the y value where the black band should be cropped out.
-            sumY = np.sum(self.imgRoiMaskedPolar,1)
-            iSumY = np.where(sumY==0)[0]
-            if (len(iSumY)>0):
-                iMinY = np.min(iSumY)
-            else:
-                iMinY = self.imgRoiMaskedPolar.shape[0]
-
-            self.imgRoiMaskedPolarCropped = self.imgRoiMaskedPolar[0:iMinY]
-    
-             
-            if (self.bInitializedMasks):
-                if (self.imgRoiMaskedPolarCroppedWindowed is not None):
-                    self.imgRoiMaskedPolarCroppedWindowedPrev = self.imgRoiMaskedPolarCroppedWindowed
-        
-                if (self.wfnRoi is None) or (self.imgRoi.shape != self.wfnRoi.shape):
-                    self.wfnRoi = self.create_wfn(self.imgRoi.shape)
-                
-                if (self.wfnRoiMaskedPolarCropped is None) or (self.imgRoiMaskedPolarCropped.shape != self.wfnRoiMaskedPolarCropped.shape):
-                    self.wfnRoiMaskedPolarCropped = self.create_wfn(self.imgRoiMaskedPolarCropped.shape)
-                
-                self.imgRoiWindowed                   = cv2.multiply(self.imgRoi.astype(np.float32), self.wfnRoi)
-                self.imgRoiMaskedPolarCroppedWindowed = cv2.multiply(self.imgRoiMaskedPolarCropped.astype(np.float32), self.wfnRoiMaskedPolarCropped)
-
-            
-        if (self.imgComparison is None) and (self.iCount>1):
-            self.imgComparison = self.imgRoiMaskedPolarCroppedWindowed
-            self.windowTest.set_image(self.imgComparison)
-        
-        # Show the image.
-        img = self.imgRoiMaskedPolarCroppedWindowed
-        #img = self.imgRoiMaskedPolarCropped
-        self.windowPolar.set_image(img)
-        
-
-    # update_state_using_phasecorr()
-    # Update the bodypart translation & rotation.
-    #
-    def update_state_using_phasecorr_cartpolar(self): # This is the older version using both the cartesian and polar images.
-        # Get the (x,y) translation between successive images.
-        (iShift, jShift) = self.get_shift_from_phasecorr(self.imgRoiWindowed, self.imgRoiWindowedPrev) # as [x,y]
-        ptCartesian = np.array([jShift, iShift])
-        ptErr = self.state.pt - self.ptCOM
-        self.state.pt += ptCartesian #- 0.005*ptErr # Correct for drift error due to integrating the shifts; pull gently toward the COM.
-
-        # Get the rotation & expansion between successive images.
-        if (self.imgRoiMaskedPolarCroppedWindowed is not None):
-            (rShift, aShift) = self.get_shift_from_phasecorr(self.imgRoiMaskedPolarCroppedWindowed, self.imgRoiMaskedPolarCroppedWindowedPrev) # as [angle,radius]
-            dAngleOffset = aShift * np.abs(2*self.angle_wedge) / self.imgRoiMaskedPolarCroppedWindowed.shape[1]
-            dRadiusOffset = rShift
-            self.state.angle += dAngleOffset
-
-        self.state.mass = 0.0
-        
-        
-    def update_state_using_phasecorr(self): # New version using just the polar image.
-        imgNow = self.imgRoiMaskedPolarCroppedWindowed
-        
-        # Get the rotation & expansion between images.
-        if (imgNow is not None) and (self.imgComparison is not None):
-            (rShift, aShift) = self.get_shift_from_phasecorr(imgNow, self.imgComparison)
-            dAngleOffset = aShift * np.abs(2*self.angle_wedge) / float(imgNow.shape[1])
-            dRadiusOffset = rShift
-            self.state.angle  = self.stateOrigin.angle  + self.stateOriginOffset.angle  + dAngleOffset
-            self.state.radius = self.stateOrigin.radius + self.stateOriginOffset.radius + dRadiusOffset
-            
-            # Get min,max's
-            self.stateLo.angle  = min(self.stateLo.angle, self.state.angle)
-            self.stateHi.angle  = max(self.stateHi.angle, self.state.angle)
-            self.stateLo.radius = min(self.stateLo.radius, self.state.radius)
-            self.stateHi.radius = max(self.stateHi.radius, self.state.radius)
-            
-            # Decay hi,lo values toward the mean value.
-#             RC = 100.0
-#             a = 1.0-np.exp(-self.dt.to_sec()/RC)
-#             d = a*(self.stateHi.angle - self.stateLo.angle)/2.0
-#             self.stateLo.angle  += d
-#             self.stateHi.angle  -= d
-#             self.stateLo.radius += d
-#             self.stateHi.radius -= d
-            
-            # Control the (angle,radius) offset to be at the midpoint of loangle, hiangle
-            # Whenever an image appears that is closer to the midpoint of loangle, hiangle, then
-            # take that image as the new comparison image.  Thus driving the comparison image 
-            # toward the midpoint image over time.
-            if (self.iCount>100):
-                # If angle and radius are near their mean values, then take a new initial image, and set the origin.
-                refAngle = (self.stateHi.angle + self.stateLo.angle)/2.0
-                
-#                 if (self.name=='head'):
-#                     rospy.logwarn('lo:% 0.4f, ref:% 0.4f, hi:% 0.4f, offset:% 0.4f, angle:% 0.4f' % (self.stateLo.angle, refAngle, self.stateHi.angle, self.stateOriginOffset.angle, self.state.angle))
-
-                if (refAngle < self.state.angle < self.stateOriginOffset.angle) or (self.stateOriginOffset.angle < self.state.angle < refAngle):
-                    self.imgComparison = imgNow
-                    #rospy.logwarn('Set Origin, %s: old (angle=% 0.3f, radius=% 0.3f), new (angle=% 0.3f, radius=% 0.3f)' % (self.name, 
-                    #                                                                                                        self.state.angle, 
-                    #                                                                                                        self.state.radius, 
-                    #                                                                                                        0.0, 
-                    #                                                                                                        self.params[self.name]['radius_axial']))
-                    self.windowTest.set_image(self.imgComparison)
-
-                    # Converge the offset to the reference...
-                    #self.stateOriginOffset.angle = self.state.angle
-                    #self.stateOriginOffset.radius = self.state.radius+0.5
-                    # ...or converge the angle to zero.
-                    self.stateLo.angle -= self.state.angle
-                    self.stateHi.angle -= self.state.angle
-                    self.state.angle = 0.0
-                    
-                    #self.stateLo.radius -= self.state.radius-self.params[self.name]['radius_axial']
-                    #self.stateHi.radius -= self.state.radius-self.params[self.name]['radius_axial']
-
-
-            # Stabilized image.
-#             size = (self.imgRoiMaskedPolar.shape[1],
-#                     self.imgRoiMaskedPolar.shape[0])
-#             center = (self.imgRoiMaskedPolar.shape[1]/2.0+aShift, 
-#                       self.imgRoiMaskedPolar.shape[0]/2.0+rShift)
-#             self.imgStabilized = cv2.getRectSubPix(self.imgRoiMaskedPolar, size, center)
-#             
-#             self.windowStabilized.set_image(self.imgStabilized)
-            
-        self.state.mass = 0.0
-        
-        
     # update()
     # Update all the internals given a foreground camera image.
     #
@@ -1372,14 +1235,8 @@ class Bodypart(object):
             self.update_roi(image)
             self.update_background()
             self.update_polar()
-            #self.update_center_of_mass()
-            self.update_state_using_phasecorr()
-            #self.update_state_using_features()
-            
-            if (self.bInitializedMasks):
-                self.bInitialized = True
-    
-    
+
+
     # hit_object()
     # Get the UI object, if any, that the mouse is on.    
     def hit_object(self, ptMouse):
@@ -1417,11 +1274,6 @@ class Bodypart(object):
         self.draw_handles(image)
 
         if (self.params[self.name]['track']):
-            pt = self.R.dot([self.state.radius*np.cos(self.state.angle), 
-                             self.state.radius*np.sin(self.state.angle)]) 
-            ptState_i = clip_pt((int(pt[0]+self.params[self.name]['x']), 
-                                 int(pt[1]+self.params[self.name]['y'])), image.shape) 
-            
             # Draw the 1x arc.
             cv2.ellipse(image,
                         (int(self.params[self.name]['x']), int(self.params[self.name]['y'])),
@@ -1453,12 +1305,152 @@ class Bodypart(object):
                         self.bgra_dim, 
                         1)
     
-            # Draw wedge.        
+            # Draw wedge lines.        
             cv2.line(image, self.ptWedge1_inner, self.ptWedge1_outer, self.bgra_dim, 1)
             cv2.line(image, self.ptWedge2_inner, self.ptWedge2_outer, self.bgra_dim, 1)
 
     
+            # Show the aux windows.
+            self.windowPolar.show()
+            self.windowBG.show()
+            self.windowFG.show()
+#             self.windowStabilized.show()
+                
+    
+
+
+###############################################################################
+###############################################################################
+# Head or Abdomen.
+class BodySegment(PolarTrackedBodypart):
+    def __init__(self, name=None, params={}, color='white'):
+        PolarTrackedBodypart.__init__(self, name, params, color)
+        
+        self.phasecorr         = PhaseCorrelation()
+        self.state             = Struct()
+        self.stateOrigin       = Struct()
+        self.stateOriginOffset = Struct()
+        self.stateLo           = Struct()
+        self.stateHi           = Struct()
+        
+        self.windowTest = ImageWindow(False, self.name+'Test')
+        self.set_params(params)
+
+    
+    # set_params()
+    # Set the given params dict into this object.
+    #
+    def set_params(self, params):
+        PolarTrackedBodypart.set_params(self, params)
+        
+        self.imgRoiBackground = None
+        self.imgComparison = None
+        self.windowTest.set_image(self.imgComparison)
+        
+        self.iCount = 0
+
+        self.stateOrigin.mass = 0.0
+        self.stateOrigin.angle = 0.0
+        self.stateOrigin.radius = float(self.params[self.name]['radius_axial'])
+
+        self.state.mass = 0.0
+        self.state.angle = 0.0
+        self.state.radius = 0.0
+
+        self.stateLo.mass = np.inf
+        self.stateLo.angle = np.inf
+        self.stateLo.radius = np.inf
+
+        self.stateHi.mass = -np.inf
+        self.stateHi.angle = -np.inf
+        self.stateHi.radius = -np.inf
+        
+
+        
+    # update_state_using_phasecorr()
+    # Update the bodypart translation & rotation.
+    #
+    def update_state_using_phasecorr(self): # New version using just the polar image.
+        imgNow = self.imgRoiFgMaskedPolarCroppedWindowed
+        
+        # Get the rotation & expansion between images.
+        if (imgNow is not None) and (self.imgComparison is not None):
+            (rShift, aShift) = self.phasecorr.get_shift(imgNow, self.imgComparison)
+            dAngleOffset = aShift * np.abs(2*self.angle_wedge) / float(imgNow.shape[1])
+            dRadiusOffset = rShift
+            self.state.angle  = self.stateOrigin.angle  + dAngleOffset
+            self.state.radius = self.stateOrigin.radius + dRadiusOffset
+            
+            # Get min,max's
+            self.stateLo.angle  = min(self.stateLo.angle, self.state.angle)
+            self.stateHi.angle  = max(self.stateHi.angle, self.state.angle)
+            self.stateLo.radius = min(self.stateLo.radius, self.state.radius)
+            self.stateHi.radius = max(self.stateHi.radius, self.state.radius)
+            
+            # Control the (angle,radius) offset to be at the midpoint of loangle, hiangle
+            # Whenever an image appears that is closer to the midpoint of loangle, hiangle, then
+            # take that image as the new comparison image.  Thus driving the comparison image 
+            # toward the midpoint image over time.
+            if (self.iCount>100):
+                # If angle and radius are near their mean values, then take a new initial image, and set the origin.
+                refAngle = np.abs((self.stateHi.angle + self.stateLo.angle)/2.0)
+                
+#                 if (self.name=='head'):
+#                     rospy.logwarn('lo:% 0.4f, ref:% 0.4f, hi:% 0.4f, offset:% 0.4f, angle:% 0.4f' % (self.stateLo.angle, refAngle, self.stateHi.angle, self.stateOriginOffset.angle, self.state.angle))
+
+                if (-refAngle < self.state.angle < refAngle):
+                    self.imgComparison = imgNow
+                    self.windowTest.set_image(self.imgComparison)
+
+                    # Converge the origin to zero.
+                    self.stateLo.angle -= self.state.angle
+                    self.stateHi.angle -= self.state.angle
+                    self.state.angle = 0.0
+                    
+                    #self.stateLo.radius -= self.state.radius-self.params[self.name]['radius_axial']
+                    #self.stateHi.radius -= self.state.radius-self.params[self.name]['radius_axial']
+
+
+            # Stabilized image.
+#             size = (self.imgRoiFgMaskedPolar.shape[1],
+#                     self.imgRoiFgMaskedPolar.shape[0])
+#             center = (self.imgRoiFgMaskedPolar.shape[1]/2.0+aShift, 
+#                       self.imgRoiFgMaskedPolar.shape[0]/2.0+rShift)
+#             self.imgStabilized = cv2.getRectSubPix(self.imgRoiFgMaskedPolar, size, center)
+#             
+#             self.windowStabilized.set_image(self.imgStabilized)
+            
+        self.state.mass = 0.0
+        
+        
+    # update()
+    # Update all the internals given a foreground camera image.
+    #
+    def update(self, header, image):
+        PolarTrackedBodypart.update(self, header, image)
+
+        if (self.imgComparison is None) and (self.iCount>1):
+            self.imgComparison = self.imgRoiFgMaskedPolarCroppedWindowed
+            self.windowTest.set_image(self.imgComparison)
+        
+        if (self.params[self.name]['track']):
+            self.update_state_using_phasecorr()
+            
+    
+    
+    # draw()
+    # Draw the outline.
+    #
+    def draw(self, image):
+        PolarTrackedBodypart.draw(self, image)
+
+        if (self.params[self.name]['track']):
             # Draw the bodypart state position.
+            pt = self.R.dot([self.state.radius*np.cos(self.state.angle), 
+                             self.state.radius*np.sin(self.state.angle)]) 
+            ptState_i = clip_pt((int(pt[0]+self.params[self.name]['x']), 
+                                 int(pt[1]+self.params[self.name]['y'])), image.shape) 
+            
             cv2.ellipse(image,
                         ptState_i,
                         (2,2),
@@ -1487,27 +1479,13 @@ class Bodypart(object):
                 pass
 
             
-            # Draw the bodypart hinge.        
-            ptHinge_i = clip_pt((int(self.ptHinge_i[0]), int(self.ptHinge_i[1])), image.shape) 
-            cv2.ellipse(image,
-                        ptHinge_i,
-                        (2,2),
-                        0,
-                        0,
-                        360,
-                        self.bgra, 
-                        1)
-    
             # Draw line from hinge to state point.        
+            ptHinge_i = clip_pt((int(self.ptHinge_i[0]), int(self.ptHinge_i[1])), image.shape) 
             cv2.line(image, ptHinge_i, ptState_i, self.bgra_state, 1)
             
-            self.windowPolar.show()
-            self.windowBG.show()
-            self.windowFG.show()
-#             self.windowStabilized.show()
             self.windowTest.show()
         
-# end class Bodypart
+# end class BodySegment
 
     
 
