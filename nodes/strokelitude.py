@@ -698,9 +698,16 @@ class EdgeDetector(object):
         angle1 = 0.0
         angle2 = 0.0
         
-        intensity = np.sum(image, 0)
-        diff = np.diff(intensity) # intensity[3:] - intensity[:-3]
+        intensities = np.sum(image, 0).astype(np.int64)
+        intensitiesF = filter_median(intensities, q=1)
+        
+        #diff = np.diff(intensitiesF) 
+        diff = intensitiesF[3:] - intensitiesF[:-3]
 
+        #rospy.logwarn((image.dtype, intensities.dtype, intensitiesF.dtype, diff.dtype))
+        #rospy.logwarn(intensitiesF)
+        #rospy.logwarn(diff)
+        
         iMax = np.argmax(diff)
         iMin = np.argmin(diff)
         if (np.abs(diff[iMax]) > np.abs(diff[iMin])): 
@@ -770,10 +777,10 @@ class WindowFunctions(object):
 ###############################################################################
 class Fly(object):
     def __init__(self, params={}):
-        self.head    = BodySegment(name='head',    params=params, color='cyan') 
-        self.abdomen = BodySegment(name='abdomen', params=params, color='magenta') 
-        self.right   = Wing(name='right',       params=params, color='red')
-        self.left    = Wing(name='left',        params=params, color='green')
+        self.head    = BodySegment(name='head',    params=params, color='cyan', bEqualizeHist=True) 
+        self.abdomen = BodySegment(name='abdomen', params=params, color='magenta', bEqualizeHist=True) 
+        self.right   = Wing(name='right',       params=params, color='red', bEqualizeHist=False)
+        self.left    = Wing(name='left',        params=params, color='green', bEqualizeHist=False)
         self.bgra_body = bgra_dict['light_gray']
         self.ptBody1 = None
         self.ptBody2 = None
@@ -935,8 +942,9 @@ class Fly(object):
 # Contains the common behavior for tracking a bodypart via a polar coordinates transform, e.g. Head, Abdomen, or Wing.
 #
 class PolarTrackedBodypart(object):
-    def __init__(self, name=None, params={}, color='white'):
+    def __init__(self, name=None, params={}, color='white', bEqualizeHist=False):
         self.name        = name
+        self.bEqualizeHist = bEqualizeHist
 
         self.bInitializedMasks = False
 
@@ -1194,10 +1202,11 @@ class PolarTrackedBodypart(object):
             self.imgRoiFg = self.imgRoi
             
         # Equalize the brightness/contrast.
-#         if (self.imgRoiFg is not None):
-#             self.imgRoiFg -= np.min(self.imgRoiFg)
-#             max2 = np.max(self.imgRoiFg)
-#             self.imgRoiFg *= (255.0/float(max2))
+        if (self.bEqualizeHist):
+            if (self.imgRoiFg is not None):
+                self.imgRoiFg -= np.min(self.imgRoiFg)
+                max2 = np.max(self.imgRoiFg)
+                self.imgRoiFg *= (255.0/float(max2))
             
         self.windowFG.set_image(self.imgRoiFg) 
         
@@ -1398,8 +1407,8 @@ class PolarTrackedBodypart(object):
 ###############################################################################
 # Head or Abdomen.
 class BodySegment(PolarTrackedBodypart):
-    def __init__(self, name=None, params={}, color='white'):
-        PolarTrackedBodypart.__init__(self, name, params, color)
+    def __init__(self, name=None, params={}, color='white', bEqualizeHist=False):
+        PolarTrackedBodypart.__init__(self, name, params, color, bEqualizeHist)
         
         self.phasecorr         = PhaseCorrelation()
         self.state             = Struct()
@@ -1562,15 +1571,15 @@ class BodySegment(PolarTrackedBodypart):
 ###############################################################################
 # Track a Wing.
 class Wing(PolarTrackedBodypart):
-    def __init__(self, name=None, params={}, color='white'):
-        PolarTrackedBodypart.__init__(self, name, params, color)
+    def __init__(self, name=None, params={}, color='white', bEqualizeHist=False):
+        PolarTrackedBodypart.__init__(self, name, params, color, bEqualizeHist)
         
         self.name = name
         self.edgedetector      = EdgeDetector()
         self.state             = Struct()
         self.bFlying = True
         
-        self.windowTest = ImageWindow(False, self.name+'Test')
+        self.windowTest = ImageWindow(False, self.name+'Edge')
         self.set_params(params)
 
     
@@ -1595,8 +1604,9 @@ class Wing(PolarTrackedBodypart):
     # Compute wing angles.
     #
     def update_state(self):
-        imgNow = self.imgRoiFgMaskedPolarCroppedWindowed
-
+        imgNow = self.imgRoiFgMaskedPolarCropped
+        self.windowTest.set_image(imgNow)
+        
         # Get the rotation & expansion between images.
         if (imgNow is not None):
             (iEdge1, iEdge2, intensity) = self.edgedetector.get_edges(imgNow)
@@ -2405,22 +2415,24 @@ class MainWindow:
                 elif (self.nameSelected == self.nameSelectedNow == 'extra_windows'):
                     self.params['extra_windows'] = self.buttons[iButtonSelected].state
 
-            self.fly.set_params(self.scale_params(self.params, self.scale))
-            self.fly.create_masks(self.shapeImage)
 
-            # Save the results.
-            SetDict().set_dict_with_preserve(self.params, rospy.get_param('strokelitude'))
+                self.fly.set_params(self.scale_params(self.params, self.scale))
+                self.fly.create_masks(self.shapeImage)
+    
+                # Save the results.
+                SetDict().set_dict_with_preserve(self.params, rospy.get_param('strokelitude'))
+
+                rospy.set_param('strokelitude', self.params)
+                with self.lock:
+                    rosparam.dump_params(self.parameterfile, 'strokelitude')
+
+
 #             for k,v in self.params.iteritems():
 #                 rospy.logwarn((k,type(v)))
 #                 if (type(v)==type({})):
 #                     for k2,v2 in v.iteritems():
 #                         rospy.logwarn('     %s, %s' % (k2,type(v2)))
                 
-            rospy.set_param('strokelitude', self.params)
-            with self.lock:
-                rosparam.dump_params(self.parameterfile, 'strokelitude')
-                rospy.sleep(1) # Why does the .yaml file get screwed up sometimes?  Try sleeping a little.
-
 
             self.bMousing           = False
             self.nameSelected       = None
