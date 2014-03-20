@@ -1,5 +1,6 @@
 Header      header
-MsgWing     left
-MsgWing     right
 MsgBodypart head
 MsgBodypart abdomen
+MsgWing     left
+MsgWing     right
+MsgExtra    extra

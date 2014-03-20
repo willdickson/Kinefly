@@ -18,7 +18,7 @@ from sensor_msgs.msg import Image
 from std_msgs.msg import Float32, Header, String
 from StrokelitudeROS.srv import *
 from StrokelitudeROS.msg import float32list as float32list_msg
-from StrokelitudeROS.msg import MsgFlystate, MsgWing, MsgBodypart, MsgCommand
+from StrokelitudeROS.msg import MsgFlystate, MsgWing, MsgBodypart, MsgExtra, MsgCommand
 from StrokelitudeROS.cfg import strokelitudeConfig
 
 gOffsetHandle = 10 # How far from the point-of-interest we place some of the handles.
@@ -715,8 +715,7 @@ class EdgeDetector(object):
         else:
             (iMajor,iMinor) = (iMin,iMax)
         
-        pixelmean = np.mean(image)
-        return (iMajor, iMinor, pixelmean/255.0)
+        return (iMajor, iMinor)
     
     
     
@@ -775,168 +774,263 @@ class WindowFunctions(object):
     
 ###############################################################################
 ###############################################################################
-class Fly(object):
-    def __init__(self, params={}):
-        self.head    = BodySegment(name='head',    params=params, color='cyan', bEqualizeHist=True) 
-        self.abdomen = BodySegment(name='abdomen', params=params, color='magenta', bEqualizeHist=True) 
-        self.right   = Wing(name='right',       params=params, color='red', bEqualizeHist=False)
-        self.left    = Wing(name='left',        params=params, color='green', bEqualizeHist=False)
-        self.bgra_body = bgra_dict['light_gray']
-        self.ptBody1 = None
-        self.ptBody2 = None
-        self.bInvertcolor = False
-        self.iCount  = 0
-        self.stamp   = 0
+# Contains the common behavior for tracking a bodypart via pixel intensity.
+#
+class IntensityTrackedBodypart(object):
+    def __init__(self, name=None, params={}, color='white', bEqualizeHist=False):
+        self.name        = name
+        self.bEqualizeHist = bEqualizeHist
 
-        self.pubFlystate = rospy.Publisher('strokelitude/flystate', MsgFlystate)
+        self.bInitializedMasks = False
+
+        self.bgra        = bgra_dict[color]
+        self.bgra_dim    = tuple(np.array(bgra_dict[color])/2)
+        self.bgra_state  = bgra_dict['red']
+        self.pixelmax    = 255.0
+
+        self.shape     = (np.inf, np.inf)
+        self.ptCenter_i = np.array([0,0])
+        self.roi       = None
+        
+        self.maskRoi           = None
+        self.sumMask = 1.0
+        
+        self.stampPrev = None
+        self.dt = rospy.Time(0)
+
+        self.params = {}
+        self.handles = {'center':Handle(np.array([0,0]), self.bgra, name='center'),
+                        'radius1':Handle(np.array([0,0]), self.bgra, name='radius1'),
+                        'radius2':Handle(np.array([0,0]), self.bgra, name='radius2')
+                        }
+        
+        # Region of interest images.
+        self.imgFullBackground                  = None
+        self.imgRoiBackground                   = None
+        self.imgRoi                             = None # Untouched roi image.
+        self.imgRoiFg                           = None # Background subtracted.
+        self.imgRoiFgMasked                     = None
+
+        # Auxiliary windows.
+        self.windowBG         = ImageWindow(False, self.name+'BG')
+        self.windowFG         = ImageWindow(False, self.name+'FG')
+        self.windowMask       = ImageWindow(False, self.name+'Mask')
 
 
+    
+    # set_params()
+    # Set the given params dict into this object, and cache a few values.
+    #
     def set_params(self, params):
         self.params = params
-        
-        self.head.set_params(params)
-        self.abdomen.set_params(params)
-        self.left.set_params(params)
-        self.right.set_params(params)
 
-        self.angleBody_i = self.get_bodyangle_i()
-        pt1 = [params['head']['hinge']['x'], params['head']['hinge']['y']]
-        pt2 = [params['abdomen']['hinge']['x'], params['abdomen']['hinge']['y']]
-        pt3 = [params['left']['hinge']['x'], params['left']['hinge']['y']]
-        pt4 = [params['right']['hinge']['x'], params['right']['hinge']['y']]
-        self.ptBodyCenter_i = get_intersection(pt1,pt2,pt3,pt4)
-        r = max(params['left']['radius_outer'], params['right']['radius_outer'])
-        self.ptBody1 = tuple((self.ptBodyCenter_i + r * np.array([np.cos(self.angleBody_i), np.sin(self.angleBody_i)])).astype(int))
-        self.ptBody2 = tuple((self.ptBodyCenter_i - r * np.array([np.cos(self.angleBody_i), np.sin(self.angleBody_i)])).astype(int))
+        self.rc_background = self.params['rc_background']
+        self.ptCenter_i = np.array([self.params[self.name]['center']['x'], self.params[self.name]['center']['y']])
         
-        # Radius of an area approximately where the thorax would be.
-        self.rThorax = np.linalg.norm(np.array([params['head']['hinge']['x'], params['head']['hinge']['y']]) - np.array([params['abdomen']['hinge']['x'], params['abdomen']['hinge']['y']]))/2.0
-        self.bInvertColorValid = False
-        
-    
-    def create_masks(self, shapeImage):
-        self.head.create_mask (shapeImage)
-        self.abdomen.create_mask (shapeImage)
-        self.right.create_mask (shapeImage)
-        self.left.create_mask (shapeImage)
+        self.cosAngle = np.cos(self.params[self.name]['angle'])
+        self.sinAngle = np.sin(self.params[self.name]['angle'])
+        #self.R = np.array([[self.cosAngle, -self.sinAngle], [self.sinAngle, self.cosAngle]])
+
+        # Turn on/off the extra windows.
+        self.windowBG.set_enable(self.params['windows'] and self.params[self.name]['track'] and self.params[self.name]['subtract_bg'])
+        self.windowFG.set_enable(self.params['windows'] and self.params[self.name]['track'])
+
+        # Refresh the handle points.
+        self.update_handle_points()
 
 
-    def get_bodyangle_i(self):
-        angle_i = get_angle_from_points_i(self.abdomen.ptHinge_i, self.head.ptHinge_i)
-        #angleBody_i  = (angle_i + np.pi) % (2.0*np.pi) - np.pi
-        angleBody_i  = angle_i
-        
-        return angleBody_i
-        
 
-    # Calculate what we think the bInvertcolor flag should be to make white-on-black.        
-    def calc_invertcolor(self, image):
-        # Get a roi around the body center.
-        xMin = max(0,self.ptBodyCenter_i[0]-int(0.75*self.rThorax))
-        yMin = max(0,self.ptBodyCenter_i[1]-int(0.75*self.rThorax))
-        xMax = min(self.ptBodyCenter_i[0]+int(0.75*self.rThorax), image.shape[1]-1)
-        yMax = min(self.ptBodyCenter_i[1]+int(0.75*self.rThorax), image.shape[0]-1)
-        imgThorax = image[yMin:yMax, xMin:xMax]
-
-        # Midpoint between darkest & lightest colors.
-        threshold = np.mean(image) 
-        #rospy.logwarn((np.min(image), np.median(image), np.mean(image), np.max(image), np.mean(imgThorax)))
+    # create_mask()
+    # Create elliptical wedge masks, and window functions.
+    #
+    def create_mask(self, shape):
+        x     = int(self.params[self.name]['center']['x'])
+        y     = int(self.params[self.name]['center']['y'])
+        r1    = int(self.params[self.name]['radius1'])
+        r2    = int(self.params[self.name]['radius2'])
+        angle = self.params[self.name]['angle']
+        bgra  = bgra_dict['white']
         
-        # If the roi is too dark, then set bInvertcolor.
-        if (np.mean(imgThorax) <= threshold):
-            self.bInvertcolor = True
-        else:
-            self.bInvertcolor = False
+        # Create the mask.
+        mask = np.zeros(shape, dtype=np.uint8)
+        cv2.ellipse(mask, (x, y), (r1, r2), int(np.rad2deg(angle)), 0, 360, bgra, cv.CV_FILLED)
+        self.windowMask.set_image(mask)
+        
+        # Find the ROI of the mask.
+        b=0 # Border
+        xSum = np.sum(mask, 0)
+        ySum = np.sum(mask, 1)
+        xMask = np.where(xSum>0)[0]
+        yMask = np.where(ySum>0)[0]
+        
+        if (len(xMask)>0) and (len(yMask)>0): 
+            # Dilate with a border.
+            xMin0 = np.where(xSum>0)[0][0]  - b
+            xMax0 = np.where(xSum>0)[0][-1] + b+1
+            yMin0 = np.where(ySum>0)[0][0]  - b
+            yMax0 = np.where(ySum>0)[0][-1] + b+1
             
-        self.bInvertColorValid = True
+            # Clip border to image edges.
+            xMin = np.max([0,xMin0])
+            yMin = np.max([0,yMin0])
+            xMax = np.min([xMax0, shape[1]-1])
+            yMax = np.min([yMax0, shape[0]-1])
+            
+            self.roi = np.array([xMin, yMin, xMax, yMax])
+            self.maskRoi = mask[yMin:yMax, xMin:xMax]
+            self.sumMask = np.sum(self.maskRoi).astype(np.float32)
+    
+            self.bInitializedMasks = True
+        else:
+            rospy.logwarn('%s: Empty mask.' % self.name)
+            self.bInitializedMasks = False
         
         
-                
+    # set_background()
+    # Set the given image as the background image.
+    #                
     def set_background(self, image):
-        self.head.set_background(image)
-        self.abdomen.set_background(image)
-        self.left.set_background(image)
-        self.right.set_background(image)
-
-    
-    def update_handle_points(self):
-        self.head.update_handle_points()
-        self.abdomen.update_handle_points()
-        self.left.update_handle_points()
-        self.right.update_handle_points()
+        self.imgFullBackground = image.astype(np.float32)
+        self.imgRoiBackground = None
         
+        
+    def update_background(self):
+        dt = max(0, self.dt.to_sec())
+        alphaBackground = 1.0 - np.exp(-dt / self.rc_background)
 
-    def update(self, header=None, image=None):
-        if (image is not None):
-            if (not self.bInvertColorValid):
-                self.calc_invertcolor(image)
-            
-            if (self.bInvertcolor):
-                image = 255-image
-    
-            if (header is not None):
-                self.stamp = header.stamp
-            else:
-                self.stamp = rospy.Time.now()
-            
-            self.head.update(header, image)
-            self.abdomen.update(header, image)
-            self.left.update(header, image)
-            self.right.update(header, image)
-            
-
-            
-    def draw(self, image):
-        # Draw line to indicate the body axis.
-        cv2.line(image, self.ptBody1, self.ptBody2, self.bgra_body, 1) # Draw a line longer than just head-to-abdomen.
+        if (self.imgRoiBackground is not None):
+            if (self.imgRoi is not None):
+                if (self.imgRoiBackground.size==self.imgRoi.size):
+                    cv2.accumulateWeighted(self.imgRoi.astype(np.float32), self.imgRoiBackground, alphaBackground)
+                else:
+                    self.imgRoiBackground = None
+                    self.imgRoi = None
+        else:
+            if (self.imgFullBackground is not None) and (self.roi is not None):
+                self.imgRoiBackground = copy.deepcopy(self.imgFullBackground[self.roi[1]:self.roi[3], self.roi[0]:self.roi[2]])
                 
-        self.head.draw(image)
-        self.abdomen.draw(image)
-        self.left.draw(image)
-        self.right.draw(image)
+        self.windowBG.set_image(self.imgRoiBackground)
+        
+
+    def update_roi(self, image):
+        self.shape = image.shape
+
+        # Extract the ROI images.
+        self.imgRoi = copy.deepcopy(image[self.roi[1]:self.roi[3], self.roi[0]:self.roi[2]])
+
+
+        # Background Subtraction.
+        self.imgRoiFg = self.imgRoi
+        if (self.params[self.name]['subtract_bg']):
+            if (self.imgRoiBackground is not None):
+                if (self.imgRoiBackground.shape==self.imgRoi.shape):
+                    self.imgRoiFg = cv2.absdiff(self.imgRoi, self.imgRoiBackground.astype(np.uint8))
+
+            
+        # Equalize the brightness/contrast.
+        if (self.bEqualizeHist):
+            if (self.imgRoiFg is not None):
+                self.imgRoiFg -= np.min(self.imgRoiFg)
+                max2 = np.max(self.imgRoiFg)
+                self.imgRoiFg *= (255.0/float(max2))
+            
+        # Apply the mask.
+        if (self.maskRoi is not None):
+            self.imgRoiFgMasked = cv2.bitwise_and(self.imgRoiFg, self.maskRoi)
+
+        self.windowFG.set_image(self.imgRoiFgMasked) 
+        
+
+            
+    # update_handle_points()
+    # Update the dictionary of handle point names and locations.
+    # Compute the various handle points.
+    #
+    def update_handle_points (self):
+        x = self.params[self.name]['center']['x']
+        y = self.params[self.name]['center']['y']
+        radius1 = self.params[self.name]['radius1']
+        radius2 = self.params[self.name]['radius2']
+        angle = self.params[self.name]['angle']
+        
+        
+        self.handles['center'].pt  = np.array([x, y])
+        self.handles['radius1'].pt = np.array([x, y]) + radius1 * np.array([self.cosAngle, self.sinAngle])
+        self.handles['radius2'].pt = np.array([x, y]) + radius2 * np.array([self.sinAngle,-self.cosAngle])
 
         
-    
-    def publish(self):
-        flystate              = MsgFlystate()
-        flystate.header       = Header(seq=self.iCount, stamp=self.stamp, frame_id='Fly')
-        if (self.params['left']['track']) and (self.left.state.angle1 is not None) and (self.left.state.angle2 is not None):
-            flystate.left     = MsgWing(intensity=self.left.state.intensity, 
-                                        angle1=self.left.state.angle1, 
-                                        angle2=self.left.state.angle2)
-        else:
-            flystate.left     = MsgWing(intensity=0.0, angle1=0.0, angle2=0.0)
-            
-        if (self.params['right']['track']) and (self.right.state.angle1 is not None) and (self.right.state.angle2 is not None):
-            flystate.right    = MsgWing(intensity=self.right.state.intensity, 
-                                        angle1=self.right.state.angle1, 
-                                        angle2=self.right.state.angle2)
-        else:
-            flystate.right    = MsgWing(intensity=0.0, angle1=0.0, angle2=0.0)
-            
-        if (self.params['head']['track']):
-            flystate.head     = MsgBodypart(intensity=self.head.state.intensity,    
-                                            radius=self.head.state.radius,    
-                                            angle=self.head.state.angle)
-        else:
-            flystate.head     = MsgBodypart(intensity=0.0, angle=0.0, radius=0.0)
-
-        if (self.params['abdomen']['track']):
-            flystate.abdomen  = MsgBodypart(intensity=self.abdomen.state.intensity, 
-                                            radius=self.abdomen.state.radius, 
-                                            angle=self.abdomen.state.angle)
-        else:
-            flystate.abdomen  = MsgBodypart(intensity=0.0, angle=0.0, radius=0.0)
-
-
+    # update()
+    # Update all the internals given a foreground camera image.
+    #
+    def update(self, header, image):
         self.iCount += 1
         
-        self.pubFlystate.publish(flystate)
+        if (self.stampPrev is not None):
+            self.dt = header.stamp - self.stampPrev
+        else:
+            self.dt = rospy.Time(0)
+        self.stampPrev = header.stamp
         
+        if (self.params[self.name]['track']):
+            if (not self.bInitializedMasks):
+                self.create_mask(image.shape)
+                
+            self.update_background()
+            self.update_roi(image)
 
-# end class Fly
 
+    # hit_object()
+    # Get the UI object, if any, that the mouse is on.    
+    def hit_object(self, ptMouse):
+        tag = None
         
+        # Check for handle hits.
+        if (self.params[self.name]['track']):
+            for tagHandle,handle in self.handles.iteritems():
+                if (handle.hit_test(ptMouse)):
+                    tag = tagHandle
+                    break
+                
+        return (self.name, tag)
+    
+
+    def draw_handles(self, image):
+        # Draw all handle points, or only just the hinge handle.
+        if (self.params[self.name]['track']):
+            for tagHandle,handle in self.handles.iteritems():
+                handle.draw(image)
+
+    
+    # draw()
+    # Draw the outline.
+    #
+    def draw(self, image):
+        self.draw_handles(image)
+
+        if (self.params[self.name]['track']):
+            x = int(self.params[self.name]['center']['x'])
+            y = int(self.params[self.name]['center']['y'])
+            radius1 = int(self.params[self.name]['radius1'])
+            radius2 = int(self.params[self.name]['radius2'])
+
+            # Draw the outer arc.
+            cv2.ellipse(image,
+                        (x, y),
+                        (radius1, radius2),
+                        np.rad2deg(self.params[self.name]['angle']),
+                        0,
+                        360,
+                        self.bgra, 
+                        1)
+    
+            # Show the aux windows.
+            self.windowBG.show()
+            self.windowFG.show()
+            self.windowMask.show()
+                
+# end class IntensityTrackedBodypart
+
+
 ###############################################################################
 ###############################################################################
 # Contains the common behavior for tracking a bodypart via a polar coordinates transform, e.g. Head, Abdomen, or Wing.
@@ -961,8 +1055,8 @@ class PolarTrackedBodypart(object):
         self.wfnRoi                   = None
         self.wfnRoiMaskedPolarCropped = None
         
-#         self.maskRoiEllipse1        = None
-        self.maskRoiEllipse           = None
+        self.maskRoi           = None
+        self.sumMask = 1.0
         
         self.stampPrev = None
         self.dt = rospy.Time(0)
@@ -1006,24 +1100,31 @@ class PolarTrackedBodypart(object):
         self.ptHinge_i = np.array([self.params[self.name]['hinge']['x'], self.params[self.name]['hinge']['y']])
         
         # Compute the body-outward-facing angle, which is the angle from the body center to the bodypart hinge.
-        pt1 = [params['head']['hinge']['x'], params['head']['hinge']['y']]
-        pt2 = [params['abdomen']['hinge']['x'], params['abdomen']['hinge']['y']]
-        pt3 = [params['left']['hinge']['x'], params['left']['hinge']['y']]
-        pt4 = [params['right']['hinge']['x'], params['right']['hinge']['y']]
-        ptBodyCenter_i = get_intersection(pt1,pt2,pt3,pt4)
-        self.angleOutward_i = float(np.arctan2(self.ptHinge_i[1]-ptBodyCenter_i[1], self.ptHinge_i[0]-ptBodyCenter_i[0]))
+#         pt1 = [params['head']['hinge']['x'], params['head']['hinge']['y']]
+#         pt2 = [params['abdomen']['hinge']['x'], params['abdomen']['hinge']['y']]
+#         pt3 = [params['left']['hinge']['x'], params['left']['hinge']['y']]
+#         pt4 = [params['right']['hinge']['x'], params['right']['hinge']['y']]
+#         ptBodyCenter_i = get_intersection(pt1,pt2,pt3,pt4)
+#         self.angleOutward_i = float(np.arctan2(self.ptHinge_i[1]-ptBodyCenter_i[1], self.ptHinge_i[0]-ptBodyCenter_i[0]))
+
+        # Compute the body-outward-facing angle, which is the angle to the current point from the relative part's point (e.g. left hinge to right hinge).
+        nameRelative = {'head':'abdomen', 
+                        'abdomen':'head', 
+                        'left':'right', 
+                        'right':'left'}
+        self.angleOutward_i = float(np.arctan2(self.params[self.name]['hinge']['y']-self.params[nameRelative[self.name]]['hinge']['y'], 
+                                               self.params[self.name]['hinge']['x']-self.params[nameRelative[self.name]]['hinge']['x']))
+
         
-        self.cosAngleBody = np.cos(self.angleBody_i)
-        self.sinAngleBody = np.sin(self.angleBody_i)
         self.cosAngleOutward = np.cos(self.angleOutward_i)
         self.sinAngleOutward = np.sin(self.angleOutward_i)
         self.R = np.array([[self.cosAngleOutward, -self.sinAngleOutward], [self.sinAngleOutward, self.cosAngleOutward]])
 
         # Turn on/off the extra windows.
-        self.windowPolar.set_enable(self.params['extra_windows'] and self.params[self.name]['track'])
-        self.windowBG.set_enable(self.params['extra_windows'] and self.params[self.name]['track'] and self.params[self.name]['subtract_bg'])
-        self.windowFG.set_enable(self.params['extra_windows'] and self.params[self.name]['track'])
-#         self.windowStabilized.set_enable(self.params['extra_windows'] and self.params[self.name]['track'])
+        self.windowPolar.set_enable(self.params['windows'] and self.params[self.name]['track'])
+        self.windowBG.set_enable(self.params['windows'] and self.params[self.name]['track'] and self.params[self.name]['subtract_bg'])
+        self.windowFG.set_enable(self.params['windows'] and self.params[self.name]['track'])
+#         self.windowStabilized.set_enable(self.params['windows'] and self.params[self.name]['track'])
 
         self.angle_hi_i = self.transform_angle_i_from_b(self.params[self.name]['angle_hi'])
         self.angle_lo_i = self.transform_angle_i_from_b(self.params[self.name]['angle_lo'])
@@ -1086,10 +1187,10 @@ class PolarTrackedBodypart(object):
         # Draw the mask.
         cv2.ellipse(mask, (x, y), (r_outer, r_outer), 0, int(np.rad2deg(self.angle_hi_i)), int(np.rad2deg(self.angle_lo_i)), bgra, cv.CV_FILLED)
         cv2.ellipse(mask, (x, y), (r_inner, r_inner), 0, 0, 360, bgra_dict['black'], cv.CV_FILLED)
+        mask = cv2.dilate(mask, np.ones([3,3])) # Make the mask one pixel bigger to account for pixel aliasing.
         self.windowMask.set_image(mask)
         
         # Find the ROI of the mask.
-        b=0 # Border
         xSum = np.sum(mask, 0)
         ySum = np.sum(mask, 1)
         xMask = np.where(xSum>0)[0]
@@ -1097,6 +1198,7 @@ class PolarTrackedBodypart(object):
         
         if (len(xMask)>0) and (len(yMask)>0): 
             # Dilate with a border.
+            b=0 # Border
             xMin0 = np.where(xSum>0)[0][0]  - b
             xMax0 = np.where(xSum>0)[0][-1] + b+1
             yMin0 = np.where(ySum>0)[0][0]  - b
@@ -1109,7 +1211,9 @@ class PolarTrackedBodypart(object):
             yMax = np.min([yMax0, shape[0]-1])
             
             self.roi = np.array([xMin, yMin, xMax, yMax])
-            self.maskRoiEllipse = mask[yMin:yMax, xMin:xMax]
+            self.maskRoi = mask[yMin:yMax, xMin:xMax]
+            self.sumMask = np.sum(self.maskRoi).astype(np.float32)
+
     
             self.i_0 = self.params[self.name]['hinge']['y'] - self.roi[1]
             self.j_0 = self.params[self.name]['hinge']['x'] - self.roi[0]
@@ -1193,13 +1297,12 @@ class PolarTrackedBodypart(object):
         self.imgRoi = copy.deepcopy(image[self.roi[1]:self.roi[3], self.roi[0]:self.roi[2]])
 
         # Background Subtraction.
+        self.imgRoiFg = self.imgRoi
         if (self.params[self.name]['subtract_bg']):
             if (self.imgRoiBackground is not None):
-                self.imgRoiFg = cv2.absdiff(self.imgRoi, self.imgRoiBackground.astype(np.uint8))
-            else:
-                rospy.logwarn('You need to save a background image to use SubtractBG.')
-        else:
-            self.imgRoiFg = self.imgRoi
+                if (self.imgRoiBackground.shape==self.imgRoi.shape):
+                    self.imgRoiFg = cv2.absdiff(self.imgRoi, self.imgRoiBackground.astype(np.uint8))
+
             
         # Equalize the brightness/contrast.
         if (self.bEqualizeHist):
@@ -1215,8 +1318,8 @@ class PolarTrackedBodypart(object):
     def update_polar(self):
         if (self.imgRoiFg is not None):
             # Apply the mask.
-            if (self.maskRoiEllipse is not None):
-                self.imgRoiFgMasked = self.imgRoiFg#cv2.bitwise_and(self.imgRoiFg, self.maskRoiEllipse)
+            if (self.maskRoi is not None):
+                self.imgRoiFgMasked = cv2.bitwise_and(self.imgRoiFg, self.maskRoi) #self.imgRoiFg#
                 #self.imgRoiFgMasked  = cv2.multiply(self.imgRoiFg.astype(np.float32), self.wfnRoi)
 
             xMax = self.imgRoiFg.shape[1]-1
@@ -1405,6 +1508,231 @@ class PolarTrackedBodypart(object):
 
 ###############################################################################
 ###############################################################################
+class Fly(object):
+    def __init__(self, params={}):
+        self.head    = BodySegment(name='head',    params=params, color='cyan', bEqualizeHist=True) 
+        self.abdomen = BodySegment(name='abdomen', params=params, color='magenta', bEqualizeHist=True) 
+        self.right   = Wing(name='right',          params=params, color='red', bEqualizeHist=False)
+        self.left    = Wing(name='left',           params=params, color='green', bEqualizeHist=False)
+        self.extra    = Legs(name='extra',           params=params, color='yellow', bEqualizeHist=False)
+        
+        self.bgra_body = bgra_dict['light_gray']
+        self.ptBodyIndicator1 = None
+        self.ptBodyIndicator2 = None
+        self.bInvertcolor = False
+        self.iCount  = 0
+        self.stamp   = 0
+
+        self.pubFlystate = rospy.Publisher('strokelitude/flystate', MsgFlystate)
+
+
+    def set_params(self, params):
+        self.params = params
+        
+        self.head.set_params(params)
+        self.abdomen.set_params(params)
+        self.left.set_params(params)
+        self.right.set_params(params)
+        self.extra.set_params(params)
+
+        pt1 = [params['head']['hinge']['x'], params['head']['hinge']['y']]
+        pt2 = [params['abdomen']['hinge']['x'], params['abdomen']['hinge']['y']]
+        pt3 = [params['left']['hinge']['x'], params['left']['hinge']['y']]
+        pt4 = [params['right']['hinge']['x'], params['right']['hinge']['y']]
+        self.ptBodyCenter_i = get_intersection(pt1,pt2,pt3,pt4)
+
+        r = max(params['left']['radius_outer'], params['right']['radius_outer'])
+        self.angleBody_i = self.get_bodyangle_i()
+        self.ptBodyIndicator1 = tuple((self.ptBodyCenter_i + r * np.array([np.cos(self.angleBody_i), np.sin(self.angleBody_i)])).astype(int))
+        self.ptBodyIndicator2 = tuple((self.ptBodyCenter_i - r * np.array([np.cos(self.angleBody_i), np.sin(self.angleBody_i)])).astype(int))
+        
+        # Radius of an area approximately where the thorax would be.
+        self.rThorax = np.linalg.norm(np.array([params['head']['hinge']['x'], params['head']['hinge']['y']]) - np.array([params['abdomen']['hinge']['x'], params['abdomen']['hinge']['y']]))/2.0
+        self.bInvertColorValid = False
+        
+    
+    def create_masks(self, shapeImage):
+        self.head.create_mask (shapeImage)
+        self.abdomen.create_mask (shapeImage)
+        self.right.create_mask (shapeImage)
+        self.left.create_mask (shapeImage)
+        self.extra.create_mask (shapeImage)
+
+
+    def get_bodyangle_i(self):
+        angle_i = get_angle_from_points_i(self.abdomen.ptHinge_i, self.head.ptHinge_i)
+        #angleBody_i  = (angle_i + np.pi) % (2.0*np.pi) - np.pi
+        angleBody_i  = angle_i
+        
+        return angleBody_i
+        
+
+    # Calculate what we think the bInvertcolor flag should be to make white-on-black.        
+    def calc_invertcolor(self, image):
+        # Get a roi around the body center.
+        xMin = max(0,self.ptBodyCenter_i[0]-int(0.75*self.rThorax))
+        yMin = max(0,self.ptBodyCenter_i[1]-int(0.75*self.rThorax))
+        xMax = min(self.ptBodyCenter_i[0]+int(0.75*self.rThorax), image.shape[1]-1)
+        yMax = min(self.ptBodyCenter_i[1]+int(0.75*self.rThorax), image.shape[0]-1)
+        imgThorax = image[yMin:yMax, xMin:xMax]
+
+        # Midpoint between darkest & lightest colors.
+        threshold = np.mean(image) 
+        #rospy.logwarn((np.min(image), np.median(image), np.mean(image), np.max(image), np.mean(imgThorax)))
+        
+        # If the roi is too dark, then set bInvertcolor.
+        if (np.mean(imgThorax) <= threshold):
+            self.bInvertcolor = True
+        else:
+            self.bInvertcolor = False
+            
+        self.bInvertColorValid = True
+        
+        
+                
+    def set_background(self, image):
+        self.head.set_background(image)
+        self.abdomen.set_background(image)
+        self.left.set_background(image)
+        self.right.set_background(image)
+        self.extra.set_background(image)
+
+    
+    def update_handle_points(self):
+        self.head.update_handle_points()
+        self.abdomen.update_handle_points()
+        self.left.update_handle_points()
+        self.right.update_handle_points()
+        self.extra.update_handle_points()
+        
+
+    def update(self, header=None, image=None):
+        if (image is not None):
+            if (not self.bInvertColorValid):
+                self.calc_invertcolor(image)
+            
+            if (self.bInvertcolor):
+                image = 255-image
+    
+            if (header is not None):
+                self.stamp = header.stamp
+            else:
+                self.stamp = rospy.Time.now()
+            
+            self.head.update(header, image)
+            self.abdomen.update(header, image)
+            self.left.update(header, image)
+            self.right.update(header, image)
+            self.extra.update(header, image)
+            
+#            rospy.logwarn((self.head.angleOutward_i, self.abdomen.angleOutward_i, self.left.angleOutward_i, self.right.angleOutward_i))
+
+            
+    def draw(self, image):
+        # Draw line to indicate the body axis.
+        cv2.line(image, self.ptBodyIndicator1, self.ptBodyIndicator2, self.bgra_body, 1) # Draw a line longer than just head-to-abdomen.
+                
+        self.head.draw(image)
+        self.abdomen.draw(image)
+        self.left.draw(image)
+        self.right.draw(image)
+        self.extra.draw(image)
+
+        
+    
+    def publish(self):
+        flystate              = MsgFlystate()
+        flystate.header       = Header(seq=self.iCount, stamp=self.stamp, frame_id='Fly')
+        if (self.params['left']['track']) and (self.left.state.angle1 is not None) and (self.left.state.angle2 is not None):
+            flystate.left     = MsgWing(intensity=self.left.state.intensity, 
+                                        angle1=self.left.state.angle1, 
+                                        angle2=self.left.state.angle2)
+        else:
+            flystate.left     = MsgWing(intensity=0.0, angle1=0.0, angle2=0.0)
+            
+        if (self.params['right']['track']) and (self.right.state.angle1 is not None) and (self.right.state.angle2 is not None):
+            flystate.right    = MsgWing(intensity=self.right.state.intensity, 
+                                        angle1=self.right.state.angle1, 
+                                        angle2=self.right.state.angle2)
+        else:
+            flystate.right    = MsgWing(intensity=0.0, angle1=0.0, angle2=0.0)
+            
+        if (self.params['head']['track']):
+            flystate.head     = MsgBodypart(intensity=self.head.state.intensity,    
+                                            radius=self.head.state.radius,    
+                                            angle=self.head.state.angle)
+        else:
+            flystate.head     = MsgBodypart(intensity=0.0, angle=0.0, radius=0.0)
+
+        if (self.params['abdomen']['track']):
+            flystate.abdomen  = MsgBodypart(intensity=self.abdomen.state.intensity, 
+                                            radius=self.abdomen.state.radius, 
+                                            angle=self.abdomen.state.angle)
+        else:
+            flystate.abdomen  = MsgBodypart(intensity=0.0, angle=0.0, radius=0.0)
+
+        if (self.params['extra']['track']):
+            flystate.extra  = MsgExtra(intensity=self.extra.state.intensity)
+        else:
+            flystate.extra  = MsgExtra(intensity=0.0)
+
+
+        self.iCount += 1
+        
+        self.pubFlystate.publish(flystate)
+        
+
+# end class Fly
+
+        
+###############################################################################
+###############################################################################
+# Head or Abdomen.
+class Legs(IntensityTrackedBodypart):
+    def __init__(self, name=None, params={}, color='white', bEqualizeHist=False):
+        IntensityTrackedBodypart.__init__(self, name, params, color, bEqualizeHist)
+        self.state = Struct()
+        self.set_params(params)
+
+    
+    # set_params()
+    # Set the given params dict into this object.
+    #
+    def set_params(self, params):
+        IntensityTrackedBodypart.set_params(self, params)
+        self.imgRoiBackground = None
+        self.iCount = 0
+        self.state.intensity = 0.0
+
+        
+    # update_state()
+    #
+    def update_state(self):
+        self.state.intensity = np.sum(self.imgRoiFgMasked).astype(np.float32) / self.sumMask 
+    
+        
+    # update()
+    # Update all the internals given a foreground camera image.
+    #
+    def update(self, header, image):
+        IntensityTrackedBodypart.update(self, header, image)
+
+        if (self.params[self.name]['track']):
+            self.update_state()
+    
+    
+    # draw()
+    # Draw the outline.
+    #
+    def draw(self, image):
+        IntensityTrackedBodypart.draw(self, image)
+
+# end class Legs
+
+    
+
+###############################################################################
+###############################################################################
 # Head or Abdomen.
 class BodySegment(PolarTrackedBodypart):
     def __init__(self, name=None, params={}, color='white', bEqualizeHist=False):
@@ -1472,14 +1800,14 @@ class BodySegment(PolarTrackedBodypart):
             self.stateHi.radius = max(self.stateHi.radius, self.state.radius)
             
             # Control the (angle,radius) offset to be at the midpoint of loangle, hiangle
-            # Whenever an image appears that is closer to the midpoint of loangle, hiangle, then
+            # Whenever an image appears that is closer to the midpoint, then
             # take that image as the new comparison image.  Thus driving the comparison image 
             # toward the midpoint image over time.
-            if (self.iCount>100):
+            if (self.params[self.name]['autozero']) and (self.iCount>100):
                 # If angle and radius are near their mean values, then take a new initial image, and set the origin.
-                refAngle = np.abs((self.stateHi.angle + self.stateLo.angle)/2.0)
+                refAngle = (self.stateHi.angle + self.stateLo.angle)/2.0
                 
-                if (-refAngle < self.state.angle < refAngle):
+                if (refAngle < self.state.angle < 0) or (0 < self.state.angle < refAngle):
                     self.imgComparison = imgNow
                     self.windowTest.set_image(self.imgComparison)
 
@@ -1498,7 +1826,7 @@ class BodySegment(PolarTrackedBodypart):
 #             
 #             self.windowStabilized.set_image(self.imgStabilized)
             
-        self.state.intensity = float(np.mean(self.imgRoiFgMaskedPolar)/255.0)
+        self.state.intensity = float(np.sum(self.imgRoiFgMasked) / self.sumMask)
         
         
     # update()
@@ -1514,7 +1842,6 @@ class BodySegment(PolarTrackedBodypart):
         if (self.params[self.name]['track']):
             self.update_state()
             
-    
     
     # draw()
     # Draw the outline.
@@ -1538,7 +1865,7 @@ class BodySegment(PolarTrackedBodypart):
                         self.bgra_state, 
                         1)
             
-            # Draw the min/max state position.
+            # Set a pixel at the min/max state positions.
             try:
                 pt = self.R.dot([self.state.radius*np.cos(self.stateLo.angle), 
                                  self.state.radius*np.sin(self.stateLo.angle)]) 
@@ -1551,8 +1878,10 @@ class BodySegment(PolarTrackedBodypart):
                 ptStateHi_i = clip_pt((int(pt[0]+self.params[self.name]['hinge']['x']), 
                                        int(pt[1]+self.params[self.name]['hinge']['y'])), image.shape) 
                 
-                image[ptStateLo_i[1]][ptStateLo_i[0]] = 0
-                image[ptStateHi_i[1]][ptStateHi_i[0]] = 0
+                # Set the pixels.
+                image[ptStateLo_i[1]][ptStateLo_i[0]] = np.array([255,255,255]) - image[ptStateLo_i[1]][ptStateLo_i[0]]
+                image[ptStateHi_i[1]][ptStateHi_i[0]] = np.array([255,255,255]) - image[ptStateHi_i[1]][ptStateHi_i[0]]
+                
             except ValueError:
                 pass
 
@@ -1609,7 +1938,9 @@ class Wing(PolarTrackedBodypart):
         
         # Get the rotation & expansion between images.
         if (imgNow is not None):
-            (iEdge1, iEdge2, intensity) = self.edgedetector.get_edges(imgNow)
+            (iEdge1, iEdge2) = self.edgedetector.get_edges(imgNow)
+            intensity = np.mean(imgNow)/255.0
+            
             angle1 = self.params[self.name]['angle_lo'] + iEdge1 * (self.params[self.name]['angle_hi']-self.params[self.name]['angle_lo']) / float(imgNow.shape[1])
             angle2 = self.params[self.name]['angle_lo'] + iEdge2 * (self.params[self.name]['angle_hi']-self.params[self.name]['angle_lo']) / float(imgNow.shape[1])
             
@@ -1649,35 +1980,35 @@ class Wing(PolarTrackedBodypart):
     #
     def draw(self, image):
         PolarTrackedBodypart.draw(self, image)
-
-        # Leading and trailing edges
-        if (self.state.angle1 is not None):
-            a = 1
-            if (self.name=='left'):
-                a = -1
-
-            angle1 =  a*self.state.angle1 + (self.angleOutward_i-self.angleBody_i)
-            angle2 =  a*self.state.angle2 + (self.angleOutward_i-self.angleBody_i)
-                
-            
-            angle1_i = self.transform_angle_i_from_b(angle1)
-            angle2_i = self.transform_angle_i_from_b(angle2)
-            
-            x0 = self.ptHinge_i[0] + self.params[self.name]['radius_inner'] * np.cos(angle1_i)
-            y0 = self.ptHinge_i[1] + self.params[self.name]['radius_inner'] * np.sin(angle1_i)
-            x1 = self.ptHinge_i[0] + self.params[self.name]['radius_outer'] * np.cos(angle1_i)
-            y1 = self.ptHinge_i[1] + self.params[self.name]['radius_outer'] * np.sin(angle1_i)
-            cv2.line(image, (int(x0),int(y0)), (int(x1),int(y1)), self.bgra, 1)
-            
-            if (self.params['n_edges']==2):
-                x0 = self.ptHinge_i[0] + self.params[self.name]['radius_inner'] * np.cos(angle2_i)
-                y0 = self.ptHinge_i[1] + self.params[self.name]['radius_inner'] * np.sin(angle2_i)
-                x1 = self.ptHinge_i[0] + self.params[self.name]['radius_outer'] * np.cos(angle2_i)
-                y1 = self.ptHinge_i[1] + self.params[self.name]['radius_outer'] * np.sin(angle2_i)
-                cv2.line(image, (int(x0),int(y0)), (int(x1),int(y1)), self.bgra, 1)
-
-
+        
         if (self.params[self.name]['track']):
+            # Leading and trailing edges
+            if (self.state.angle1 is not None):
+                a = 1
+                if (self.name=='left'):
+                    a = -1
+    
+                angle1 =  a*self.state.angle1 + (self.angleOutward_i-self.angleBody_i)
+                angle2 =  a*self.state.angle2 + (self.angleOutward_i-self.angleBody_i)
+                    
+                
+                angle1_i = self.transform_angle_i_from_b(angle1)
+                angle2_i = self.transform_angle_i_from_b(angle2)
+                
+                x0 = self.ptHinge_i[0] + self.params[self.name]['radius_inner'] * np.cos(angle1_i)
+                y0 = self.ptHinge_i[1] + self.params[self.name]['radius_inner'] * np.sin(angle1_i)
+                x1 = self.ptHinge_i[0] + self.params[self.name]['radius_outer'] * np.cos(angle1_i)
+                y1 = self.ptHinge_i[1] + self.params[self.name]['radius_outer'] * np.sin(angle1_i)
+                cv2.line(image, (int(x0),int(y0)), (int(x1),int(y1)), self.bgra, 1)
+                
+                if (self.params['n_edges']==2):
+                    x0 = self.ptHinge_i[0] + self.params[self.name]['radius_inner'] * np.cos(angle2_i)
+                    y0 = self.ptHinge_i[1] + self.params[self.name]['radius_inner'] * np.sin(angle2_i)
+                    x1 = self.ptHinge_i[0] + self.params[self.name]['radius_outer'] * np.cos(angle2_i)
+                    y1 = self.ptHinge_i[1] + self.params[self.name]['radius_outer'] * np.sin(angle2_i)
+                    cv2.line(image, (int(x0),int(y0)), (int(x1),int(y1)), self.bgra, 1)
+    
+
             self.windowTest.show()
         
 # end class Wing
@@ -1716,25 +2047,24 @@ class MainWindow:
         defaults = {'filenameBackground':'~/strokelitude.png',
                     'image_topic':'/camera/image_raw',
                     'use_gui':True,                     # You can turn off the GUI to speed the framerate.
-                    'extra_windows':True,               # Show the helpful extra windows.
+                    'windows':True,               # Show the helpful extra windows.
                     'symmetric':True,                   # Forces the UI to remain symmetric.
-                    'resolution_radians':0.0174532925,  # Coarser resolution will speed the framerate. 1 degree == 0.0174532925 radians.
-                    'threshold_intensity_flight':0.1,
+                    'threshold_intensity_flight':0.1,   # Amount of pixel intensity that counts as flying.  Intensity ranges on interval [0,1].
                     'scale_image':1.0,                  # Reducing the image scale will speed the framerate.
                     'n_edges':1,                        # Number of edges per wing to find.  1 or 2.
-                    'rc_background':10.0,                # Time constant of the moving average background.
-                    'head':   {'track':True,
-                               'autozero':True,
-                               'subtract_bg':False,        # Use background subtraction?
-                               'hinge':{'x':300,
+                    'rc_background':1000.0,             # Time constant of the moving average background.
+                    'head':   {'track':True,            # To track, or not to track.
+                               'autozero':True,         # Automatically figure out where is the center of motion.
+                               'subtract_bg':False,     # Use background subtraction?
+                               'hinge':{'x':300,        # Hinge position in image coordinates.
                                         'y':150},
-                               'radius_outer':100,
-                               'radius_inner':10,
-                               'angle_hi':0.7854, 
-                               'angle_lo':-0.7854},
+                               'radius_outer':100,      # Outer radius in pixel units.
+                               'radius_inner':10,       # Inner radius in pixel units.
+                               'angle_hi':0.7854,       # Angle limit in radians.
+                               'angle_lo':-0.7854},     # Angle limit in radians.
                     'abdomen':{'track':True,
                                'autozero':True,
-                               'subtract_bg':False,     # Use background subtraction?
+                               'subtract_bg':False,
                                'hinge':{'x':300,
                                         'y':250},
                                'radius_outer':120,
@@ -1743,7 +2073,7 @@ class MainWindow:
                                'angle_lo':-0.7854},
                     'left':   {'track':True,
                                'autozero':False,
-                               'subtract_bg':True,         # Use background subtraction?
+                               'subtract_bg':True,
                                'hinge':{'x':100,
                                         'y':100},
                                'radius_outer':80,
@@ -1752,13 +2082,20 @@ class MainWindow:
                                'angle_lo':-0.7854},
                     'right':  {'track':True,
                                'autozero':False,
-                               'subtract_bg':True,        # Use background subtraction?
+                               'subtract_bg':True,
                                'hinge':{'x':300,
                                         'y':100},
                                'radius_outer':80,
                                'radius_inner':10,
                                'angle_hi':0.7854, 
                                'angle_lo':-0.7854},
+                    'extra':   {'track':True,
+                               'subtract_bg':False,
+                               'center':{'x':200,
+                                         'y':200},
+                               'radius1':30,
+                               'radius2':20,
+                               'angle':0.0},
 
                     }
         SetDict().set_dict_with_preserve(self.params, defaults)
@@ -1766,7 +2103,7 @@ class MainWindow:
         self.params = self.legalizeParams(self.params)
         rospy.set_param('strokelitude', self.params)
         
-        # initialize wings and body
+        # Create the fly.
         self.fly = Fly(self.params)
         
         # Background image.
@@ -1822,6 +2159,10 @@ class MainWindow:
         self.buttons.append(btn)
 
         x = btn.right+1
+        btn = Button(pt=[x,y], scale=self.scale, type='checkbox', name='extra', text='extra', state=self.params['extra']['track'])
+        self.buttons.append(btn)
+
+        x = btn.right+1
         btn = Button(pt=[x,y], scale=self.scale, type='checkbox', name='subtract_bg', text='subtractBG', state=self.params['right']['subtract_bg'])
         self.buttons.append(btn)
 
@@ -1830,7 +2171,7 @@ class MainWindow:
         self.buttons.append(btn)
 
         x = btn.right+1
-        btn = Button(pt=[x,y], scale=self.scale, type='checkbox', name='extra_windows', text='windows', state=self.params['extra_windows'])
+        btn = Button(pt=[x,y], scale=self.scale, type='checkbox', name='windows', text='windows', state=self.params['windows'])
         self.buttons.append(btn)
 
         self.yToolbar = btn.bottom + 1
@@ -1926,7 +2267,13 @@ class MainWindow:
             paramsScaled[partname]['hinge']['y'] = (paramsIn[partname]['hinge']['y']*scale)  
             paramsScaled[partname]['radius_outer'] = (paramsIn[partname]['radius_outer']*scale)  
             paramsScaled[partname]['radius_inner'] = (paramsIn[partname]['radius_inner']*scale)  
-			
+            
+        for partname in ['extra']:
+            paramsScaled[partname]['center']['x'] = (paramsIn[partname]['center']['x']*scale)  
+            paramsScaled[partname]['center']['y'] = (paramsIn[partname]['center']['y']*scale)  
+            paramsScaled[partname]['radius1'] = (paramsIn[partname]['radius1']*scale)  
+            paramsScaled[partname]['radius2'] = (paramsIn[partname]['radius2']*scale)  
+            
         return paramsScaled  
 	
 	
@@ -2122,12 +2469,13 @@ class MainWindow:
             (tagHit,delim,partnameHit) = nameNearest.partition('_')
             uiHit = self.buttons[iButtonHit].type
         else: # Check for handle hit.
-            tag  = [None,None,None,None]
-            partname = [None,None,None,None]
+            tag  = [None,None,None,None,None]
+            partname = [None,None,None,None,None]
             (partname[0], tag[0]) = self.fly.left.hit_object(ptMouse)
             (partname[1], tag[1]) = self.fly.right.hit_object(ptMouse)
             (partname[2], tag[2]) = self.fly.head.hit_object(ptMouse)
             (partname[3], tag[3]) = self.fly.abdomen.hit_object(ptMouse)
+            (partname[4], tag[4]) = self.fly.extra.hit_object(ptMouse)
             i = next((i for i in range(len(tag)) if tag[i]!=None), None)
             if (i is not None):
                 tagHit  = tag[i]
@@ -2167,7 +2515,7 @@ class MainWindow:
         return ptReflected
 
     
-    def BodypartFromPartname(self, partname):
+    def bodypart_from_partname(self, partname):
         if (partname=='left'):
             bodypart = self.fly.left
         elif (partname=='right'):
@@ -2176,6 +2524,8 @@ class MainWindow:
             bodypart = self.fly.head
         elif (partname=='abdomen'):
             bodypart = self.fly.abdomen
+        elif (partname=='extra'):
+            bodypart = self.fly.extra
         else:
             bodypart = None
             
@@ -2190,8 +2540,8 @@ class MainWindow:
         tagThis = tagSelected
         tagOther = 'angle_lo' if (tagSelected=='angle_hi') else 'angle_hi'
         tagSlave = tagOther
-        bodypartSelected = self.BodypartFromPartname(partnameSelected)
-        bodypartSlave    = self.BodypartFromPartname(partnameSlave)
+        bodypartSelected = self.bodypart_from_partname(partnameSelected)
+        bodypartSlave    = self.bodypart_from_partname(partnameSlave)
 
         paramsScaled = self.scale_params(self.params, self.scale) 
         
@@ -2309,6 +2659,26 @@ class MainWindow:
             if (partnameSelected in ['left','right']) and (paramsScaled['symmetric']):
                 paramsScaled[partnameSlave]['radius_inner'] = paramsScaled[partnameSelected]['radius_inner']
                 
+        # Center.
+        elif (tagSelected=='center'): 
+            if (partnameSelected=='extra'):
+
+                # Move the center point.
+                pt = ptMouse
+                paramsScaled[partnameSelected]['center']['x'] = float(pt[0])
+                paramsScaled[partnameSelected]['center']['y'] = float(pt[1])
+                
+        # Radius.
+        elif (tagSelected=='radius1'): 
+            pt = ptMouse - bodypartSelected.ptCenter_i
+            paramsScaled[partnameSelected]['radius1'] = float(np.linalg.norm(pt))
+            paramsScaled[partnameSelected]['angle'] = float(np.arctan2(pt[1], pt[0]))        
+        elif (tagSelected=='radius2'): 
+            pt = bodypartSelected.ptCenter_i - ptMouse
+            paramsScaled[partnameSelected]['radius2'] = float(np.linalg.norm(pt))
+            paramsScaled[partnameSelected]['angle'] = float(np.arctan2(pt[1], pt[0])-np.pi/2.0)        
+                
+
         self.params = self.scale_params(paramsScaled, 1/self.scale) 
 
 
@@ -2329,7 +2699,7 @@ class MainWindow:
             self.partnameSelected = partname
             self.uiSelected = ui
             self.iButtonSelected = iButtonSelected
-
+            #rospy.logwarn((ui, tag, partname, iButtonSelected))
 
             if (self.iButtonSelected is not None):
                 self.stateSelected = self.buttons[self.iButtonSelected].state
@@ -2399,8 +2769,9 @@ class MainWindow:
                         self.buttons[iButtonSelected].state = False
                         rospy.logwarn('No background image.  Cannot use background subtraction.')
 
-                    self.params['left']['subtract_bg'] = self.buttons[iButtonSelected].state
+                    self.params['left']['subtract_bg']  = self.buttons[iButtonSelected].state
                     self.params['right']['subtract_bg'] = self.buttons[iButtonSelected].state
+                    self.params['extra']['subtract_bg']  = self.buttons[iButtonSelected].state
                     
                 elif (self.nameSelected == self.nameSelectedNow == 'head'):
                     self.params['head']['track'] = self.buttons[iButtonSelected].state
@@ -2412,10 +2783,14 @@ class MainWindow:
                     self.params['right']['track'] = self.buttons[iButtonSelected].state
                     self.params['left']['track']  = self.buttons[iButtonSelected].state
 
-                elif (self.nameSelected == self.nameSelectedNow == 'extra_windows'):
-                    self.params['extra_windows'] = self.buttons[iButtonSelected].state
+                elif (self.nameSelected == self.nameSelectedNow == 'extra'):
+                    self.params['extra']['track'] = self.buttons[iButtonSelected].state
+
+                elif (self.nameSelected == self.nameSelectedNow == 'windows'):
+                    self.params['windows'] = self.buttons[iButtonSelected].state
 
 
+            if (self.uiSelected in ['handle','checkbox']):
                 self.fly.set_params(self.scale_params(self.params, self.scale))
                 self.fly.create_masks(self.shapeImage)
     
