@@ -1947,8 +1947,8 @@ class Wing(PolarTrackedBodypart):
             angle2 = self.params[self.name]['angle_lo'] + iEdge2 * (self.params[self.name]['angle_hi']-self.params[self.name]['angle_lo']) / float(imgNow.shape[1])
             
             # Put angle into the bodypart frame.
-            self.state.angle1 = angle1 - (self.angleOutward_i-self.angleBody_i)
-            self.state.angle2 = angle2 - (self.angleOutward_i-self.angleBody_i)
+            self.state.angle1 = (angle1 - (self.angleOutward_i-self.angleBody_i) + np.pi) % (2*np.pi) - np.pi
+            self.state.angle2 = (angle2 - (self.angleOutward_i-self.angleBody_i) + np.pi) % (2*np.pi) - np.pi
             
             if (self.name=='left'):
                 self.state.angle1 *= -1
