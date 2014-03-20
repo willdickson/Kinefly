@@ -2396,7 +2396,7 @@ class MainWindow:
                     if (self.fly.left.state.angle1 is not None) and (self.fly.right.state.angle1 is not None):
                         leftplusright = self.fly.left.state.angle1 + self.fly.right.state.angle1
                         #s = 'L+R:% 7.1f' % -np.rad2deg(leftplusright)
-                        s = 'L+R:% 7.4f' % -leftplusright
+                        s = 'L+R:% 7.4f' % leftplusright
                         cv2.putText(imgOutput, s, (x, y_bottom), self.fontface, self.scaleText, bgra_dict['magenta'])
                         w_text = int(82 * self.scale)
                         x += w_text+self.w_gap
@@ -2406,7 +2406,7 @@ class MainWindow:
                     if (self.fly.left.state.angle1 is not None) and (self.fly.right.state.angle1 is not None):
                         leftminusright = self.fly.left.state.angle1 - self.fly.right.state.angle1
                         #s = 'L-R:% 7.1f' % -np.rad2deg(leftminusright)
-                        s = 'L-R:% 7.4f' % -leftminusright
+                        s = 'L-R:% 7.4f' % leftminusright
                         cv2.putText(imgOutput, s, (x, y_bottom), self.fontface, self.scaleText, bgra_dict['magenta'])
                         w_text = int(82 * self.scale)
                         x += w_text+self.w_gap
