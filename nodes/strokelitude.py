@@ -1182,10 +1182,12 @@ class PolarTrackedBodypart(object):
         y = int(self.params[self.name]['hinge']['y'])
         r_outer = int(self.params[self.name]['radius_outer'])
         r_inner = int(self.params[self.name]['radius_inner'])
-        bgra = bgra_dict['white']
+        
+        hi = int(np.ceil(np.rad2deg(self.angle_hi_i)))
+        lo = int(np.floor(np.rad2deg(self.angle_lo_i)))
         
         # Draw the mask.
-        cv2.ellipse(mask, (x, y), (r_outer, r_outer), 0, int(np.rad2deg(self.angle_hi_i)), int(np.rad2deg(self.angle_lo_i)), bgra, cv.CV_FILLED)
+        cv2.ellipse(mask, (x, y), (r_outer, r_outer), 0, hi, lo, bgra_dict['white'], cv.CV_FILLED)
         cv2.ellipse(mask, (x, y), (r_inner, r_inner), 0, 0, 360, bgra_dict['black'], cv.CV_FILLED)
         mask = cv2.dilate(mask, np.ones([3,3])) # Make the mask one pixel bigger to account for pixel aliasing.
         self.windowMask.set_image(mask)
@@ -1225,8 +1227,8 @@ class PolarTrackedBodypart(object):
     
             # Find where the mask might be clipped.  First, draw an unclipped ellipse.        
             delta = 1
-            pts =                cv2.ellipse2Poly((x, y), (r_outer, r_outer), 0, int(np.rad2deg(self.angle_hi_i)), int(np.rad2deg(self.angle_lo_i)), delta)
-            pts = np.append(pts, cv2.ellipse2Poly((x, y), (r_inner, r_inner), 0, int(np.rad2deg(self.angle_hi_i)), int(np.rad2deg(self.angle_lo_i)), delta), 0)
+            pts =                cv2.ellipse2Poly((x, y), (r_outer, r_outer), 0, hi, lo, delta)
+            pts = np.append(pts, cv2.ellipse2Poly((x, y), (r_inner, r_inner), 0, hi, lo, delta), 0)
             #pts = np.append(pts, [list of line1 pixels connecting the two arcs], 0) 
             #pts = np.append(pts, [list of line2 pixels connecting the two arcs], 0) 
     
@@ -1250,14 +1252,14 @@ class PolarTrackedBodypart(object):
                     
             # Determine how much of the bottom of the polar image to trim off (i.e. rClip) based on if the ellipse is partially offimage.
             (rClip0, rClip1, rClip2, rClip3) = (1.0, 1.0, 1.0, 1.0)
-            if (roiClipped[0]>0):
-                rClip0 = 1.0 - (float(roiClipped[0])/float(self.j_0))
-            if (roiClipped[1]>0):
-                rClip1 = 1.0 - (float(roiClipped[1])/float(self.i_0))
-            if (roiClipped[2]>0):
-                rClip2 = 1.0 - (float(roiClipped[2])/float(j_n-self.j_0))
-            if (roiClipped[3]>0):
-                rClip3 = 1.0 - (float(roiClipped[3])/float(i_n-self.i_0))
+            if (roiClipped[0]>0): # Left
+                rClip0 = 1.0 - (float(roiClipped[0])/float(r_outer-r_inner))#self.j_0))
+            if (roiClipped[1]>0): # Top
+                rClip1 = 1.0 - (float(roiClipped[1])/float(r_outer-r_inner))#self.i_0))
+            if (roiClipped[2]>0): # Right
+                rClip2 = 1.0 - (float(roiClipped[2])/float(r_outer-r_inner))#j_n-self.j_0))
+            if (roiClipped[3]>0): # Bottom
+                rClip3 = 1.0 - (float(roiClipped[3])/float(r_outer-r_inner))#i_n-self.i_0))
     
             self.rClip = np.min([rClip0, rClip1, rClip2, rClip3])
         else:
