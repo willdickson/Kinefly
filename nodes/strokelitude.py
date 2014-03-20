@@ -785,7 +785,7 @@ class IntensityTrackedBodypart(object):
 
         self.bgra        = bgra_dict[color]
         self.bgra_dim    = tuple(np.array(bgra_dict[color])/2)
-        self.bgra_state  = bgra_dict['red']
+        self.bgra_state  = bgra_dict[color]#bgra_dict['red']
         self.pixelmax    = 255.0
 
         self.shape     = (np.inf, np.inf)
@@ -1044,7 +1044,7 @@ class PolarTrackedBodypart(object):
 
         self.bgra        = bgra_dict[color]
         self.bgra_dim    = tuple(np.array(bgra_dict[color])/2)
-        self.bgra_state  = bgra_dict['red']
+        self.bgra_state  = bgra_dict[color]#bgra_dict['red']
         self.pixelmax    = 255.0
 
         self.shape     = (np.inf, np.inf)
@@ -1468,7 +1468,7 @@ class PolarTrackedBodypart(object):
                         np.rad2deg(0.0),
                         np.rad2deg(self.angle_hi_i),
                         np.rad2deg(self.angle_lo_i),
-                        self.bgra, 
+                        self.bgra_dim, 
                         1)
 
             # Draw the outer arc.
@@ -1514,7 +1514,7 @@ class Fly(object):
         self.abdomen = BodySegment(name='abdomen', params=params, color='magenta', bEqualizeHist=True) 
         self.right   = Wing(name='right',          params=params, color='red', bEqualizeHist=False)
         self.left    = Wing(name='left',           params=params, color='green', bEqualizeHist=False)
-        self.extra    = Legs(name='extra',           params=params, color='yellow', bEqualizeHist=False)
+        self.extra    = Extra(name='extra',           params=params, color='yellow', bEqualizeHist=False)
         
         self.bgra_body = bgra_dict['light_gray']
         self.ptBodyIndicator1 = None
@@ -1687,8 +1687,8 @@ class Fly(object):
         
 ###############################################################################
 ###############################################################################
-# Head or Abdomen.
-class Legs(IntensityTrackedBodypart):
+# The 'extra' area to track intensity.
+class Extra(IntensityTrackedBodypart):
     def __init__(self, name=None, params={}, color='white', bEqualizeHist=False):
         IntensityTrackedBodypart.__init__(self, name, params, color, bEqualizeHist)
         self.state = Struct()
@@ -1727,7 +1727,7 @@ class Legs(IntensityTrackedBodypart):
     def draw(self, image):
         IntensityTrackedBodypart.draw(self, image)
 
-# end class Legs
+# end class Extra
 
     
 
