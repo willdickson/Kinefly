@@ -1265,8 +1265,7 @@ class PolarTrackedBodypart(object):
     
             self.rClip = np.min([rClip0, rClip1, rClip2, rClip3])
         else:
-            rospy.logwarn('Empty mask.')
-        
+            rospy.logwarn('%s: Empty mask.' % self.name)        
         
     # set_background()
     # Set the given image as the background image.
@@ -1298,24 +1297,25 @@ class PolarTrackedBodypart(object):
         self.shape = image.shape
         
         # Extract the ROI images.
-        self.imgRoi = copy.deepcopy(image[self.roi[1]:self.roi[3], self.roi[0]:self.roi[2]])
+        if (self.roi is not None):
+            self.imgRoi = copy.deepcopy(image[self.roi[1]:self.roi[3], self.roi[0]:self.roi[2]])
 
-        # Background Subtraction.
-        self.imgRoiFg = self.imgRoi
-        if (self.params[self.name]['subtract_bg']):
-            if (self.imgRoiBackground is not None):
-                if (self.imgRoiBackground.shape==self.imgRoi.shape):
-                    self.imgRoiFg = cv2.absdiff(self.imgRoi, self.imgRoiBackground.astype(np.uint8))
+            # Background Subtraction.
+            self.imgRoiFg = self.imgRoi
+            if (self.params[self.name]['subtract_bg']):
+                if (self.imgRoiBackground is not None):
+                    if (self.imgRoiBackground.shape==self.imgRoi.shape):
+                        self.imgRoiFg = cv2.absdiff(self.imgRoi, self.imgRoiBackground.astype(np.uint8))
 
-            
-        # Equalize the brightness/contrast.
-        if (self.bEqualizeHist):
-            if (self.imgRoiFg is not None):
-                self.imgRoiFg -= np.min(self.imgRoiFg)
-                max2 = np.max(self.imgRoiFg)
-                self.imgRoiFg *= (255.0/float(max2))
-            
-        self.windowFG.set_image(self.imgRoiFg) 
+                
+            # Equalize the brightness/contrast.
+            if (self.bEqualizeHist):
+                if (self.imgRoiFg is not None):
+                    self.imgRoiFg -= np.min(self.imgRoiFg)
+                    max2 = np.max(self.imgRoiFg)
+                    self.imgRoiFg *= (255.0/float(max2))
+                
+            self.windowFG.set_image(self.imgRoiFg) 
         
 
             
@@ -1831,7 +1831,10 @@ class BodySegment(PolarTrackedBodypart):
 #             
 #             self.windowStabilized.set_image(self.imgStabilized)
             
-        self.state.intensity = float(np.sum(self.imgRoiFgMasked) / self.sumMask)
+        if (self.imgRoiFgMasked is not None):
+            self.state.intensity = float(np.sum(self.imgRoiFgMasked) / self.sumMask)
+        else:
+            self.state.intensity = 0.0            
         
         
     # update()
