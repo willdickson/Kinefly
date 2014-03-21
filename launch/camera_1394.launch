@@ -7,6 +7,6 @@
     <param name="camera/image_rect/compressed/format"  type="string" value="png" />
     
     <node name="camera"           pkg="camera1394"  type="camera1394_node" />
-    <node name="view_raw"         pkg="image_view"  type="image_view"  ns="camera"  args="image:=image_raw" />
+    <!-- <node name="view_raw"         pkg="image_view"  type="image_view"  ns="camera"  args="image:=image_raw" /> -->
   
 </launch>
