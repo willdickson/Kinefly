@@ -29,23 +29,18 @@ class Strokelitude2PhidgetsAnalog:
         # Load the parameters.
         self.params = rospy.get_param('strokelitude/phidgetsanalog', {})
         self.defaults = {'v0enable':True, 'v1enable':True, 'v2enable':True, 'v3enable':True, 
-                        'v00': 0.0, 'v0l1':1.0, 'v0l2':0.0, 'v0r1':0.0, 'v0r2':0.0, 'v0ha':0.0, 'v0hr':0.0, 'v0aa':0.0, 'v0ar':0.0, # L
-                        'v10': 0.0, 'v1l1':0.0, 'v1l2':0.0, 'v1r1':1.0, 'v1r2':0.0, 'v1ha':0.0, 'v1hr':0.0, 'v1aa':0.0, 'v1ar':0.0, # R
-                        'v20': 0.0, 'v2l1':1.0, 'v2l2':0.0, 'v2r1':1.0, 'v2r2':0.0, 'v2ha':0.0, 'v2hr':0.0, 'v2aa':0.0, 'v2ar':0.0, # L+R
-                        'v30': 0.0, 'v3l1':1.0, 'v3l2':0.0, 'v3r1':-1.0, 'v3r2':0.0, 'v3ha':0.0, 'v3hr':0.0, 'v3aa':0.0, 'v3ar':0.0, # L-R
-
-#                          'v00': 0.0, 'v0l1':-1.0, 'v0l2':0.0, 'v0r1':0.0, 'v0r2':0.0, 'v0ha':0.0, 'v0hr':0.0, 'v0aa':0.0, 'v0ar':0.0, # L
-#                          'v10': 0.0, 'v1l1':-1.0, 'v1l2':0.0, 'v1r1':0.0, 'v1r2':0.0, 'v1ha':0.0, 'v1hr':0.0, 'v1aa':0.0, 'v1ar':0.0, # R
-#                          'v20': 0.0, 'v2l1':1.0, 'v2l2':0.0, 'v2r1':0.0, 'v2r2':0.0, 'v2ha':0.0, 'v2hr':0.0, 'v2aa':0.0, 'v2ar':0.0, # L+R
-#                          'v30': 0.0, 'v3l1':1.0, 'v3l2':0.0, 'v3r1':0.0, 'v3r2':0.0, 'v3ha':0.0, 'v3hr':0.0, 'v3aa':0.0, 'v3ar':0.0, # L-R
+                        'v00': 0.0, 'v0l1':1.0, 'v0l2':0.0, 'v0r1':0.0, 'v0r2':0.0, 'v0ha':0.0, 'v0hr':0.0, 'v0aa':0.0, 'v0ar':0.0, 'v0ei':0.0, # L
+                        'v10': 0.0, 'v1l1':0.0, 'v1l2':0.0, 'v1r1':1.0, 'v1r2':0.0, 'v1ha':0.0, 'v1hr':0.0, 'v1aa':0.0, 'v1ar':0.0, 'v1ei':0.0, # R
+                        'v20': 0.0, 'v2l1':1.0, 'v2l2':0.0, 'v2r1':1.0, 'v2r2':0.0, 'v2ha':0.0, 'v2hr':0.0, 'v2aa':0.0, 'v2ar':0.0, 'v2ei':0.0, # L+R
+                        'v30': 0.0, 'v3l1':1.0, 'v3l2':0.0, 'v3r1':-1.0, 'v3r2':0.0, 'v3ha':0.0, 'v3hr':0.0, 'v3aa':0.0, 'v3ar':0.0, 'v3ei':0.0, # L-R
                          'autorange':False
                          }
         self.set_dict_with_preserve(self.params, self.defaults)
         rospy.set_param('strokelitude/phidgetsanalog', self.params)
         
 
-        self.stateMin = np.array([ np.inf,  np.inf,  np.inf,  np.inf,  np.inf,  np.inf,  np.inf,  np.inf,  np.inf])
-        self.stateMax = np.array([-np.inf, -np.inf, -np.inf, -np.inf, -np.inf, -np.inf, -np.inf, -np.inf, -np.inf])
+        self.stateMin = np.array([ np.inf,  np.inf,  np.inf,  np.inf,  np.inf,  np.inf,  np.inf,  np.inf,  np.inf,  np.inf])
+        self.stateMax = np.array([-np.inf, -np.inf, -np.inf, -np.inf, -np.inf, -np.inf, -np.inf, -np.inf, -np.inf, -np.inf])
         
         self.update_coefficients()
         
@@ -94,10 +89,10 @@ class Strokelitude2PhidgetsAnalog:
     # coefficients to make a user-specified voltage from wing, head, and abdomen angles.
     # 
     def update_coefficients_from_params(self):
-        self.a = np.array([[self.params['v00'], self.params['v0l1'], self.params['v0l2'], self.params['v0r1'], self.params['v0r2'], self.params['v0ha'], self.params['v0hr'], self.params['v0aa'], self.params['v0ar']],
-                           [self.params['v10'], self.params['v1l1'], self.params['v1l2'], self.params['v1r1'], self.params['v1r2'], self.params['v1ha'], self.params['v1hr'], self.params['v1aa'], self.params['v1ar']],
-                           [self.params['v20'], self.params['v2l1'], self.params['v2l2'], self.params['v2r1'], self.params['v2r2'], self.params['v2ha'], self.params['v2hr'], self.params['v2aa'], self.params['v2ar']],
-                           [self.params['v30'], self.params['v3l1'], self.params['v3l2'], self.params['v3r1'], self.params['v3r2'], self.params['v3ha'], self.params['v3hr'], self.params['v3aa'], self.params['v3ar']]
+        self.a = np.array([[self.params['v00'], self.params['v0l1'], self.params['v0l2'], self.params['v0r1'], self.params['v0r2'], self.params['v0ha'], self.params['v0hr'], self.params['v0aa'], self.params['v0ar'], self.params['v0ei']],
+                           [self.params['v10'], self.params['v1l1'], self.params['v1l2'], self.params['v1r1'], self.params['v1r2'], self.params['v1ha'], self.params['v1hr'], self.params['v1aa'], self.params['v1ar'], self.params['v1ei']],
+                           [self.params['v20'], self.params['v2l1'], self.params['v2l2'], self.params['v2r1'], self.params['v2r2'], self.params['v2ha'], self.params['v2hr'], self.params['v2aa'], self.params['v2ar'], self.params['v2ei']],
+                           [self.params['v30'], self.params['v3l1'], self.params['v3l2'], self.params['v3r1'], self.params['v3r2'], self.params['v3ha'], self.params['v3hr'], self.params['v3aa'], self.params['v3ar'], self.params['v3ei']]
                           ],
                           dtype=np.float32
                           )
@@ -185,7 +180,8 @@ class Strokelitude2PhidgetsAnalog:
                           flystate.head.angle,
                           flystate.head.radius,
                           flystate.abdomen.angle,
-                          flystate.abdomen.radius
+                          flystate.abdomen.radius,
+                          flystate.extra.intensity
                           ], dtype=np.float32)
         
         if (self.iCount>10):
@@ -209,7 +205,8 @@ class Strokelitude2PhidgetsAnalog:
 #         voltages[0] = self.v00 + self.v0l1*L1 + self.v0l2*L2 + \
 #                                  self.v0r1*R1 + self.v0r2*R2 + \
 #                                  self.v0ha*HA + self.v0hr*HR + \
-#                                  self.v0aa*AA + self.v0ar*AR # Angle + Radius
+#                                  self.v0aa*AA + self.v0ar*AR + \ # Angle + Radius
+#                                  self.v0ei*EI                    # Extra intensity
                        
         return voltages.clip(-10.0, 10.0)
 
