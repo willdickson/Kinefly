@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+#! coding=latin-1
 from __future__ import division
 import roslib; roslib.load_manifest('StrokelitudeROS')
 import rospy
@@ -1087,7 +1088,7 @@ class PolarTrackedBodypart(object):
         self.windowFG         = ImageWindow(False, self.name+'FG')
         self.windowPolar      = ImageWindow(False, self.name+'Polar')
         self.windowMask       = ImageWindow(False, self.name+'Mask')
-#         self.windowStabilized = ImageWindow(False, self.name+'Stable')
+        self.windowStabilized = ImageWindow(False, self.name+'Stable')
 
 
     
@@ -1126,7 +1127,7 @@ class PolarTrackedBodypart(object):
         self.windowPolar.set_enable(self.params['windows'] and self.params[self.name]['track'])
         self.windowBG.set_enable(self.params['windows'] and self.params[self.name]['track'] and self.params[self.name]['subtract_bg'])
         self.windowFG.set_enable(self.params['windows'] and self.params[self.name]['track'])
-#         self.windowStabilized.set_enable(self.params['windows'] and self.params[self.name]['track'])
+        self.windowStabilized.set_enable(self.params['windows'] and self.params[self.name]['track'] and self.params[self.name]['stabilize'])
 
         self.angle_hi_i = self.transform_angle_i_from_b(self.params[self.name]['angle_hi'])
         self.angle_lo_i = self.transform_angle_i_from_b(self.params[self.name]['angle_lo'])
@@ -1505,7 +1506,7 @@ class PolarTrackedBodypart(object):
             self.windowFG.show()
             self.windowPolar.show()
             self.windowMask.show()
-#             self.windowStabilized.show()
+            self.windowStabilized.show()
                 
 # end class PolarTrackedBodypart
 
@@ -1823,13 +1824,15 @@ class BodySegment(PolarTrackedBodypart):
                     
 
             # Stabilized image.
-#             size = (self.imgRoiFgMaskedPolar.shape[1],
-#                     self.imgRoiFgMaskedPolar.shape[0])
-#             center = (self.imgRoiFgMaskedPolar.shape[1]/2.0+aShift, 
-#                       self.imgRoiFgMaskedPolar.shape[0]/2.0+rShift)
-#             self.imgStabilized = cv2.getRectSubPix(self.imgRoiFgMaskedPolar, size, center)
-#             
-#             self.windowStabilized.set_image(self.imgStabilized)
+            if (self.params[self.name]['stabilize']):
+                size = (self.imgRoiFgMaskedPolar.shape[1],
+                        self.imgRoiFgMaskedPolar.shape[0])
+                center = (self.imgRoiFgMaskedPolar.shape[1]/2.0+aShift, 
+                          self.imgRoiFgMaskedPolar.shape[0]/2.0+rShift)
+                self.imgStabilized = cv2.getRectSubPix(self.imgRoiFgMaskedPolar, size, center)
+                 
+                self.windowStabilized.set_image(self.imgStabilized)
+
             
         if (self.imgRoiFgMasked is not None):
             self.state.intensity = float(np.sum(self.imgRoiFgMasked) / self.sumMask)
@@ -2085,6 +2088,7 @@ class MainWindow:
                     'head':   {'track':True,            # To track, or not to track.
                                'autozero':True,         # Automatically figure out where is the center of motion.
                                'subtract_bg':False,     # Use background subtraction?
+                               'stabilize':False,
                                'hinge':{'x':300,        # Hinge position in image coordinates.
                                         'y':150},
                                'radius_outer':80,      # Outer radius in pixel units.
@@ -2094,6 +2098,7 @@ class MainWindow:
                     'abdomen':{'track':True,
                                'autozero':True,
                                'subtract_bg':False,
+                               'stabilize':False,
                                'hinge':{'x':300,
                                         'y':250},
                                'radius_outer':120,
@@ -2103,6 +2108,7 @@ class MainWindow:
                     'left':   {'track':True,
                                'autozero':False,
                                'subtract_bg':True,
+                               'stabilize':False,
                                'hinge':{'x':250,
                                         'y':200},
                                'radius_outer':80,
@@ -2112,6 +2118,7 @@ class MainWindow:
                     'right':  {'track':True,
                                'autozero':False,
                                'subtract_bg':True,
+                               'stabilize':False,
                                'hinge':{'x':350,
                                         'y':200},
                                'radius_outer':80,
@@ -2160,6 +2167,7 @@ class MainWindow:
         self.subImageRaw           = rospy.Subscriber(self.params['image_topic'], Image, self.image_callback, queue_size=2)
         self.subCommand            = rospy.Subscriber('strokelitude/command', MsgCommand, self.command_callback)
 
+        self.h_gap = int(5 * self.scale)
         self.w_gap = int(10 * self.scale)
         self.scaleText = 0.4 * self.scale
         self.fontface = cv2.FONT_HERSHEY_SIMPLEX
@@ -2351,8 +2359,11 @@ class MainWindow:
                 y_bottom = int(imgOutput.shape[0] - 10 * self.scale)
                 x_right  = int(imgOutput.shape[1] - 10 * self.scale)
                 x = x_left
+                y = y_bottom
+                h = 10
 
                 # Output the framerate.
+                w = 55
                 if (not self.bMousing):
                     tNow = rospy.Time.now().to_sec()
                     dt = tNow - self.tPrev
@@ -2370,86 +2381,118 @@ class MainWindow:
                             
                         self.hz = self.hzSum / self.iCount
                         
-                    cv2.putText(imgOutput, '%5.1f Hz' % self.hz, (x, y_bottom), self.fontface, self.scaleText, bgra_dict['dark_yellow'] )
+                    cv2.putText(imgOutput, '%5.1f Hz' % self.hz, (x, y), self.fontface, self.scaleText, bgra_dict['dark_yellow'] )
                     
-                w_text = int(55 * self.scale)
-                x += w_text+self.w_gap
-            
-
-                # Output the head state.
-                if (self.params['head']['track']):
-                    s = 'HEAD:% 7.4f' % (self.fly.head.state.angle)
-                    w = 90
-                    cv2.putText(imgOutput, s, (x, y_bottom), self.fontface, self.scaleText, self.fly.head.bgra)
                     w_text = int(w * self.scale)
-                    x += w_text+self.w_gap
+                    h_text = int(h * self.scale)
+                    #x += w_text+self.w_gap
+                    y -= h_text+self.h_gap
                 
-
-                # Output the abdomen state.
-                if (self.params['abdomen']['track']):
-                    s = 'ABDOMEN:% 7.4f' % (self.fly.abdomen.state.angle)
-                    w = 115
-                    cv2.putText(imgOutput, s, (x, y_bottom), self.fontface, self.scaleText, self.fly.abdomen.bgra)
-                    w_text = int(w * self.scale)
-                    x += w_text+self.w_gap
+    
+                    # Output the extra state.
+                    if (self.params['extra']['track']):
+                        s = 'EXTRA: (%0.3f)' % (self.fly.extra.state.intensity)
+                        w = 95
+                        cv2.putText(imgOutput, s, (x, y), self.fontface, self.scaleText, self.fly.extra.bgra)
+                        w_text = int(w * self.scale)
+                        h_text = int(h * self.scale)
+                        #x += w_text+self.w_gap
+                        y -= h_text+self.h_gap
+                    
+    
+                    # Output the wings state.
+                    if (self.params['right']['track']):
+                        # Output flight status
+                        if (self.fly.left.bFlying and self.fly.right.bFlying):
+                            s = 'Flying: (%0.3f)' % np.mean([self.fly.left.state.intensity,self.fly.right.state.intensity]) 
+                        else:
+                            s = 'Not flying: (%0.3f)' % np.mean([self.fly.left.state.intensity,self.fly.right.state.intensity]) 
+                        
+                        w = 150
+                        cv2.putText(imgOutput, s, (x, y), self.fontface, self.scaleText, bgra_dict['blue'])
+                        w_text = int(w * self.scale)
+                        h_text = int(h * self.scale)
+                        #x += w_text+self.w_gap
+                        y -= h_text+self.h_gap
                 
-
-                # Output the wings state.
-                if (self.params['right']['track']):
-                    if (self.fly.left.state.angle1 is not None):
-                        if (self.params['n_edges']==1):
-                            s = 'L:% 7.4f' % (self.fly.left.state.angle1)
-                            w = 65
-                        else:
-                            s = 'L:% 7.4f,% 7.4f' % (self.fly.left.state.angle1, self.fly.left.state.angle2)
-                            w = 120
-                        cv2.putText(imgOutput, s, (x, y_bottom), self.fontface, self.scaleText, self.fly.left.bgra)
-                        w_text = int(w * self.scale)
-                        x += w_text+self.w_gap
-                    
-                    if (self.fly.right.state.angle1 is not None):
-                        if (self.params['n_edges']==1):
-                            s = 'R:% 7.4f' % (self.fly.right.state.angle1)
-                            w = 65
-                        else:
-                            s = 'R:% 7.4f,% 7.4f' % (self.fly.right.state.angle1, self.fly.right.state.angle2)
-                            w = 120
-                        cv2.putText(imgOutput, s, (x, y_bottom), self.fontface, self.scaleText, self.fly.right.bgra)
-                        w_text = int(w * self.scale)
-                        x += w_text+self.w_gap
-                    
+                        # L+R
+                        if (self.fly.left.state.angle1 is not None) and (self.fly.right.state.angle1 is not None):
+                            leftplusright = self.fly.left.state.angle1 + self.fly.right.state.angle1
+                            #s = 'L+R:% 7.1f' % -np.rad2deg(leftplusright)
+                            s = 'L+R:% 7.4f' % leftplusright
+                            w = 82
+                            cv2.putText(imgOutput, s, (x, y), self.fontface, self.scaleText, bgra_dict['blue'])
+                            w_text = int(w * self.scale)
+                            h_text = int(h * self.scale)
+                            #x += w_text+self.w_gap
+                            y -= h_text+self.h_gap
         
-                    # Output sum of WBA
-                    if (self.fly.left.state.angle1 is not None) and (self.fly.right.state.angle1 is not None):
-                        leftplusright = self.fly.left.state.angle1 + self.fly.right.state.angle1
-                        #s = 'L+R:% 7.1f' % -np.rad2deg(leftplusright)
-                        s = 'L+R:% 7.4f' % leftplusright
-                        cv2.putText(imgOutput, s, (x, y_bottom), self.fontface, self.scaleText, bgra_dict['magenta'])
-                        w_text = int(82 * self.scale)
-                        x += w_text+self.w_gap
-    
-                        
-                    # Output difference in WBA
-                    if (self.fly.left.state.angle1 is not None) and (self.fly.right.state.angle1 is not None):
-                        leftminusright = self.fly.left.state.angle1 - self.fly.right.state.angle1
-                        #s = 'L-R:% 7.1f' % -np.rad2deg(leftminusright)
-                        s = 'L-R:% 7.4f' % leftminusright
-                        cv2.putText(imgOutput, s, (x, y_bottom), self.fontface, self.scaleText, bgra_dict['magenta'])
-                        w_text = int(82 * self.scale)
-                        x += w_text+self.w_gap
-    
-                        
-                    # Output flight status
-                    if (self.fly.left.bFlying and self.fly.right.bFlying):
-                        s = 'FLIGHT'
-                    else:
-                        s = 'no flight'
-                    
-                    cv2.putText(imgOutput, s, (x, y_bottom), self.fontface, self.scaleText, bgra_dict['magenta'])
-                    w_text = int(50 * self.scale)
-                    x += w_text+self.w_gap
+                            
+                        # L-R
+                        if (self.fly.left.state.angle1 is not None) and (self.fly.right.state.angle1 is not None):
+                            leftminusright = self.fly.left.state.angle1 - self.fly.right.state.angle1
+                            #s = 'L-R:% 7.1f' % -np.rad2deg(leftminusright)
+                            s = 'L-R:% 7.4f' % leftminusright
+                            w = 82
+                            cv2.putText(imgOutput, s, (x, y), self.fontface, self.scaleText, bgra_dict['blue'])
+                            w_text = int(w * self.scale)
+                            h_text = int(h * self.scale)
+                            #x += w_text+self.w_gap
+                            y -= h_text+self.h_gap
+        
+                        # Right
+                        if (self.fly.right.state.angle1 is not None):
+                            if (self.params['n_edges']==1):
+                                s = 'R:% 7.4f' % (self.fly.right.state.angle1)
+                                w = 65
+                            else:
+                                s = 'R:% 7.4f,% 7.4f' % (self.fly.right.state.angle1, self.fly.right.state.angle2)
+                                w = 120
+                            cv2.putText(imgOutput, s, (x, y), self.fontface, self.scaleText, self.fly.right.bgra)
+                            w_text = int(w * self.scale)
+                            h_text = int(h * self.scale)
+                            #x += w_text+self.w_gap
+                            y -= h_text+self.h_gap
             
-                # end if (self.params['right']['track'])
+                        # Left
+                        if (self.fly.left.state.angle1 is not None):
+                            if (self.params['n_edges']==1):
+                                s = 'L:% 7.4f' % (self.fly.left.state.angle1)
+                                w = 65
+                            else:
+                                s = 'L:% 7.4f,% 7.4f' % (self.fly.left.state.angle1, self.fly.left.state.angle2)
+                                w = 120
+                            cv2.putText(imgOutput, s, (x, y), self.fontface, self.scaleText, self.fly.left.bgra)
+                            w_text = int(w * self.scale)
+                            h_text = int(h * self.scale)
+                            #x += w_text+self.w_gap
+                            y -= h_text+self.h_gap
+                        
+                            
+                    # end if (self.params['right']['track'])
+    
+    
+                    # Output the abdomen state.
+                    if (self.params['abdomen']['track']):
+                        s = 'ABDOMEN:% 7.4f' % (self.fly.abdomen.state.angle)
+                        w = 115
+                        cv2.putText(imgOutput, s, (x, y), self.fontface, self.scaleText, self.fly.abdomen.bgra)
+                        w_text = int(w * self.scale)
+                        h_text = int(h * self.scale)
+                        #x += w_text+self.w_gap
+                        y -= h_text+self.h_gap
+                    
+    
+                    # Output the head state.
+                    if (self.params['head']['track']):
+                        s = 'HEAD:% 7.4f' % (self.fly.head.state.angle)
+                        w = 90
+                        cv2.putText(imgOutput, s, (x, y), self.fontface, self.scaleText, self.fly.head.bgra)
+                        w_text = int(w * self.scale)
+                        h_text = int(h * self.scale)
+                        #x += w_text+self.w_gap
+                        y -= h_text+self.h_gap
+                
 
 
                 # Display the image.
