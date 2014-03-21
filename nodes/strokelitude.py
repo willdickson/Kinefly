@@ -691,6 +691,11 @@ class PhaseCorrelation(object):
 # Find the two largest gradients in the horizontal intensity profile of an image.
 #
 class EdgeDetector(object):
+    intensities = []
+    intensitiesF = []
+    diff = []
+    diffF = []
+
     # get_edges()
     # Get the angles of the two wing edges.
     #
@@ -698,19 +703,16 @@ class EdgeDetector(object):
         angle1 = 0.0
         angle2 = 0.0
         
-        intensities = np.sum(image, 0).astype(np.int64)
-        intensitiesF = filter_median(intensities, q=1)
+        self.intensities = np.sum(image, 0).astype(np.int64)
+        self.intensitiesF = filter_median(self.intensities, q=1)
         
         #diff = np.diff(intensitiesF) 
-        diff = intensitiesF[3:] - intensitiesF[:-3]
+        diff = self.intensitiesF[5:] - self.intensitiesF[:-5]
+        diffF = filter_median(diff, q=1)
 
-        #rospy.logwarn((image.dtype, intensities.dtype, intensitiesF.dtype, diff.dtype))
-        #rospy.logwarn(intensitiesF)
-        #rospy.logwarn(diff)
-        
-        iMax = np.argmax(diff)
-        iMin = np.argmin(diff)
-        if (np.abs(diff[iMax]) > np.abs(diff[iMin])): 
+        iMax = np.argmax(diffF)
+        iMin = np.argmin(diffF)
+        if (np.abs(diffF[iMax]) > np.abs(diffF[iMin])): 
             (iMajor,iMinor) = (iMax,iMin)  
         else:
             (iMajor,iMinor) = (iMin,iMax)
@@ -1526,7 +1528,7 @@ class Fly(object):
         self.stamp   = 0
 
         self.pubFlystate = rospy.Publisher('strokelitude/flystate', MsgFlystate)
-
+ 
 
     def set_params(self, params):
         self.params = params
@@ -1683,6 +1685,7 @@ class Fly(object):
         
         self.pubFlystate.publish(flystate)
         
+
 
 # end class Fly
 
@@ -1909,10 +1912,15 @@ class Wing(PolarTrackedBodypart):
         self.edgedetector      = EdgeDetector()
         self.state             = Struct()
         self.bFlying = True
+        self.sense = 1 if (self.name=='right') else -1 
         
         self.windowTest = ImageWindow(False, self.name+'Edge')
         self.set_params(params)
 
+        # Services, for live intensities plots via live_wing_histograms.py
+        self.service_angles      = rospy.Service('wing_angles_'+name, float32list, self.serve_angles_callback)
+        self.service_intensities = rospy.Service('wing_intensities_'+name, float32list, self.serve_intensities_callback)
+        self.service_edges       = rospy.Service('wing_edges_'+name, float32list, self.serve_edges_callback)
     
     # set_params()
     # Set the given params dict into this object.
@@ -1951,8 +1959,8 @@ class Wing(PolarTrackedBodypart):
             self.state.angle2 = (angle2 - (self.angleOutward_i-self.angleBody_i) + np.pi) % (2*np.pi) - np.pi
             
             if (self.name=='left'):
-                self.state.angle1 *= -1
-                self.state.angle2 *= -1
+                self.state.angle1 *= self.sense
+                self.state.angle2 *= self.sense
                 
             self.state.intensity = intensity
 
@@ -1986,12 +1994,8 @@ class Wing(PolarTrackedBodypart):
         if (self.params[self.name]['track']):
             # Leading and trailing edges
             if (self.state.angle1 is not None):
-                a = 1
-                if (self.name=='left'):
-                    a = -1
-    
-                angle1 =  a*self.state.angle1 + (self.angleOutward_i-self.angleBody_i)
-                angle2 =  a*self.state.angle2 + (self.angleOutward_i-self.angleBody_i)
+                angle1 =  self.sense*self.state.angle1 + (self.angleOutward_i-self.angleBody_i)
+                angle2 =  self.sense*self.state.angle2 + (self.angleOutward_i-self.angleBody_i)
                     
                 
                 angle1_i = self.transform_angle_i_from_b(angle1)
@@ -2008,11 +2012,31 @@ class Wing(PolarTrackedBodypart):
                     y0 = self.ptHinge_i[1] + self.params[self.name]['radius_inner'] * np.sin(angle2_i)
                     x1 = self.ptHinge_i[0] + self.params[self.name]['radius_outer'] * np.cos(angle2_i)
                     y1 = self.ptHinge_i[1] + self.params[self.name]['radius_outer'] * np.sin(angle2_i)
-                    cv2.line(image, (int(x0),int(y0)), (int(x1),int(y1)), self.bgra, 1)
+                    cv2.line(image, (int(x0),int(y0)), (int(x1),int(y1)), self.bgra_dim, 1)
     
 
             self.windowTest.show()
         
+        
+    def serve_angles_callback(self, request):
+        return float32listResponse(np.linspace(self.params[self.name]['angle_lo'], 
+                                               self.params[self.name]['angle_hi'], 
+                                               len(self.edgedetector.intensitiesF)))
+        
+    def serve_intensities_callback(self, request):
+        rv = float32listResponse([])
+        if (self.edgedetector.intensitiesF is not None) and (len(self.edgedetector.intensitiesF)>0):
+            intensities = (self.edgedetector.intensitiesF - np.min(self.edgedetector.intensitiesF)).astype(np.float32)
+            intensities /= np.max(intensities)
+            rv = float32listResponse(intensities)
+            
+        return rv
+        
+    def serve_edges_callback(self, request):
+        angle1 = (((self.angleOutward_i-self.angleBody_i) + np.pi) % (2*np.pi)) - np.pi + self.sense*self.state.angle1
+        angle2 = (((self.angleOutward_i-self.angleBody_i) + np.pi) % (2*np.pi)) - np.pi + self.sense*self.state.angle2
+        return float32listResponse([angle1, angle1])
+            
 # end class Wing
 
     
