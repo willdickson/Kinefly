@@ -2029,12 +2029,17 @@ class Wing(PolarTrackedBodypart):
     def serve_angles_callback(self, request):
         return float32listResponse(np.linspace(self.params[self.name]['angle_lo'], 
                                                self.params[self.name]['angle_hi'], 
-                                               len(self.edgedetector.intensitiesF)))
+                                               len(self.edgedetector.intensitiesF))) # -5))
         
     def serve_intensities_callback(self, request):
         rv = float32listResponse([])
         if (self.edgedetector.intensitiesF is not None) and (len(self.edgedetector.intensitiesF)>0):
             intensities = (self.edgedetector.intensitiesF - np.min(self.edgedetector.intensitiesF)).astype(np.float32)
+            
+            #diff = self.edgedetector.intensitiesF[5:] - self.edgedetector.intensitiesF[:-5]
+            #diffF = filter_median(diff, q=1)
+            #intensities = (diffF - np.min(diffF)).astype(np.float32)
+            
             intensities /= np.max(intensities)
             rv = float32listResponse(intensities)
             
@@ -2108,7 +2113,6 @@ class MainWindow:
                                'angle_hi':3.927, 
                                'angle_lo':2.3562},
                     'left':   {'track':True,
-                               'autozero':False,
                                'subtract_bg':True,
                                'stabilize':False,
                                'hinge':{'x':250,
@@ -2118,7 +2122,6 @@ class MainWindow:
                                'angle_hi':-0.7854, 
                                'angle_lo':-2.3562},
                     'right':  {'track':True,
-                               'autozero':False,
                                'subtract_bg':True,
                                'stabilize':False,
                                'hinge':{'x':350,

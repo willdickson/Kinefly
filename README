@@ -2,18 +2,21 @@ Strokelitude
 ----------------
 Strokelitude extracts angle and position variables of a tethered winged insect.
 
-The reported variables are wing major and minor edges, head and abdomen angles & radii, and the pixel intensity of an elliptical region of the image (intended to capture leg motion, etc). 
+The reported variables are wing major and minor edge angles, head and abdomen angles & radii, and the pixel intensity of an arbitrary elliptical region of the image (intended to capture leg motion, etc). 
 
-The software runs under ROS, the Robot Operating System, and can use any camera or other source that provides a ROS image stream, e.g. /camera/image_raw.
+The software runs on ROS, the Robot Operating System, and can use any camera or other source that provides a ROS image stream, e.g. /camera/image_raw.
 
 
 Installation:
 ---------------------------
-You need ROS, a camera to supply a ROS image stream, Strokelitude.  If you want to control voltages, then you need the Phidgets API w/ PhidgetsAnalog hardware.  If you want to control LED panels, then you'll need panels, see below.  There might be more stuff, but that's the basic setup.
+You need ROS, a camera to supply a ROS image stream, and Strokelitude.  If you want to control voltages, then you'll need the PhidgetsAnalog hardware w/ Phidgets API.  If you want to control LED panels, then you'll need panels, see below.  There might be more stuff, but that's the basic setup.
 
+Basebones instructions:
 sudo-apt-get install ros-hydro-desktop-full
 git clone https://github.com/ssafarik/StrokelitudeROS.git
 rosmake StrokelitudeROS
+touch ~/strokelitude.yaml
+
 
 For Phidgets, go to the Phidgets website and get both "libphidget..." and "PhidgetsPython"
 
@@ -22,7 +25,8 @@ For Phidgets, go to the Phidgets website and get both "libphidget..." and "Phidg
 Main Window
 ---------------------------
 The main window provides an interface to most, but not all, of the functionality. The buttons and checkboxes on the toolbar, and the handles on the image, function as follows:
-  <Exit>        Terminate the program.
+  <Exit>        Terminate the program.  Use this instead of the 
+                titlebar's [x].
   <SaveBG>      Save the instant camera image to disk as ~/strokelitude.png
   []Head        Turn on/off head tracking.
   []Abdomen     Turn on/off abdomen tracking.
@@ -40,9 +44,9 @@ The frame rate is dependent upon virtually every setting.  Turn off tracking of 
   
 Handle Positioning:
 ---------------------------
-Each of the head/abdomen/left/right body parts has a set of control points that determine what part of the image is tracked.  The handle positions determine the hinge, angles, and radii.
+Each of the head/abdomen/left/right body parts has a set of control points that determine what part of the image is tracked.  The handle positions determine the hinges, angles, and radii.
 
-First, for best tracking, each of the head/abdomen/left/right body parts should have the 'hinge' handle placed at the center of rotation, which in the case of the abdomen, for example, is not the center of the abdomen, but rather is the point where the abdomen connects to the rest of the body, and rotates about.
+First, for best tracking, each of the head/abdomen/left/right body parts should have the 'hinge' handle placed at the center of rotation, which for example in the case of the abdomen is not the center of the abdomen, but rather is the point where the abdomen connects to the rest of the body, and rotates about.
 
 For the head and abdomen, set the inner and outer radii to cover just a narrow strip that encloses unique features of the bodypart as the bodypart rotates, and set the angles to cover all of the bodypart motion.    
 
@@ -71,13 +75,12 @@ Before the initial run of Strokelitude, you must create a blank ~/strokelitude.y
 
 Most parameters are set by manipulating the main window interface, but a few are not and are described here.  There are some global parameters, plus sections for each of head/abdomen/left/right.  
 
-Parameters that are not set by the UI:
-The parameters that are not specific to a bodypart are:
+Parameters that apply to all bodyparts:
     filenameBackground:         Location to store the background image.  
                                 (default: ~/strokelitude.png)
     image_topic:                ROS topic for the image stream. 
                                 (default: /camera/image_raw)
-    n_edges:                    Display 1 or 2 wing edges.
+    n_edges:                    Display 1 or 2 wing edges. (default: 1)
     parameterfile:              Location of the YAML file. 
                                 (default: ~/strokelitude.yaml)
     rc_background:              Time constant of the moving average background
@@ -90,11 +93,13 @@ The parameters that are not specific to a bodypart are:
     use_gui:                    Turn on/off the graphical user interface to
                                 speed the framerate. (default: true)
   
-The parameters that are specific to a bodypart are:
+Parameters set individually for head & abdomen:
     autozero:                   Automatically (true) determine the zero 
                                 angle based on center of motion, or (false)
                                 use the first valid frame as the zero angle.
                                 (default: true)
+  
+Parameters set individually for head, abdomen, left, right:
     stabilize:                  Turn on/off Image stabilization for a
                                 bodypart.  The quality of stabilization
                                 is very dependent upon the region selected
