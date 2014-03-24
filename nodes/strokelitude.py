@@ -1515,11 +1515,11 @@ class PolarTrackedBodypart(object):
 ###############################################################################
 class Fly(object):
     def __init__(self, params={}):
-        self.head    = BodySegment(name='head',    params=params, color='cyan', bEqualizeHist=True) 
+        self.head    = BodySegment(name='head',    params=params, color='cyan',    bEqualizeHist=True) 
         self.abdomen = BodySegment(name='abdomen', params=params, color='magenta', bEqualizeHist=True) 
-        self.right   = Wing(name='right',          params=params, color='red', bEqualizeHist=False)
-        self.left    = Wing(name='left',           params=params, color='green', bEqualizeHist=False)
-        self.extra    = Extra(name='extra',           params=params, color='yellow', bEqualizeHist=False)
+        self.right   = Wing(name='right',          params=params, color='red',     bEqualizeHist=False)
+        self.left    = Wing(name='left',           params=params, color='green',   bEqualizeHist=False)
+        self.extra   = Extra(name='extra',         params=params, color='yellow',  bEqualizeHist=False)
         
         self.bgra_body = bgra_dict['light_gray']
         self.ptBodyIndicator1 = None
@@ -1914,19 +1914,18 @@ class Wing(PolarTrackedBodypart):
     def __init__(self, name=None, params={}, color='white', bEqualizeHist=False):
         PolarTrackedBodypart.__init__(self, name, params, color, bEqualizeHist)
         
-        self.name = name
-        self.edgedetector      = EdgeDetector()
-        self.state             = Struct()
-        self.bFlying = True
-        self.sense = 1 if (self.name=='right') else -1 
-        
-        self.windowTest = ImageWindow(False, self.name+'Edge')
+        self.name           = name
+        self.edgedetector   = EdgeDetector()
+        self.state          = Struct()
+        self.bFlying        = False
+        self.windowTest     = ImageWindow(False, self.name+'Edge')
         self.set_params(params)
 
         # Services, for live intensities plots via live_wing_histograms.py
         self.service_angles      = rospy.Service('wing_angles_'+name, float32list, self.serve_angles_callback)
         self.service_intensities = rospy.Service('wing_intensities_'+name, float32list, self.serve_intensities_callback)
         self.service_edges       = rospy.Service('wing_edges_'+name, float32list, self.serve_edges_callback)
+    
     
     # set_params()
     # Set the given params dict into this object.
@@ -1935,15 +1934,19 @@ class Wing(PolarTrackedBodypart):
         PolarTrackedBodypart.set_params(self, params)
         
         self.imgRoiBackground = None
-        
         self.iCount = 0
 
         self.state.intensity = 0.0
         self.state.angle1 = 0.0
         self.state.angle2 = 0.0
 
-        
-
+        # Compute the 'handedness' of the head/abdomen and wing/wing axes.
+        matAxes = np.array([[self.params['head']['hinge']['x']-self.params['abdomen']['hinge']['x'], self.params['head']['hinge']['y']-self.params['abdomen']['hinge']['y']],
+                            [self.params['right']['hinge']['x']-self.params['left']['hinge']['x'], self.params['right']['hinge']['y']-self.params['left']['hinge']['y']]])
+        self.senseAxes = np.sign(np.linalg.det(matAxes))
+        a = 1 if (self.name=='left') else -1
+        self.sense = a*self.senseAxes  
+    
         
     # update_state()
     # Compute wing angles.
@@ -1964,9 +1967,8 @@ class Wing(PolarTrackedBodypart):
             self.state.angle1 = (angle1 - (self.angleOutward_i-self.angleBody_i) + np.pi) % (2*np.pi) - np.pi
             self.state.angle2 = (angle2 - (self.angleOutward_i-self.angleBody_i) + np.pi) % (2*np.pi) - np.pi
             
-            if (self.name=='left'):
-                self.state.angle1 *= self.sense
-                self.state.angle2 *= self.sense
+            self.state.angle1 *= self.sense
+            self.state.angle2 *= self.sense
                 
             self.state.intensity = intensity
 
