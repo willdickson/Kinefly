@@ -98,8 +98,6 @@ Parameters set individually for head & abdomen:
                                 angle based on center of motion, or (false)
                                 use the first valid frame as the zero angle.
                                 (default: true)
-  
-Parameters set individually for head, abdomen, left, right:
     stabilize:                  Turn on/off Image stabilization for a
                                 bodypart.  The quality of stabilization
                                 is very dependent upon the region selected
