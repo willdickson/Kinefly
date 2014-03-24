@@ -638,51 +638,51 @@ class PhaseCorrelation(object):
     # Calculate the coordinate shift between the two images.
     #
     def get_shift(self, imgA, imgB):
+        rv = np.array([0.0, 0.0])
         if (imgA is not None) and (imgB is not None) and (imgA.shape==imgB.shape):
             # Phase correlation.
             A  = cv2.dft(imgA)
             B  = cv2.dft(imgB)
             AB = cv2.mulSpectrums(A, B, flags=0, conjB=True)
-            crosspower = AB / cv2.norm(AB)
-            shift = cv2.idft(crosspower)
-            shift0  = np.roll(shift,  int(shift.shape[0]/2), 0)
-            shift00 = np.roll(shift0, int(shift.shape[1]/2), 1) # Roll the matrix so 0,0 goes to the center of the image.
-            
-            # Get the coordinates of the maximum shift.
-            kShift = np.argmax(shift00)
-            (iShift,jShift) = np.unravel_index(kShift, shift00.shape)
+            if (cv2.norm(AB) != 0.0):
+                crosspower = AB / cv2.norm(AB)
+                shift = cv2.idft(crosspower)
+                shift0  = np.roll(shift,  int(shift.shape[0]/2), 0)
+                shift00 = np.roll(shift0, int(shift.shape[1]/2), 1) # Roll the matrix so 0,0 goes to the center of the image.
+                
+                # Get the coordinates of the maximum shift.
+                kShift = np.argmax(shift00)
+                (iShift,jShift) = np.unravel_index(kShift, shift00.shape)
+    
+                # Get weighted centroid of a region around the peak, for sub-pixel accuracy.
+                w = 7
+                r = int((w-1)/2)
+                i0 = clip(iShift-r, 0, shift00.shape[0]-1)
+                i1 = clip(iShift+r, 0, shift00.shape[0]-1)+1
+                j0 = clip(jShift-r, 0, shift00.shape[1]-1)
+                j1 = clip(jShift+r, 0, shift00.shape[1]-1)+1
+                peak = shift00[i0:i1].T[j0:j1].T
+                moments = cv2.moments(peak, binaryImage=False)
+                           
+                if (moments['m00'] != 0.0):
+                    iShiftSubpixel = moments['m01']/moments['m00'] + float(i0)
+                    jShiftSubpixel = moments['m10']/moments['m00'] + float(j0)
+                else:
+                    iShiftSubpixel = float(shift.shape[0])/2.0
+                    jShiftSubpixel = float(shift.shape[1])/2.0
+                
+                # Accomodate the matrix roll we did above.
+                iShiftSubpixel -= float(shift.shape[0])/2.0
+                jShiftSubpixel -= float(shift.shape[1])/2.0
+    
+                # Convert unsigned shifts to signed shifts. 
+                height = float(shift00.shape[0])
+                width  = float(shift00.shape[1])
+                iShiftSubpixel  = ((iShiftSubpixel+height/2.0) % height) - height/2.0
+                jShiftSubpixel  = ((jShiftSubpixel+width/2.0) % width) - width/2.0
+                
+                rv = np.array([iShiftSubpixel, jShiftSubpixel])
 
-            # Get weighted centroid of a region around the peak, for sub-pixel accuracy.
-            w = 7
-            r = int((w-1)/2)
-            i0 = clip(iShift-r, 0, shift00.shape[0]-1)
-            i1 = clip(iShift+r, 0, shift00.shape[0]-1)+1
-            j0 = clip(jShift-r, 0, shift00.shape[1]-1)
-            j1 = clip(jShift+r, 0, shift00.shape[1]-1)+1
-            peak = shift00[i0:i1].T[j0:j1].T
-            moments = cv2.moments(peak, binaryImage=False)
-                       
-            if (moments['m00'] != 0.0):
-                iShiftSubpixel = moments['m01']/moments['m00'] + float(i0)
-                jShiftSubpixel = moments['m10']/moments['m00'] + float(j0)
-            else:
-                iShiftSubpixel = float(shift.shape[0])/2.0
-                jShiftSubpixel = float(shift.shape[1])/2.0
-            
-            # Accomodate the matrix roll we did above.
-            iShiftSubpixel -= float(shift.shape[0])/2.0
-            jShiftSubpixel -= float(shift.shape[1])/2.0
-
-            # Convert unsigned shifts to signed shifts. 
-            height = float(shift00.shape[0])
-            width  = float(shift00.shape[1])
-            iShiftSubpixel  = ((iShiftSubpixel+height/2.0) % height) - height/2.0
-            jShiftSubpixel  = ((jShiftSubpixel+width/2.0) % width) - width/2.0
-            
-            rv = np.array([iShiftSubpixel, jShiftSubpixel])
-            
-        else:
-            rv = np.array([0.0, 0.0])
             
         return rv
         
@@ -1088,7 +1088,6 @@ class PolarTrackedBodypart(object):
         self.windowFG         = ImageWindow(False, self.name+'FG')
         self.windowPolar      = ImageWindow(False, self.name+'Polar')
         self.windowMask       = ImageWindow(False, self.name+'Mask')
-        self.windowStabilized = ImageWindow(False, self.name+'Stable')
 
 
     
@@ -1127,7 +1126,6 @@ class PolarTrackedBodypart(object):
         self.windowPolar.set_enable(self.params['windows'] and self.params[self.name]['track'])
         self.windowBG.set_enable(self.params['windows'] and self.params[self.name]['track'] and self.params[self.name]['subtract_bg'])
         self.windowFG.set_enable(self.params['windows'] and self.params[self.name]['track'])
-        self.windowStabilized.set_enable(self.params['windows'] and self.params[self.name]['track'] and self.params[self.name]['stabilize'])
 
         self.angle_hi_i = self.transform_angle_i_from_b(self.params[self.name]['angle_hi'])
         self.angle_lo_i = self.transform_angle_i_from_b(self.params[self.name]['angle_lo'])
@@ -1183,9 +1181,9 @@ class PolarTrackedBodypart(object):
         # Args for the two ellipse calls.
         x = int(self.params[self.name]['hinge']['x'])
         y = int(self.params[self.name]['hinge']['y'])
-        r_outer = int(self.params[self.name]['radius_outer'])
-        r_inner = int(self.params[self.name]['radius_inner'])
-        
+        r_outer = int(np.ceil(self.params[self.name]['radius_outer']))
+        r_inner = int(np.floor(self.params[self.name]['radius_inner']))-1
+
         hi = int(np.ceil(np.rad2deg(self.angle_hi_i)))
         lo = int(np.floor(np.rad2deg(self.angle_lo_i)))
         
@@ -1243,7 +1241,7 @@ class PolarTrackedBodypart(object):
             yMin0 = min0[1]
             xMax0 = max0[0]+1
             yMax0 = max0[1]+1
-            
+
             # Compare unclipped with the as-drawn locations.
             xClip0 = xMin-xMin0
             yClip0 = yMin-yMin0
@@ -1335,7 +1333,7 @@ class PolarTrackedBodypart(object):
             
             radius_mid = (self.params[self.name]['radius_outer']+self.params[self.name]['radius_inner'])/2.0
             dr = (self.params[self.name]['radius_outer']-self.params[self.name]['radius_inner'])/2.0
-                
+
             self.imgRoiFgMaskedPolar  = self.polartransforms.transform_polar_elliptical(self.imgRoiFgMasked, 
                                                      self.i_0, 
                                                      self.j_0, 
@@ -1506,7 +1504,6 @@ class PolarTrackedBodypart(object):
             self.windowFG.show()
             self.windowPolar.show()
             self.windowMask.show()
-            self.windowStabilized.show()
                 
 # end class PolarTrackedBodypart
 
@@ -1751,7 +1748,8 @@ class BodySegment(PolarTrackedBodypart):
         self.stateLo           = Struct()
         self.stateHi           = Struct()
         
-        self.windowTest = ImageWindow(False, self.name+'Test')
+        self.windowStabilized = ImageWindow(False, self.name+'Stable')
+        self.windowTest       = ImageWindow(False, self.name+'Test')
         self.set_params(params)
 
     
@@ -1783,6 +1781,8 @@ class BodySegment(PolarTrackedBodypart):
         self.stateHi.angle = -np.inf
         self.stateHi.radius = -np.inf
         
+        self.windowStabilized.set_enable(self.params['windows'] and self.params[self.name]['track'] and self.params[self.name]['stabilize'])
+
 
         
     # update_state()
@@ -1901,6 +1901,7 @@ class BodySegment(PolarTrackedBodypart):
             ptHinge_i = clip_pt((int(self.ptHinge_i[0]), int(self.ptHinge_i[1])), image.shape) 
             cv2.line(image, ptHinge_i, ptState_i, self.bgra_state, 1)
             
+            self.windowStabilized.show()
             self.windowTest.show()
         
 # end class BodySegment
@@ -2240,10 +2241,10 @@ class MainWindow:
                         paramsOut[partname]['hinge']['y'] = max(0, paramsOut[partname]['hinge']['y'])
     
                 if ('radius_inner' in paramsOut[partname]):
-                    paramsOut[partname]['radius_inner'] = max(5, paramsOut[partname]['radius_inner'])
+                    paramsOut[partname]['radius_inner'] = max(5*paramsOut['scale_image'], paramsOut[partname]['radius_inner'])
     
                 if ('radius_outer' in paramsOut[partname]) and ('radius_inner' in paramsOut[partname]):
-                    paramsOut[partname]['radius_outer'] = max(paramsOut[partname]['radius_outer'], paramsOut[partname]['radius_inner']+5)
+                    paramsOut[partname]['radius_outer'] = max(paramsOut[partname]['radius_outer'], paramsOut[partname]['radius_inner']+5*paramsOut['scale_image'])
 
         return paramsOut
         
@@ -2692,7 +2693,7 @@ class MainWindow:
                     angle_lo_b = paramsScaled[partnameSelected][tagOther]
     #            angle_lo_b = paramsScaled[partnameSelected][tagOther]
             
-            paramsScaled[partnameSelected]['radius_outer'] = float(max(bodypartSelected.params[partnameSelected]['radius_inner']+2, 
+            paramsScaled[partnameSelected]['radius_outer'] = float(max(bodypartSelected.params[partnameSelected]['radius_inner']+2*self.scale, 
                                                                       np.linalg.norm(bodypartSelected.ptHinge_i - ptMouse)))
                 
             # Make angles relative to bodypart origin. 
@@ -2732,7 +2733,7 @@ class MainWindow:
         # Inner radius.
         elif (tagSelected=='radius_inner'): 
             paramsScaled[partnameSelected]['radius_inner'] = float(min(np.linalg.norm(bodypartSelected.ptHinge_i - ptMouse), 
-                                                                                      bodypartSelected.params[partnameSelected]['radius_outer']-2))
+                                                                                      bodypartSelected.params[partnameSelected]['radius_outer']-2*self.scale))
             if (partnameSelected in ['left','right']) and (paramsScaled['symmetric']):
                 paramsScaled[partnameSlave]['radius_inner'] = paramsScaled[partnameSelected]['radius_inner']
                 
