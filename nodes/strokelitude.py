@@ -644,8 +644,9 @@ class PhaseCorrelation(object):
             A  = cv2.dft(imgA)
             B  = cv2.dft(imgB)
             AB = cv2.mulSpectrums(A, B, flags=0, conjB=True)
-            if (cv2.norm(AB) != 0.0):
-                crosspower = AB / cv2.norm(AB)
+            normAB = cv2.norm(AB)
+            if (normAB != 0.0):
+                crosspower = AB / normAB
                 shift = cv2.idft(crosspower)
                 shift0  = np.roll(shift,  int(shift.shape[0]/2), 0)
                 shift00 = np.roll(shift0, int(shift.shape[1]/2), 1) # Roll the matrix so 0,0 goes to the center of the image.
@@ -832,7 +833,6 @@ class IntensityTrackedBodypart(object):
         
         self.cosAngle = np.cos(self.params[self.name]['angle'])
         self.sinAngle = np.sin(self.params[self.name]['angle'])
-        #self.R = np.array([[self.cosAngle, -self.sinAngle], [self.sinAngle, self.cosAngle]])
 
         # Turn on/off the extra windows.
         self.windowBG.set_enable(self.params['windows'] and self.params[self.name]['track'] and self.params[self.name]['subtract_bg'])
@@ -1293,6 +1293,7 @@ class PolarTrackedBodypart(object):
         
 
     def update_roi(self, image):
+        self.image = image
         self.shape = image.shape
         
         # Extract the ROI images.
@@ -1825,11 +1826,18 @@ class BodySegment(PolarTrackedBodypart):
 
             # Stabilized image.
             if (self.params[self.name]['stabilize']):
-                size = (self.imgRoiFgMaskedPolar.shape[1],
-                        self.imgRoiFgMaskedPolar.shape[0])
-                center = (self.imgRoiFgMaskedPolar.shape[1]/2.0+aShift, 
-                          self.imgRoiFgMaskedPolar.shape[0]/2.0+rShift)
-                self.imgStabilized = cv2.getRectSubPix(self.imgRoiFgMaskedPolar, size, center)
+                # Stabilize the polar image.
+                #size = (self.imgRoiFgMaskedPolar.shape[1],
+                #        self.imgRoiFgMaskedPolar.shape[0])
+                #center = (self.imgRoiFgMaskedPolar.shape[1]/2.0+aShift, 
+                #          self.imgRoiFgMaskedPolar.shape[0]/2.0+rShift)
+                #self.imgStabilized = cv2.getRectSubPix(self.imgRoiFgMaskedPolar, size, center)
+                
+                # Stabilize the bodypart in the entire camera image.
+                center = (self.params[self.name]['hinge']['x'], self.params[self.name]['hinge']['y'])
+                size = (self.image.shape[1], self.image.shape[0]) 
+                T = cv2.getRotationMatrix2D(center, np.rad2deg(self.state.angle), 1.0)
+                self.imgStabilized = cv2.warpAffine(self.image, T, size)
                  
                 self.windowStabilized.set_image(self.imgStabilized)
 
@@ -2089,7 +2097,7 @@ class MainWindow:
                     'use_gui':True,                     # You can turn off the GUI to speed the framerate.
                     'windows':True,               # Show the helpful extra windows.
                     'symmetric':True,                   # Forces the UI to remain symmetric.
-                    'threshold_intensity_flight':0.1,   # Amount of pixel intensity that counts as flying.  Intensity ranges on interval [0,1].
+                    'threshold_intensity_flight':0.5,   # Amount of pixel intensity that counts as flying.  Intensity ranges on interval [0,1].
                     'scale_image':1.0,                  # Reducing the image scale will speed the framerate.
                     'n_edges':1,                        # Number of edges per wing to find.  1 or 2.
                     'rc_background':1000.0,             # Time constant of the moving average background.
