@@ -89,7 +89,7 @@ Parameters that apply to all bodyparts:
                                 values give better framerate. (default: 1.0)
     threshold_intensity_flight: Wing intensity values greater than this count
                                 as flying. The range is on [0,1]. 
-                                (default: 0.1)
+                                (default: 0.5)
     use_gui:                    Turn on/off the graphical user interface to
                                 speed the framerate. (default: true)
   

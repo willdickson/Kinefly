@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 import numpy as np
 
-from StrokelitudeROS.srv import *
+from StrokelitudeROS.srv import SrvFloat32List
 
 class Live_Plotter:
     
@@ -19,28 +19,28 @@ class Live_Plotter:
         # right wing
         service_name = "wing_intensities_right"
         rospy.wait_for_service(service_name)
-        self.get_wing_intensities_right = rospy.ServiceProxy(service_name, float32list)
+        self.get_wing_intensities_right = rospy.ServiceProxy(service_name, SrvFloat32List)
         
         service_name = "wing_angles_right"
         rospy.wait_for_service(service_name)
-        self.get_wing_angles_right = rospy.ServiceProxy(service_name, float32list)
+        self.get_wing_angles_right = rospy.ServiceProxy(service_name, SrvFloat32List)
         
         service_name = "wing_edges_right"
         rospy.wait_for_service(service_name)
-        self.get_wing_edges_right = rospy.ServiceProxy(service_name, float32list)
+        self.get_wing_edges_right = rospy.ServiceProxy(service_name, SrvFloat32List)
         
         # left wing
         service_name = "wing_intensities_left"
         rospy.wait_for_service(service_name)
-        self.get_wing_intensities_left = rospy.ServiceProxy(service_name, float32list)
+        self.get_wing_intensities_left = rospy.ServiceProxy(service_name, SrvFloat32List)
         
         service_name = "wing_angles_left"
         rospy.wait_for_service(service_name)
-        self.get_wing_angles_left = rospy.ServiceProxy(service_name, float32list)
+        self.get_wing_angles_left = rospy.ServiceProxy(service_name, SrvFloat32List)
         
         service_name = "wing_edges_left"
         rospy.wait_for_service(service_name)
-        self.get_wing_edges_left = rospy.ServiceProxy(service_name, float32list)
+        self.get_wing_edges_left = rospy.ServiceProxy(service_name, SrvFloat32List)
         
         #
         
