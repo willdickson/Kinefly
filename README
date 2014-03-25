@@ -1,6 +1,6 @@
 Kinefly
 ----------------
-Kinefly extracts angle and position variables of a tethered winged insect.
+Kinefly extracts kinematics variables from the camera image of a tethered winged insect.
 
 The reported variables are wing major and minor edge angles, head and abdomen angles & radii, and the pixel intensity of an arbitrary elliptical region of the image (intended to capture leg motion, etc). 
 
@@ -11,7 +11,7 @@ Installation:
 ---------------------------
 You need ROS, a camera to supply a ROS image stream, and Kinefly.  If you want to control voltages, then you'll need the PhidgetsAnalog hardware w/ Phidgets API.  If you want to control LED panels, then you'll need panels, see below.  There might be more stuff, but that's the basic setup.
 
-Basebones instructions:
+Barebones instructions:
 sudo-apt-get install ros-hydro-desktop-full
 git clone https://github.com/ssafarik/Kinefly.git
 rosmake Kinefly
@@ -37,11 +37,6 @@ The main window provides an interface to most, but not all, of the functionality
   []Windows     Turn on/off helpful windows showing various internal images.
 
   
-Frame Rate
----------------------------
-The frame rate is dependent upon virtually every setting.  Turn off tracking of unneeded bodyparts, use the smallest usable regions of interest (i.e. handle positions), and turn off unneeded windows to speed the frame rate.  The largest improvement is likely to come from lowering the value of 'scale_image' in the .yaml file.
-
-  
 Handle Positioning:
 ---------------------------
 Each of the head/abdomen/left/right body parts has a set of control points that determine what part of the image is tracked.  The handle positions determine the hinges, angles, and radii.
@@ -53,6 +48,38 @@ For the head and abdomen, set the inner and outer radii to cover just a narrow s
 For the wings, the angles and radii should be positioned to indicate a region of interest such that legs and other non-wing moving things do not encroach into the region of interest.
 
 
+Output Variables
+---------------------------
+The output is published on the ROS topic '/kinefly/flystate', and can be retrieved either by running the command 'rostopic echo kinefly/flystate' or by writing your own ROS node and subscribing to that topic.
+An example of the output is shown here:
+---
+header: 
+  seq: 843
+  stamp: 
+    secs: 1393885539
+    nsecs: 751821041
+  frame_id: Fly
+head: 
+  radius: 56.592949767
+  angle: -0.167498539458
+  intensity: 0.376857756377
+abdomen: 
+  radius: 109.989494885
+  angle: 0.0321847366966
+  intensity: 0.638065271683
+left: 
+  angle1: 0.575350079497
+  angle2: -0.629515897126
+  intensity: 0.837157232885
+right: 
+  angle1: 1.0994397644
+  angle2: 1.21830546613
+  intensity: 0.626624052158
+extra: 
+  intensity: 0.592803359032
+ 
+
+
 Units
 ---------------------------
 Angle units are radians.  
@@ -62,6 +89,11 @@ Intensity is on the range [0,1], where 0.0 equals all pixels black, and 1.0 equa
 Each bodypart (head, abdomen, and wings) has its own angle origin.  The zero angle for the head is directly opposite from the abdomen, and the zero of the abdomen angle is directly opposite from the head.  The zero for each wing is directly opposite from the other wing hinge.  In other words, imagine a line connecting the head and abdomen, and a line connecting each wing hinge. The zero angles are outward along those lines, and the range of each angle is on the range [-pi,+pi].
 
 
+Frame Rate
+---------------------------
+The frame rate is dependent upon virtually every setting.  Turn off tracking of unneeded bodyparts, use the smallest usable regions of interest (i.e. handle positions), and turn off unneeded windows to speed the frame rate.  The largest improvement is likely to come from lowering the value of 'scale_image' in the .yaml file.
+
+  
 White On Black
 ---------------------------
 Kinefly works best internally if the image is white-on-black.  The camera image may be either black-on-white or white-on-black, and whether to invert the color or not is decided automatically based on the pixel intensity of a region between the head hinge and the abdomen hinge.  If the mean pixel value of this region is darker than the mean pixel value of the overall image, then we invert the colors.
