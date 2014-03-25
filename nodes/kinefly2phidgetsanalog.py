@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 from __future__ import division
-import roslib; roslib.load_manifest('StrokelitudeROS')
+import roslib; roslib.load_manifest('Kinefly')
 import rospy
 import rosparam
 
@@ -9,14 +9,14 @@ import numpy as np
 
 from std_msgs.msg import String
 
-from StrokelitudeROS.msg import MsgFlystate
+from Kinefly.msg import MsgFlystate
 import Phidgets
 import Phidgets.Devices.Analog
 
 
 ###############################################################################
 ###############################################################################
-class Strokelitude2PhidgetsAnalog:
+class Kinefly2PhidgetsAnalog:
 
     def __init__(self):
         self.bInitialized = False
@@ -24,10 +24,10 @@ class Strokelitude2PhidgetsAnalog:
         self.bAttached = False
         
         # initialize
-        rospy.init_node('strokelitude2phidgetsanalog', anonymous=True)
+        rospy.init_node('kinefly2phidgetsanalog', anonymous=True)
         
         # Load the parameters.
-        self.params = rospy.get_param('strokelitude/phidgetsanalog', {})
+        self.params = rospy.get_param('kinefly/phidgetsanalog', {})
         self.defaults = {'v0enable':True, 'v1enable':True, 'v2enable':True, 'v3enable':True, 
                         'v00': 0.0, 'v0l1':1.0, 'v0l2':0.0, 'v0r1':0.0, 'v0r2':0.0, 'v0ha':0.0, 'v0hr':0.0, 'v0aa':0.0, 'v0ar':0.0, 'v0ei':0.0, # L
                         'v10': 0.0, 'v1l1':0.0, 'v1l2':0.0, 'v1r1':1.0, 'v1r2':0.0, 'v1ha':0.0, 'v1hr':0.0, 'v1aa':0.0, 'v1ar':0.0, 'v1ei':0.0, # R
@@ -36,7 +36,7 @@ class Strokelitude2PhidgetsAnalog:
                          'autorange':False
                          }
         self.set_dict_with_preserve(self.params, self.defaults)
-        rospy.set_param('strokelitude/phidgetsanalog', self.params)
+        rospy.set_param('kinefly/phidgetsanalog', self.params)
         
 
         self.stateMin = np.array([ np.inf,  np.inf,  np.inf,  np.inf,  np.inf,  np.inf,  np.inf,  np.inf,  np.inf,  np.inf])
@@ -52,8 +52,8 @@ class Strokelitude2PhidgetsAnalog:
         self.analog.setOnDetachHandler(self.detach_callback)
 
         # Subscriptions.        
-        self.subFlystate = rospy.Subscriber('strokelitude/flystate', MsgFlystate, self.flystate_callback)
-        self.subCommand  = rospy.Subscriber('strokelitude2phidgetsanalog/command', String, self.command_callback)
+        self.subFlystate = rospy.Subscriber('kinefly/flystate', MsgFlystate, self.flystate_callback)
+        self.subCommand  = rospy.Subscriber('kinefly2phidgetsanalog/command', String, self.command_callback)
         rospy.sleep(1) # Allow time to connect publishers & subscribers.
 
         self.bInitialized = True
@@ -223,12 +223,12 @@ class Strokelitude2PhidgetsAnalog:
 
 
         if (self.command == 'help'):
-            rospy.logwarn('The strokelitude2phidgetsanalog/command topic accepts the following string commands:')
+            rospy.logwarn('The kinefly2phidgetsanalog/command topic accepts the following string commands:')
             rospy.logwarn('  help                 This message.')
             rospy.logwarn('  exit                 Exit the program.')
             rospy.logwarn('')
             rospy.logwarn('You can send the above commands at the shell prompt via:')
-            rospy.logwarn('rostopic pub -1 strokelitude2phidgetsanalog/command std_msgs/String commandtext')
+            rospy.logwarn('rostopic pub -1 kinefly2phidgetsanalog/command std_msgs/String commandtext')
             rospy.logwarn('')
             rospy.logwarn('Parameters are settable as launch-time parameters.')
             rospy.logwarn('')
@@ -277,6 +277,6 @@ class Strokelitude2PhidgetsAnalog:
 
 if __name__ == '__main__':
 
-    s2pa = Strokelitude2PhidgetsAnalog()
+    s2pa = Kinefly2PhidgetsAnalog()
     s2pa.run()
 

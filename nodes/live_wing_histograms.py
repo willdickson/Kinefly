@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-import roslib; roslib.load_manifest('StrokelitudeROS')
+import roslib; roslib.load_manifest('Kinefly')
 import rospy
 
 import time
@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 import numpy as np
 
-from StrokelitudeROS.srv import SrvFloat32List
+from Kinefly.srv import SrvFloat32List
 
 class Live_Plotter:
     
@@ -101,8 +101,8 @@ class Live_Plotter:
                 self.angles_right = self.get_wing_angles_right(1).data
                 self.angles_left = self.get_wing_angles_left(1).data
 
-                self.limits_right = [rospy.get_param('strokelitude/right/angle_lo'), rospy.get_param('strokelitude/right/angle_hi')]
-                self.limits_left = [rospy.get_param('strokelitude/left/angle_lo'), rospy.get_param('strokelitude/left/angle_hi')]
+                self.limits_right = [rospy.get_param('kinefly/right/angle_lo'), rospy.get_param('kinefly/right/angle_hi')]
+                self.limits_left = [rospy.get_param('kinefly/left/angle_lo'), rospy.get_param('kinefly/left/angle_hi')]
                 self.last_update = time.time()
                 
             data_right = self.get_wing_intensities_right(1).data

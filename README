@@ -1,6 +1,6 @@
-Strokelitude
+Kinefly
 ----------------
-Strokelitude extracts angle and position variables of a tethered winged insect.
+Kinefly extracts angle and position variables of a tethered winged insect.
 
 The reported variables are wing major and minor edge angles, head and abdomen angles & radii, and the pixel intensity of an arbitrary elliptical region of the image (intended to capture leg motion, etc). 
 
@@ -9,13 +9,13 @@ The software runs on ROS, the Robot Operating System, and can use any camera or 
 
 Installation:
 ---------------------------
-You need ROS, a camera to supply a ROS image stream, and Strokelitude.  If you want to control voltages, then you'll need the PhidgetsAnalog hardware w/ Phidgets API.  If you want to control LED panels, then you'll need panels, see below.  There might be more stuff, but that's the basic setup.
+You need ROS, a camera to supply a ROS image stream, and Kinefly.  If you want to control voltages, then you'll need the PhidgetsAnalog hardware w/ Phidgets API.  If you want to control LED panels, then you'll need panels, see below.  There might be more stuff, but that's the basic setup.
 
 Basebones instructions:
 sudo-apt-get install ros-hydro-desktop-full
-git clone https://github.com/ssafarik/StrokelitudeROS.git
-rosmake StrokelitudeROS
-touch ~/strokelitude.yaml
+git clone https://github.com/ssafarik/Kinefly.git
+rosmake Kinefly
+touch ~/kinefly.yaml
 
 
 For Phidgets, go to the Phidgets website and get both "libphidget..." and "PhidgetsPython"
@@ -27,7 +27,7 @@ Main Window
 The main window provides an interface to most, but not all, of the functionality. The buttons and checkboxes on the toolbar, and the handles on the image, function as follows:
   <Exit>        Terminate the program.  Use this instead of the 
                 titlebar's [x].
-  <SaveBG>      Save the instant camera image to disk as ~/strokelitude.png
+  <SaveBG>      Save the instant camera image to disk as ~/kinefly.png
   []Head        Turn on/off head tracking.
   []Abdomen     Turn on/off abdomen tracking.
   []Wings       Turn on/off left & right wing tracking.
@@ -64,25 +64,25 @@ Each bodypart (head, abdomen, and wings) has its own angle origin.  The zero ang
 
 White On Black
 ---------------------------
-Strokelitude works best internally if the image is white-on-black.  The camera image may be either black-on-white or white-on-black, and whether to invert the color or not is decided automatically based on the pixel intensity of a region between the head hinge and the abdomen hinge.  If the mean pixel value of this region is darker than the mean pixel value of the overall image, then we invert the colors.
+Kinefly works best internally if the image is white-on-black.  The camera image may be either black-on-white or white-on-black, and whether to invert the color or not is decided automatically based on the pixel intensity of a region between the head hinge and the abdomen hinge.  If the mean pixel value of this region is darker than the mean pixel value of the overall image, then we invert the colors.
 
   
 Parameters, YAML file.
 ---------------------------
-All parameters are stored in the file ~/strokelitude.yaml, and default values will be written to the file upon the first successful run.  Please only edit the strokelitude.yaml file when Strokelitude is not running.  
+All parameters are stored in the file ~/kinefly.yaml, and default values will be written to the file upon the first successful run.  Please only edit the kinefly.yaml file when Kinefly is not running.  
 
-Before the initial run of Strokelitude, you must create a blank ~/strokelitude.yaml file.  Parameters used by Strokelitude are automatically written to the file, hence any edits you make while Strokelitude is running will be overwritten.
+Before the initial run of Kinefly, you must create a blank ~/kinefly.yaml file.  Parameters used by Kinefly are automatically written to the file, hence any edits you make while Kinefly is running will be overwritten.
 
 Most parameters are set by manipulating the main window interface, but a few are not and are described here.  There are some global parameters, plus sections for each of head/abdomen/left/right.  
 
 Parameters that apply to all bodyparts:
     filenameBackground:         Location to store the background image.  
-                                (default: ~/strokelitude.png)
+                                (default: ~/kinefly.png)
     image_topic:                ROS topic for the image stream. 
                                 (default: /camera/image_raw)
     n_edges:                    Display 1 or 2 wing edges. (default: 1)
     parameterfile:              Location of the YAML file. 
-                                (default: ~/strokelitude.yaml)
+                                (default: ~/kinefly.yaml)
     rc_background:              Time constant of the moving average background
                                 image. (default: 1000.0)
     scale_image:                Scale all images by this amount.  Smaller 
@@ -106,9 +106,9 @@ Parameters set individually for head & abdomen:
                              
 Voltage Output
 ---------------------------
-Strokelitude can output voltages using a PhidgetsAnalog device using the ROS node strokelitude2phidgetsanalog.  The default values set the four voltage channels to (L, R, L-R, L+R), with the voltage value equal to the angle in radians.
+Kinefly can output voltages using a PhidgetsAnalog device using the ROS node kinefly2phidgetsanalog.  The default values set the four voltage channels to (L, R, L-R, L+R), with the voltage value equal to the angle in radians.
 
-PhidgetsAnalog parameters are located in the strokelitude.yaml file under the phidgetsanalog key.  The parameters determine how the four voltage output channels set their voltages.  Each of the four channels is determined by a set of v#__ coefficients, where # is one of 0|1|2|3, for example, v0l1 is the leftangle1 component for voltage channel 0.
+PhidgetsAnalog parameters are located in the kinefly.yaml file under the phidgetsanalog key.  The parameters determine how the four voltage output channels set their voltages.  Each of the four channels is determined by a set of v#__ coefficients, where # is one of 0|1|2|3, for example, v0l1 is the leftangle1 component for voltage channel 0.
 
     v#enable:   Enable/disable each channel separately. (true|false)
     autorange:  Automatically set the four channels to L, R, L-R, L+R such
@@ -134,11 +134,11 @@ Thus for example, a voltage output such as L-R can be generated on v2 by setting
 
 LED Panels Control
 ---------------------------
-Strokelitude can control the MReiser LED Panels (see bitbucket.org/mreiser/panels, and github.com/ssafarik/ledpanels) either directly over USB, or indirectly via the voltage signal generated by the voltage output above.
+Kinefly can control the MReiser LED Panels (see bitbucket.org/mreiser/panels, and github.com/ssafarik/ledpanels) either directly over USB, or indirectly via the voltage signal generated by the voltage output above.
 
-In either case the ROS node from github.com/ssafarik/ledpanels must be running in order to send serial commands to the panels.  If you want to control the panels via USB, then you'll also need to run the ROS node strokelitude2ledpanels.
+In either case the ROS node from github.com/ssafarik/ledpanels must be running in order to send serial commands to the panels.  If you want to control the panels via USB, then you'll also need to run the ROS node kinefly2ledpanels.
  
-LEDPanels parameters are located in the strokelitude.yaml file under the ledpanels key.  The parameters determine how the four voltage ADC input channels interpret the voltages into position and velocity commands. xpos, xvel, ypos, and yvel are determined by a set of adc# coefficients, where # is one of 0|1|2|3.
+LEDPanels parameters are located in the kinefly.yaml file under the ledpanels key.  The parameters determine how the four voltage ADC input channels interpret the voltages into position and velocity commands. xpos, xvel, ypos, and yvel are determined by a set of adc# coefficients, where # is one of 0|1|2|3.
 
 Each x or y channel calculates a position or velocity by a linear combination of terms of the form:
     Q = adc0*bnc0 

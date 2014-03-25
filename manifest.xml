@@ -1,13 +1,13 @@
 <package>
-  <description brief="StrokelitudeROS">
+  <description brief="Kinefly">
 
-     StrokelitudeROS
+     Kinefly - Measurement of tethered flying insect wing and body kinematics.  Measures wing angles, head and abdomen positions, provides bodypart stabilization. 
 
   </description>
   <author>Steve Safarik</author>
   <license>BSD</license>
   <review status="unreviewed" notes=""/>
-  <url>http://ros.org/wiki/StrokelitudeROS</url>
+  <url>http://ros.org/wiki/Kinefly</url>
   <depend package="cv_bridge"/> 
   <depend package="dynamic_reconfigure"/> 
   <depend package="ledpanels"/> 

@@ -4,7 +4,7 @@
     <!-- Launch the camera.                                         -->
     <!-- ========================================================== -->
 
-    <node name="playbag" pkg="rosbag" type="play" args="--clock --delay=1 --rate=10 --loop /home/ssafarik/flyhead.bag" required="true" /> <!-- strokelitude_2photon2 flyhead -->
+    <node name="playbag" pkg="rosbag" type="play" args="--clock --delay=1 --rate=10 --loop /home/ssafarik/flyhead.bag" required="true" /> <!-- kinefly_2photon2 flyhead -->
     <!-- <node name="view_raw"         pkg="image_view"     type="image_view"  ns="camera"  args="image:=image_raw" /> -->
   
 </launch>

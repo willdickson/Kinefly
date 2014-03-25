@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 #! coding=latin-1
 from __future__ import division
-import roslib; roslib.load_manifest('StrokelitudeROS')
+import roslib; roslib.load_manifest('Kinefly')
 import rospy
 import rosparam
 
@@ -17,9 +17,9 @@ import dynamic_reconfigure.server
 from cv_bridge import CvBridge, CvBridgeError
 from sensor_msgs.msg import Image
 from std_msgs.msg import Float32, Header, String
-from StrokelitudeROS.srv import SrvFloat32List, SrvFloat32ListResponse
-from StrokelitudeROS.msg import MsgFlystate, MsgWing, MsgBodypart, MsgExtra, MsgCommand
-from StrokelitudeROS.cfg import strokelitudeConfig
+from Kinefly.srv import SrvFloat32List, SrvFloat32ListResponse
+from Kinefly.msg import MsgFlystate, MsgWing, MsgBodypart, MsgExtra, MsgCommand
+from Kinefly.cfg import kineflyConfig
 
 gOffsetHandle = 10 # How far from the point-of-interest we place some of the handles.
 
@@ -1525,7 +1525,7 @@ class Fly(object):
         self.iCount  = 0
         self.stamp   = 0
 
-        self.pubFlystate = rospy.Publisher('strokelitude/flystate', MsgFlystate)
+        self.pubFlystate = rospy.Publisher('kinefly/flystate', MsgFlystate)
  
 
     def set_params(self, params):
@@ -2075,15 +2075,15 @@ class MainWindow:
         self.lock = threading.Lock()
         
         # initialize
-        rospy.init_node('strokelitude', anonymous=True)
+        rospy.init_node('kinefly', anonymous=True)
         
         # initialize display
-        self.window_name = 'Strokelitude'
+        self.window_name = 'Kinefly'
         cv2.namedWindow(self.window_name,1)
         self.cvbridge = CvBridge()
         
         # Load the parameters yaml file.
-        self.parameterfile = os.path.expanduser(rospy.get_param('strokelitude/parameterfile', '~/strokelitude.yaml'))
+        self.parameterfile = os.path.expanduser(rospy.get_param('kinefly/parameterfile', '~/kinefly.yaml'))
         with self.lock:
             try:
                 self.params = rosparam.load_file(self.parameterfile)[0][0]
@@ -2091,7 +2091,7 @@ class MainWindow:
                 rospy.logwarn('%s.  Using default values.' % e)
                 self.params = {}
             
-        defaults = {'filenameBackground':'~/strokelitude.png',
+        defaults = {'filenameBackground':'~/kinefly.png',
                     'image_topic':'/camera/image_raw',
                     'use_gui':True,                     # You can turn off the GUI to speed the framerate.
                     'windows':True,               # Show the helpful extra windows.
@@ -2148,9 +2148,9 @@ class MainWindow:
 
                     }
         SetDict().set_dict_with_preserve(self.params, defaults)
-        SetDict().set_dict_with_preserve(self.params, rospy.get_param('strokelitude'))
+        SetDict().set_dict_with_preserve(self.params, rospy.get_param('kinefly'))
         self.params = self.legalizeParams(self.params)
-        rospy.set_param('strokelitude', self.params)
+        rospy.set_param('kinefly', self.params)
         
         # Create the fly.
         self.fly = Fly(self.params)
@@ -2174,11 +2174,11 @@ class MainWindow:
         self.iCount = 0
         
         # Publishers.
-        self.pubCommand            = rospy.Publisher('strokelitude/command', MsgCommand)
+        self.pubCommand            = rospy.Publisher('kinefly/command', MsgCommand)
 
         # Subscriptions.        
         self.subImageRaw           = rospy.Subscriber(self.params['image_topic'], Image, self.image_callback, queue_size=2)
-        self.subCommand            = rospy.Subscriber('strokelitude/command', MsgCommand, self.command_callback)
+        self.subCommand            = rospy.Subscriber('kinefly/command', MsgCommand, self.command_callback)
 
         self.h_gap = int(5 * self.scale)
         self.w_gap = int(10 * self.scale)
@@ -2230,7 +2230,7 @@ class MainWindow:
         # user callbacks
         cv2.setMouseCallback(self.window_name, self.onMouse, param=None)
         
-        self.reconfigure = dynamic_reconfigure.server.Server(strokelitudeConfig, self.reconfigure_callback)
+        self.reconfigure = dynamic_reconfigure.server.Server(kineflyConfig, self.reconfigure_callback)
         
         
     # legalizeParams()
@@ -2269,7 +2269,7 @@ class MainWindow:
         # Set it into the wings.
         self.fly.set_params(self.scale_params(self.params, self.scale))
         with self.lock:
-            rosparam.dump_params(self.parameterfile, 'strokelitude')
+            rosparam.dump_params(self.parameterfile, 'kinefly')
         
         return config
 
@@ -2293,7 +2293,7 @@ class MainWindow:
             
         
         if (self.command == 'help'):
-            rospy.logwarn('The strokelitude/command topic accepts the following string commands:')
+            rospy.logwarn('The kinefly/command topic accepts the following string commands:')
             rospy.logwarn('  help                 This message.')
             rospy.logwarn('  save_background      Save the instant camera image to disk for')
             rospy.logwarn('                       background subtraction.')
@@ -2301,7 +2301,7 @@ class MainWindow:
             rospy.logwarn('  exit                 Exit the program.')
             rospy.logwarn('')
             rospy.logwarn('You can send the above commands at the shell prompt via:')
-            rospy.logwarn('rostopic pub -1 strokelitude/command StrokelitudeROS/MsgCommand commandtext N')
+            rospy.logwarn('rostopic pub -1 kinefly/command Kinefly/MsgCommand commandtext N')
             rospy.logwarn('')
             rospy.logwarn('You may also set some parameters via ROS dynamic_reconfigure, all others')
             rospy.logwarn('are settable as launch-time parameters.')
@@ -2880,11 +2880,11 @@ class MainWindow:
                 self.fly.create_masks(self.shapeImage)
     
                 # Save the results.
-                SetDict().set_dict_with_preserve(self.params, rospy.get_param('strokelitude'))
+                SetDict().set_dict_with_preserve(self.params, rospy.get_param('kinefly'))
 
-                rospy.set_param('strokelitude', self.params)
+                rospy.set_param('kinefly', self.params)
                 with self.lock:
-                    rosparam.dump_params(self.parameterfile, 'strokelitude')
+                    rosparam.dump_params(self.parameterfile, 'kinefly')
 
 
 #             for k,v in self.params.iteritems():
@@ -2918,10 +2918,10 @@ if __name__ == '__main__':
     rospy.logwarn('')
     rospy.logwarn('**************************************************************************')
     rospy.logwarn('')  
-    rospy.logwarn('     StrokelitudeROS: Camera-based Wingbeat Analyzer Software for ROS')
+    rospy.logwarn('     Kinefly: Camera-based Flying Insect Kinematics Analyzer for ROS')
     rospy.logwarn('         by Steve Safarik, Floris van Breugel (c) 2014')
     rospy.logwarn('')  
-    rospy.logwarn('     Left click+drag to move any handle points.')
+    rospy.logwarn('     Left click+drag to move handle points.')
     rospy.logwarn('')  
     rospy.logwarn('')  
     main.command_callback(MsgCommand('help',0))

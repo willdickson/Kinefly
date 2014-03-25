@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 from __future__ import division
-import roslib; roslib.load_manifest('StrokelitudeROS')
+import roslib; roslib.load_manifest('Kinefly')
 import rospy
 import rosparam
 
@@ -10,22 +10,22 @@ import numpy as np
 from std_msgs.msg import Float32, Header, String
 
 from ledpanels.msg import MsgPanelsCommand
-from StrokelitudeROS.msg import MsgFlystate, MsgWing, MsgBodypart
+from Kinefly.msg import MsgFlystate, MsgWing, MsgBodypart
 
 
 ###############################################################################
 ###############################################################################
-class Strokelitude2Ledpanels:
+class Kinefly2Ledpanels:
 
     def __init__(self):
         self.bInitialized = False
         self.bRunning = False
 
         # initialize
-        rospy.init_node('strokelitude2ledpanels', anonymous=True)
+        rospy.init_node('kinefly2ledpanels', anonymous=True)
         
         # Load the parameters.
-        self.params = rospy.get_param('strokelitude/ledpanels', {})
+        self.params = rospy.get_param('kinefly/ledpanels', {})
         self.defaults = {'method': 'voltage', # 'voltage' or 'usb';        How we communicate with the panel controller.
                          'pattern_id': 1,
                          'mode': 'velocity',  # 'velocity' or 'position';  Fly is controlling vel or pos.
@@ -61,7 +61,7 @@ class Strokelitude2Ledpanels:
                          }
         self.set_dict_with_preserve(self.params, self.defaults)
         self.update_coefficients_from_params()
-        rospy.set_param('strokelitude/ledpanels', self.params)
+        rospy.set_param('kinefly/ledpanels', self.params)
         
         self.msgpanels = MsgPanelsCommand(command='all_off', arg1=0, arg2=0, arg3=0, arg4=0, arg5=0, arg6=0)
         
@@ -70,8 +70,8 @@ class Strokelitude2Ledpanels:
         self.pubPanelsCommand = rospy.Publisher('ledpanels/command', MsgPanelsCommand)
         
         # Subscriptions.        
-        self.subFlystate = rospy.Subscriber('strokelitude/flystate', MsgFlystate, self.flystate_callback)
-        self.subCommand  = rospy.Subscriber('strokelitude2ledpanels/command', String, self.command_callback)
+        self.subFlystate = rospy.Subscriber('kinefly/flystate', MsgFlystate, self.flystate_callback)
+        self.subCommand  = rospy.Subscriber('kinefly2ledpanels/command', String, self.command_callback)
         rospy.sleep(1) # Time to connect publishers & subscribers.
 
 
@@ -92,14 +92,14 @@ class Strokelitude2Ledpanels:
             elif (self.params['mode']=='position'):
                 cmd += '_pos'
             else:
-                rospy.logwarn('strokelitude2ledpanels: mode must be ''velocity'' or ''position''.')
+                rospy.logwarn('kinefly2ledpanels: mode must be ''velocity'' or ''position''.')
             
             if (self.params['axis']=='x'):
                 cmd += '_custom_x'
             elif (self.params['axis']=='y'):
                 cmd += '_custom_y'
             else:
-                rospy.logwarn('strokelitude2ledpanels: axis must be ''x'' or ''y''.')
+                rospy.logwarn('kinefly2ledpanels: axis must be ''x'' or ''y''.')
             
             # Set the panels controller to the custom mode, with the specified coefficients.
             self.pubPanelsCommand.publish(MsgPanelsCommand(command=cmd, arg1=self.params['coeff_voltage']['adc0'], 
@@ -137,7 +137,7 @@ class Strokelitude2Ledpanels:
             
     def flystate_callback(self, flystate):
         if (self.bRunning):
-            self.params = rospy.get_param('strokelitude/ledpanels', {})
+            self.params = rospy.get_param('kinefly/ledpanels', {})
             self.set_dict_with_preserve(self.params, self.defaults)
             self.update_coefficients_from_params()
             
@@ -155,7 +155,7 @@ class Strokelitude2Ledpanels:
                 pass
                 
             else:
-                rospy.logwarn('strokelitude2ledpanels: method must be ''usb'' or ''voltage''')
+                rospy.logwarn('kinefly2ledpanels: method must be ''usb'' or ''voltage''')
     
     
     # create_msgpanels_pos()
@@ -250,14 +250,14 @@ class Strokelitude2Ledpanels:
             
         
         if (self.command == 'help'):
-            rospy.logwarn('The strokelitude2ledpanels/command topic accepts the following string commands:')
+            rospy.logwarn('The kinefly2ledpanels/command topic accepts the following string commands:')
             rospy.logwarn('  help                 This message.')
             rospy.logwarn('  stop                 Stop the ledpanels.')
             rospy.logwarn('  start                Start the ledpanels.')
             rospy.logwarn('  exit                 Exit the program.')
             rospy.logwarn('')
             rospy.logwarn('You can send the above commands at the shell prompt via:')
-            rospy.logwarn('rostopic pub -1 strokelitude2ledpanels/command std_msgs/String commandtext')
+            rospy.logwarn('rostopic pub -1 kinefly2ledpanels/command std_msgs/String commandtext')
             rospy.logwarn('')
             rospy.logwarn('Parameters are settable as launch-time parameters.')
             rospy.logwarn('')
@@ -303,6 +303,6 @@ class Strokelitude2Ledpanels:
 
 if __name__ == '__main__':
 
-    s2l = Strokelitude2Ledpanels()
+    s2l = Kinefly2Ledpanels()
     s2l.run()
 

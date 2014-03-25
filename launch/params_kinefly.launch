@@ -1,9 +1,9 @@
 <launch>
 	<!-- ========================================================== -->
-	<!-- Configuration of the strokelitude                          -->
+	<!-- Configuration of the Kinefly                          -->
 	<!-- ========================================================== -->
 
 
-    <rosparam file="$(env HOME)/strokelitude.yaml" ns="strokelitude" />
-    <param name="strokelitude/parameterfile" type="string" value="$(env HOME)/strokelitude.yaml" />
+    <rosparam file="$(env HOME)/kinefly.yaml" ns="kinefly" />
+    <param name="kinefly/parameterfile" type="string" value="$(env HOME)/kinefly.yaml" />
 </launch>
