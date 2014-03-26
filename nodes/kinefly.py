@@ -1517,6 +1517,8 @@ class Fly(object):
         self.right   = Wing(name='right',          params=params, color='red',     bEqualizeHist=False)
         self.left    = Wing(name='left',           params=params, color='green',   bEqualizeHist=False)
         self.extra   = Extra(name='extra',         params=params, color='yellow',  bEqualizeHist=False)
+
+        self.windowThorax      = ImageWindow(True, 'Thorax')
         
         self.bgra_body = bgra_dict['light_gray']
         self.ptBodyIndicator1 = None
@@ -1577,6 +1579,7 @@ class Fly(object):
         xMax = min(self.ptBodyCenter_i[0]+int(0.75*self.rThorax), image.shape[1]-1)
         yMax = min(self.ptBodyCenter_i[1]+int(0.75*self.rThorax), image.shape[0]-1)
         imgThorax = image[yMin:yMax, xMin:xMax]
+        self.windowThorax.set_image(imgThorax)
 
         # Midpoint between darkest & lightest colors.
         threshold = np.mean(image) 
@@ -1640,6 +1643,7 @@ class Fly(object):
         self.right.draw(image)
         self.extra.draw(image)
 
+        self.windowThorax.show()
         
     
     def publish(self):

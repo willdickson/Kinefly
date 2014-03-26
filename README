@@ -11,15 +11,7 @@ Installation:
 ---------------------------
 You need ROS, a camera to supply a ROS image stream, and Kinefly.  If you want to control voltages, then you'll need the PhidgetsAnalog hardware w/ Phidgets API.  If you want to control LED panels, then you'll need panels, see below.  There might be more stuff, but that's the basic setup.
 
-Barebones instructions:
-sudo-apt-get install ros-hydro-desktop-full
-git clone https://github.com/ssafarik/Kinefly.git
-rosmake Kinefly
-touch ~/kinefly.yaml
-
-
-For Phidgets, go to the Phidgets website and get both "libphidget..." and "PhidgetsPython"
-
+Refer to the file 'install.txt' for detailed instructions.
 
 
 Main Window
@@ -96,7 +88,12 @@ The frame rate is dependent upon virtually every setting.  Turn off tracking of 
   
 White On Black
 ---------------------------
-Kinefly works best internally if the image is white-on-black.  The camera image may be either black-on-white or white-on-black, and whether to invert the color or not is decided automatically based on the pixel intensity of a region between the head hinge and the abdomen hinge.  If the mean pixel value of this region is darker than the mean pixel value of the overall image, then we invert the colors.
+Kinefly works best internally if the image is white-on-black.  The camera image may be either black-on-white or white-on-black, and whether to invert the color or not is decided automatically based on the pixel intensity of a region centered on the intersection of the lines head/abdomen hinges and left/right hinges.  If the mean pixel value of this region is darker than the mean pixel value of the overall image, then we invert the colors.
+
+
+Background Subtraction
+---------------------------
+Background subtraction is performed only for the wings and extra region, not for the head and abdomen.  The background is initialized with the kinefly.png image on disk, and updates as a moving average with the time constant (in seconds) parameter rc_background. 
 
   
 Parameters, YAML file.
