@@ -25,6 +25,9 @@ The main window provides an interface to most, but not all, of the functionality
   []Wings       Turn on/off left & right wing tracking.
   []Extra       Turn on/off the 'extra' ellipse intensity calculation.
   []SubtractBG  Turn on/off background subtraction on wings & extra.
+  []Stabilize   Turn on/off image stabilization for head & abdomen.  The  
+                quality of stabilization is very dependent upon the region 
+                selected with the handles. (default: false) 
   []Symmetric   When moving handles, keep them symmetric about the body axis.
   []Windows     Turn on/off helpful windows showing various internal images.
 
@@ -43,7 +46,10 @@ For the wings, the angles and radii should be positioned to indicate a region of
 Output Variables
 ---------------------------
 The output is published on the ROS topic '/kinefly/flystate', and can be retrieved either by running the command 'rostopic echo kinefly/flystate' or by writing your own ROS node and subscribing to that topic.
-An example of the output is shown here:
+
+There are two angles per wing, and angle1 is the 'stronger' edge in terms of intensity gradient, and is not necessarily the leading edge.  Angle2 is the edge with the next stronger gradient with the inverse sign.  In other words, the edges are found by looking at the intensity gradient across the wingstroke, and the strongest is labelled angle1.  Angle2 is the next strongest gradient with a sign opposite the gradient of angle1.  
+
+An example of the flystate output is shown here:
 ---
 header: 
   seq: 843
@@ -70,7 +76,6 @@ right:
 extra: 
   intensity: 0.592803359032
  
-
 
 Units
 ---------------------------
@@ -127,10 +132,6 @@ Parameters set individually for head & abdomen:
                                 angle based on center of motion, or (false)
                                 use the first valid frame as the zero angle.
                                 (default: true)
-    stabilize:                  Turn on/off Image stabilization for a
-                                bodypart.  The quality of stabilization
-                                is very dependent upon the region selected
-                                with the handles. (default: false) 
 
                              
 Voltage Output

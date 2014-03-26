@@ -181,54 +181,25 @@ class Button(object):
         self.colorLolight = cv.Scalar(64,64,64,0)
         self.colorText = cv.Scalar(255,255,255,0)
 
-        self.ptLT = (self.rect[0],                 self.rect[1])
-        self.ptRT = (self.rect[0]+self.rect[2],    self.rect[1])
-        self.ptLB = (self.rect[0],                 self.rect[1]+self.rect[3])
-        self.ptRB = (self.rect[0]+self.rect[2],    self.rect[1]+self.rect[3])
 
-        self.ptLT0 = (self.rect[0]-1,              self.rect[1]-1)
-        self.ptRT0 = (self.rect[0]+self.rect[2]+1, self.rect[1]-1)
-        self.ptLB0 = (self.rect[0]-1,              self.rect[1]+self.rect[3]+1)
-        self.ptRB0 = (self.rect[0]+self.rect[2]+1, self.rect[1]+self.rect[3]+1)
-
-        self.ptLT1 = (self.rect[0]+1,              self.rect[1]+1)
-        self.ptRT1 = (self.rect[0]+self.rect[2]-1, self.rect[1]+1)
-        self.ptLB1 = (self.rect[0]+1,              self.rect[1]+self.rect[3]-1)
-        self.ptRB1 = (self.rect[0]+self.rect[2]-1, self.rect[1]+self.rect[3]-1)
-
-        self.ptLT2 = (self.rect[0]+2,              self.rect[1]+2)
-        self.ptRT2 = (self.rect[0]+self.rect[2]-2, self.rect[1]+2)
-        self.ptLB2 = (self.rect[0]+2,              self.rect[1]+self.rect[3]-2)
-        self.ptRB2 = (self.rect[0]+self.rect[2]-2, self.rect[1]+self.rect[3]-2)
-
-        self.left   = self.ptLT0[0]
-        self.top    = self.ptLT0[1]
-        self.right  = self.ptRB0[0]
-        self.bottom = self.ptRB0[1]
-        
-        self.ptCheckCenter = (int(self.ptLT2[0] + 2 + self.widthCheckbox/2), self.ptCenter[1])
-        self.ptCheckLT     = (int(self.ptCheckCenter[0]-self.widthCheckbox/2), int(self.ptCheckCenter[1]-self.widthCheckbox/2))
-        self.ptCheckRT     = (int(self.ptCheckCenter[0]+self.widthCheckbox/2), int(self.ptCheckCenter[1]-self.widthCheckbox/2))
-        self.ptCheckLB     = (int(self.ptCheckCenter[0]-self.widthCheckbox/2), int(self.ptCheckCenter[1]+self.widthCheckbox/2))
-        self.ptCheckRB     = (int(self.ptCheckCenter[0]+self.widthCheckbox/2), int(self.ptCheckCenter[1]+self.widthCheckbox/2))
-
-
+    # hit_test()
+    # Detect if the mouse is on the button.
+    #
     def hit_test(self, ptMouse):
         if (self.rect[0] <= ptMouse[0] <= self.rect[0]+self.rect[2]) and (self.rect[1] <= ptMouse[1] <= self.rect[1]+self.rect[3]):
             return True
         else:
             return False
         
-
-    def set_text(self, text):
-        self.text = text
-        (sizeText,rv) = cv2.getTextSize(self.text, cv2.FONT_HERSHEY_SIMPLEX, 0.4*self.scale, 1)
-        self.sizeText = (sizeText[0],    sizeText[1])
+    # set_pos()
+    # Set the button to locate at the given upper-left point, or to the given rect.
+    #
+    def set_pos(self, pt=None, rect=None):
+        if (rect is not None):
+            self.rect = rect
             
-
-        if (self.rect is not None):
-            pass
-        elif (self.pt is not None):
+        elif (pt is not None):
+            self.pt = pt
             self.rect = [0,0,0,0]
             if (self.type=='pushbutton'):
                 self.rect[0] = self.pt[0]
@@ -240,18 +211,61 @@ class Button(object):
                 self.rect[1] = self.pt[1]
                 self.rect[2] = int(self.sizeText[0] + 6 + self.widthCheckbox + 4)
                 self.rect[3] = self.sizeText[1] + 6
+        
+            # Get the locations of the various button pieces.        
+            self.ptLT = (self.rect[0],                 self.rect[1])
+            self.ptRT = (self.rect[0]+self.rect[2],    self.rect[1])
+            self.ptLB = (self.rect[0],                 self.rect[1]+self.rect[3])
+            self.ptRB = (self.rect[0]+self.rect[2],    self.rect[1]+self.rect[3])
+    
+            self.ptLT0 = (self.rect[0]-1,              self.rect[1]-1)
+            self.ptRT0 = (self.rect[0]+self.rect[2]+1, self.rect[1]-1)
+            self.ptLB0 = (self.rect[0]-1,              self.rect[1]+self.rect[3]+1)
+            self.ptRB0 = (self.rect[0]+self.rect[2]+1, self.rect[1]+self.rect[3]+1)
+    
+            self.ptLT1 = (self.rect[0]+1,              self.rect[1]+1)
+            self.ptRT1 = (self.rect[0]+self.rect[2]-1, self.rect[1]+1)
+            self.ptLB1 = (self.rect[0]+1,              self.rect[1]+self.rect[3]-1)
+            self.ptRB1 = (self.rect[0]+self.rect[2]-1, self.rect[1]+self.rect[3]-1)
+    
+            self.ptLT2 = (self.rect[0]+2,              self.rect[1]+2)
+            self.ptRT2 = (self.rect[0]+self.rect[2]-2, self.rect[1]+2)
+            self.ptLB2 = (self.rect[0]+2,              self.rect[1]+self.rect[3]-2)
+            self.ptRB2 = (self.rect[0]+self.rect[2]-2, self.rect[1]+self.rect[3]-2)
+    
+            self.left   = self.ptLT0[0]
+            self.top    = self.ptLT0[1]
+            self.right  = self.ptRB0[0]
+            self.bottom = self.ptRB0[1]
+            
+            if (self.type=='pushbutton'):
+                self.ptCenter = (int(self.rect[0]+self.rect[2]/2),                       int(self.rect[1]+self.rect[3]/2))
+                self.ptText = (self.ptCenter[0] - int(self.sizeText[0]/2) - 1, 
+                               self.ptCenter[1] + int(self.sizeText[1]/2) - 1)
+            elif (self.type=='checkbox'):
+                self.ptCenter = (int(self.rect[0]+self.rect[2]/2+(self.widthCheckbox+4)/2), int(self.rect[1]+self.rect[3]/2))
+                self.ptText = (self.ptCenter[0] - int(self.sizeText[0]/2) - 1 + 2, 
+                               self.ptCenter[1] + int(self.sizeText[1]/2) - 1)
+                
+            self.ptCheckCenter = (int(self.ptLT2[0] + 2 + self.widthCheckbox/2), self.ptCenter[1])
+            self.ptCheckLT     = (int(self.ptCheckCenter[0]-self.widthCheckbox/2), int(self.ptCheckCenter[1]-self.widthCheckbox/2))
+            self.ptCheckRT     = (int(self.ptCheckCenter[0]+self.widthCheckbox/2), int(self.ptCheckCenter[1]-self.widthCheckbox/2))
+            self.ptCheckLB     = (int(self.ptCheckCenter[0]-self.widthCheckbox/2), int(self.ptCheckCenter[1]+self.widthCheckbox/2))
+            self.ptCheckRB     = (int(self.ptCheckCenter[0]+self.widthCheckbox/2), int(self.ptCheckCenter[1]+self.widthCheckbox/2))
+
         else:
-            rospy.logwarn('Error creating Button().')
+            rospy.logwarn('Error setting button size and position.')
 
-        if (self.type=='pushbutton'):
-            self.ptCenter = (int(self.rect[0]+self.rect[2]/2),                       int(self.rect[1]+self.rect[3]/2))
-            self.ptText = (self.ptCenter[0] - int(self.sizeText[0]/2) - 1, 
-                           self.ptCenter[1] + int(self.sizeText[1]/2) - 1)
-        elif (self.type=='checkbox'):
-            self.ptCenter = (int(self.rect[0]+self.rect[2]/2+(self.widthCheckbox+4)/2), int(self.rect[1]+self.rect[3]/2))
-            self.ptText = (self.ptCenter[0] - int(self.sizeText[0]/2) - 1 + 2, 
-                           self.ptCenter[1] + int(self.sizeText[1]/2) - 1)
 
+    # set_text()
+    # Set the button text, and size the button to fit.
+    #
+    def set_text(self, text):
+        self.text = text
+        (sizeText,rv) = cv2.getTextSize(self.text, cv2.FONT_HERSHEY_SIMPLEX, 0.4*self.scale, 1)
+        self.sizeText = (sizeText[0],    sizeText[1])
+        
+        self.set_pos(pt=self.pt, rect=self.rect)
 
                 
     # draw_button()
@@ -1518,7 +1532,7 @@ class Fly(object):
         self.left    = Wing(name='left',           params=params, color='green',   bEqualizeHist=False)
         self.extra   = Extra(name='extra',         params=params, color='yellow',  bEqualizeHist=False)
 
-        self.windowThorax      = ImageWindow(True, 'Thorax')
+        self.windowThorax      = ImageWindow(False, 'Thorax')
         
         self.bgra_body = bgra_dict['light_gray']
         self.ptBodyIndicator1 = None
@@ -2188,55 +2202,89 @@ class MainWindow:
         self.w_gap = int(10 * self.scale)
         self.scaleText = 0.4 * self.scale
         self.fontface = cv2.FONT_HERSHEY_SIMPLEX
-
-        # UI button specs.
-        self.buttons = []
-        x = int(1 * self.scale)
-        y = int(1 * self.scale)
-        btn = Button(pt=[x,y], scale=self.scale, type='pushbutton', name='exit', text='exit')
-        self.buttons.append(btn)
+        self.buttons = None
+        self.yToolbar = 0
         
-        x = btn.right+1
-        btn = Button(pt=[x,y], scale=self.scale, type='pushbutton', name='save_bg', text='saveBG')
-        self.buttons.append(btn)
-        
-        x = btn.right+1
-        btn = Button(pt=[x,y], scale=self.scale, type='checkbox', name='head', text='head', state=self.params['head']['track'])
-        self.buttons.append(btn)
-
-        x = btn.right+1
-        btn = Button(pt=[x,y], scale=self.scale, type='checkbox', name='abdomen', text='abdomen', state=self.params['abdomen']['track'])
-        self.buttons.append(btn)
-
-        x = btn.right+1
-        btn = Button(pt=[x,y], scale=self.scale, type='checkbox', name='wings', text='wings', state=self.params['right']['track'])
-        self.buttons.append(btn)
-
-        x = btn.right+1
-        btn = Button(pt=[x,y], scale=self.scale, type='checkbox', name='extra', text='extra', state=self.params['extra']['track'])
-        self.buttons.append(btn)
-
-        x = btn.right+1
-        btn = Button(pt=[x,y], scale=self.scale, type='checkbox', name='subtract_bg', text='subtractBG', state=self.params['right']['subtract_bg'])
-        self.buttons.append(btn)
-
-        x = btn.right+1
-        btn = Button(pt=[x,y], scale=self.scale, type='checkbox', name='symmetry', text='symmetric', state=self.params['symmetric'])
-        self.buttons.append(btn)
-
-        x = btn.right+1
-        btn = Button(pt=[x,y], scale=self.scale, type='checkbox', name='windows', text='windows', state=self.params['windows'])
-        self.buttons.append(btn)
-
-        self.yToolbar = btn.bottom + 1
-
-
         # user callbacks
         cv2.setMouseCallback(self.window_name, self.onMouse, param=None)
         
         self.reconfigure = dynamic_reconfigure.server.Server(kineflyConfig, self.reconfigure_callback)
         
+
+    # Check the given button to see if it extends outside the image, and if so then reposition it to the next line.
+    def wrap_button(self, btn, image):
+        if (btn.right >= image.shape[1]):
+            btn.set_pos(pt=[1, btn.bottom+1])
+
         
+    # Create the button bar, with overflow onto more than one line if needed to fit on the image.        
+    def create_buttons(self, image):
+        if (self.buttons is None):
+            # UI button specs.
+            self.buttons = []
+            x = 1
+            y = 1
+            btn = Button(pt=[x,y], scale=self.scale, type='pushbutton', name='exit', text='exit')
+            self.wrap_button(btn, image)
+            self.buttons.append(btn)
+            
+            x = btn.right+1
+            y = btn.top+1
+            btn = Button(pt=[x,y], scale=self.scale, type='pushbutton', name='save_bg', text='saveBG')
+            self.wrap_button(btn, image)
+            self.buttons.append(btn)
+            
+            x = btn.right+1
+            y = btn.top+1
+            btn = Button(pt=[x,y], scale=self.scale, type='checkbox', name='head', text='head', state=self.params['head']['track'])
+            self.wrap_button(btn, image)
+            self.buttons.append(btn)
+            
+            x = btn.right+1
+            y = btn.top+1
+            btn = Button(pt=[x,y], scale=self.scale, type='checkbox', name='abdomen', text='abdomen', state=self.params['abdomen']['track'])
+            self.wrap_button(btn, image)
+            self.buttons.append(btn)
+            
+            x = btn.right+1
+            y = btn.top+1
+            btn = Button(pt=[x,y], scale=self.scale, type='checkbox', name='wings', text='wings', state=self.params['right']['track'])
+            self.wrap_button(btn, image)
+            self.buttons.append(btn)
+            
+            x = btn.right+1
+            y = btn.top+1
+            btn = Button(pt=[x,y], scale=self.scale, type='checkbox', name='extra', text='extra', state=self.params['extra']['track'])
+            self.wrap_button(btn, image)
+            self.buttons.append(btn)
+            
+            x = btn.right+1
+            y = btn.top+1
+            btn = Button(pt=[x,y], scale=self.scale, type='checkbox', name='subtract_bg', text='subtractBG', state=self.params['right']['subtract_bg'])
+            self.wrap_button(btn, image)
+            self.buttons.append(btn)
+            
+            x = btn.right+1
+            y = btn.top+1
+            btn = Button(pt=[x,y], scale=self.scale, type='checkbox', name='stabilize', text='stabilize', state=self.params['head']['stabilize'])
+            self.wrap_button(btn, image)
+            self.buttons.append(btn)
+            
+            x = btn.right+1
+            y = btn.top+1
+            btn = Button(pt=[x,y], scale=self.scale, type='checkbox', name='symmetry', text='symmetric', state=self.params['symmetric'])
+            self.wrap_button(btn, image)
+            self.buttons.append(btn)
+            
+            x = btn.right+1
+            y = btn.top+1
+            btn = Button(pt=[x,y], scale=self.scale, type='checkbox', name='windows', text='windows', state=self.params['windows'])
+            self.wrap_button(btn, image)
+            self.buttons.append(btn)
+            
+            self.yToolbar = btn.bottom + 1
+
+
     # legalizeParams()
     # Make sure that all the parameters contain legal values.
     #
@@ -2305,7 +2353,7 @@ class MainWindow:
             rospy.logwarn('  exit                 Exit the program.')
             rospy.logwarn('')
             rospy.logwarn('You can send the above commands at the shell prompt via:')
-            rospy.logwarn('rostopic pub -1 kinefly/command Kinefly/MsgCommand commandtext N')
+            rospy.logwarn('rostopic pub -1 kinefly/command Kinefly/MsgCommand commandtext arg1')
             rospy.logwarn('')
             rospy.logwarn('You may also set some parameters via ROS dynamic_reconfigure, all others')
             rospy.logwarn('are settable as launch-time parameters.')
@@ -2333,8 +2381,9 @@ class MainWindow:
 	
     # Draw user-interface elements on the image.
     def draw_buttons(self, image):
-        for i in range(len(self.buttons)):
-            self.buttons[i].draw(image)
+        if (self.buttons is not None):
+            for i in range(len(self.buttons)):
+                self.buttons[i].draw(image)
 
 
     def image_callback(self, rosimage):
@@ -2350,25 +2399,28 @@ class MainWindow:
             
         except CvBridgeError, e:
             rospy.logwarn ('Exception converting background image from ROS to opencv:  %s' % e)
-            self.imgCamera = None
-            
-         
+            self.imgScaled = None
+        
+        # Scale the image.
         if (self.scale == 1.0):              
-        	self.imgCamera = img
+        	self.imgScaled = img
         else:  
-        	self.imgCamera = cv2.resize(img, (0,0), fx=self.scale, fy=self.scale) 
+        	self.imgScaled = cv2.resize(img, (0,0), fx=self.scale, fy=self.scale) 
                 
                 
-        if (self.imgCamera is not None):
-            self.shapeImage = self.imgCamera.shape # (height,width)
+        if (self.imgScaled is not None):
+            self.shapeImage = self.imgScaled.shape # (height,width)
             
+            # Create the button bar if needed.    
+            self.create_buttons(self.imgScaled)
+        
             if (not self.bInitialized):
                 self.fly.create_masks(self.shapeImage)
                 self.bInitialized = True
                                 
             if (self.params['use_gui']):
         
-                imgOutput = cv2.cvtColor(self.imgCamera, cv2.COLOR_GRAY2RGB)
+                imgOutput = cv2.cvtColor(self.imgScaled, cv2.COLOR_GRAY2RGB)
                 self.fly.draw(imgOutput)
                 self.draw_buttons(imgOutput)
             
@@ -2519,7 +2571,7 @@ class MainWindow:
 
             if (not self.bMousing):
                 # Update the fly internals.
-                self.fly.update(rosimage.header, self.imgCamera)
+                self.fly.update(rosimage.header, self.imgScaled)
     
                 # Publish the outputs.
                 self.fly.publish()
@@ -2530,8 +2582,8 @@ class MainWindow:
     # Save the current camera image as the background.
     #
     def save_background(self):
-        self.fly.set_background(self.imgCamera)
-        self.imgFullBackground = self.imgCamera
+        self.fly.set_background(self.imgScaled)
+        self.imgFullBackground = self.imgScaled
         rospy.logwarn ('Saving new background image %s' % self.filenameBackground)
         cv2.imwrite(self.filenameBackground, self.imgFullBackground)
     
@@ -2875,6 +2927,10 @@ class MainWindow:
                 elif (self.nameSelected == self.nameSelectedNow == 'extra'):
                     self.params['extra']['track'] = self.buttons[iButtonSelected].state
 
+                elif (self.nameSelected == self.nameSelectedNow == 'stabilize'):
+                    self.params['head']['stabilize'] = self.buttons[iButtonSelected].state
+                    self.params['abdomen']['stabilize'] = self.buttons[iButtonSelected].state
+
                 elif (self.nameSelected == self.nameSelectedNow == 'windows'):
                     self.params['windows'] = self.buttons[iButtonSelected].state
 
@@ -2890,7 +2946,7 @@ class MainWindow:
                 with self.lock:
                     rosparam.dump_params(self.parameterfile, 'kinefly')
 
-
+            # Dump the params to the screen, for debugging.
 #             for k,v in self.params.iteritems():
 #                 rospy.logwarn((k,type(v)))
 #                 if (type(v)==type({})):
@@ -2922,7 +2978,7 @@ if __name__ == '__main__':
     rospy.logwarn('')
     rospy.logwarn('**************************************************************************')
     rospy.logwarn('')  
-    rospy.logwarn('     Kinefly: Camera-based Flying Insect Kinematics Analyzer for ROS')
+    rospy.logwarn('     Kinefly: Camera-based Tethered Insect Kinematics Analyzer for ROS')
     rospy.logwarn('         by Steve Safarik, Floris van Breugel (c) 2014')
     rospy.logwarn('')  
     rospy.logwarn('     Left click+drag to move handle points.')
