@@ -3,4 +3,4 @@ MsgBodypart head
 MsgBodypart abdomen
 MsgWing     left
 MsgWing     right
-MsgExtra    extra
+MsgAux      aux

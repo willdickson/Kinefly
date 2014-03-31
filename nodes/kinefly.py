@@ -18,7 +18,7 @@ from cv_bridge import CvBridge, CvBridgeError
 from sensor_msgs.msg import Image
 from std_msgs.msg import Float32, Header, String
 from Kinefly.srv import SrvFloat32List, SrvFloat32ListResponse
-from Kinefly.msg import MsgFlystate, MsgWing, MsgBodypart, MsgExtra, MsgCommand
+from Kinefly.msg import MsgFlystate, MsgWing, MsgBodypart, MsgAux, MsgCommand
 from Kinefly.cfg import kineflyConfig
 
 gOffsetHandle = 10 # How far from the point-of-interest we place some of the handles.
@@ -828,7 +828,7 @@ class IntensityTrackedBodypart(object):
         self.imgRoiFg                           = None # Background subtracted.
         self.imgRoiFgMasked                     = None
 
-        # Auxiliary windows.
+        # Extra windows.
         self.windowBG         = ImageWindow(False, self.name+'BG')
         self.windowFG         = ImageWindow(False, self.name+'FG')
         self.windowMask       = ImageWindow(False, self.name+'Mask')
@@ -1039,7 +1039,7 @@ class IntensityTrackedBodypart(object):
                         self.bgra, 
                         1)
     
-            # Show the aux windows.
+            # Show the extra windows.
             self.windowBG.show()
             self.windowFG.show()
             self.windowMask.show()
@@ -1096,7 +1096,7 @@ class PolarTrackedBodypart(object):
         self.imgRoiFgMaskedPolarCroppedWindowed = None
         self.imgComparison                      = None
 
-        # Auxiliary windows.
+        # Extra windows.
         self.windowBG         = ImageWindow(False, self.name+'BG')
         self.windowFG         = ImageWindow(False, self.name+'FG')
         self.windowPolar      = ImageWindow(False, self.name+'Polar')
@@ -1152,10 +1152,6 @@ class PolarTrackedBodypart(object):
     # Transform an angle from the fly body frame to the camera image frame.
     #
     def transform_angle_i_from_b(self, angle_b):
-#         if self.name == 'right':
-#             angle_i  =  angle_b + self.angleBody_i + np.pi/2.0
-#         else: # left
-#             angle_i  = -angle_b + self.angleBody_i + np.pi/2.0 + np.pi
         angle_i = angle_b + self.angleBody_i 
              
 #         angle_i = (angle_i+np.pi) % (2.0*np.pi) - np.pi
@@ -1166,10 +1162,6 @@ class PolarTrackedBodypart(object):
     # Transform an angle from the camera image frame to the fly frame: longitudinal axis head is 0, CW positive.
     #
     def transform_angle_b_from_i(self, angle_i):
-#         if (self.name in ['head','abdomen','right']:
-#             angle_b  =  angle_i - self.angleOutward_i
-#         else:  
-#             angle_b  = -angle_i + self.angleBody_i + np.pi/2.0 + np.pi
         angle_b = angle_i - self.angleBody_i
         angle_b = ((angle_b+np.pi) % (2.0*np.pi)) - np.pi
 
@@ -1513,7 +1505,7 @@ class PolarTrackedBodypart(object):
             cv2.line(image, self.ptWedgeLo_inner, self.ptWedgeLo_outer, self.bgra_dim, 1)
 
     
-            # Show the aux windows.
+            # Show the extra windows.
             self.windowBG.show()
             self.windowFG.show()
             self.windowPolar.show()
@@ -1530,7 +1522,7 @@ class Fly(object):
         self.abdomen = BodySegment(name='abdomen', params=params, color='magenta', bEqualizeHist=True) 
         self.right   = Wing(name='right',          params=params, color='red',     bEqualizeHist=False)
         self.left    = Wing(name='left',           params=params, color='green',   bEqualizeHist=False)
-        self.extra   = Extra(name='extra',         params=params, color='yellow',  bEqualizeHist=False)
+        self.aux     = Aux(name='aux',             params=params, color='yellow',  bEqualizeHist=False)
 
         self.windowThorax      = ImageWindow(False, 'Thorax')
         
@@ -1551,7 +1543,7 @@ class Fly(object):
         self.abdomen.set_params(params)
         self.left.set_params(params)
         self.right.set_params(params)
-        self.extra.set_params(params)
+        self.aux.set_params(params)
 
         pt1 = [params['head']['hinge']['x'], params['head']['hinge']['y']]
         pt2 = [params['abdomen']['hinge']['x'], params['abdomen']['hinge']['y']]
@@ -1574,7 +1566,7 @@ class Fly(object):
         self.abdomen.create_mask (shapeImage)
         self.right.create_mask (shapeImage)
         self.left.create_mask (shapeImage)
-        self.extra.create_mask (shapeImage)
+        self.aux.create_mask (shapeImage)
 
 
     def get_bodyangle_i(self):
@@ -1614,7 +1606,7 @@ class Fly(object):
         self.abdomen.set_background(image)
         self.left.set_background(image)
         self.right.set_background(image)
-        self.extra.set_background(image)
+        self.aux.set_background(image)
 
     
     def update_handle_points(self):
@@ -1622,7 +1614,7 @@ class Fly(object):
         self.abdomen.update_handle_points()
         self.left.update_handle_points()
         self.right.update_handle_points()
-        self.extra.update_handle_points()
+        self.aux.update_handle_points()
         
 
     def update(self, header=None, image=None):
@@ -1642,9 +1634,8 @@ class Fly(object):
             self.abdomen.update(header, image)
             self.left.update(header, image)
             self.right.update(header, image)
-            self.extra.update(header, image)
+            self.aux.update(header, image)
             
-#            rospy.logwarn((self.head.angleOutward_i, self.abdomen.angleOutward_i, self.left.angleOutward_i, self.right.angleOutward_i))
 
             
     def draw(self, image):
@@ -1655,7 +1646,7 @@ class Fly(object):
         self.abdomen.draw(image)
         self.left.draw(image)
         self.right.draw(image)
-        self.extra.draw(image)
+        self.aux.draw(image)
 
         self.windowThorax.show()
         
@@ -1691,10 +1682,10 @@ class Fly(object):
         else:
             flystate.abdomen  = MsgBodypart(intensity=0.0, angle=0.0, radius=0.0)
 
-        if (self.params['extra']['track']):
-            flystate.extra  = MsgExtra(intensity=self.extra.state.intensity)
+        if (self.params['aux']['track']):
+            flystate.aux  = MsgAux(intensity=self.aux.state.intensity)
         else:
-            flystate.extra  = MsgExtra(intensity=0.0)
+            flystate.aux  = MsgAux(intensity=0.0)
 
 
         self.iCount += 1
@@ -1708,8 +1699,8 @@ class Fly(object):
         
 ###############################################################################
 ###############################################################################
-# The 'extra' area to track intensity.
-class Extra(IntensityTrackedBodypart):
+# The 'aux' area to track intensity.
+class Aux(IntensityTrackedBodypart):
     def __init__(self, name=None, params={}, color='white', bEqualizeHist=False):
         IntensityTrackedBodypart.__init__(self, name, params, color, bEqualizeHist)
         self.state = Struct()
@@ -1748,7 +1739,7 @@ class Extra(IntensityTrackedBodypart):
     def draw(self, image):
         IntensityTrackedBodypart.draw(self, image)
 
-# end class Extra
+# end class Aux
 
     
 
@@ -2112,7 +2103,7 @@ class MainWindow:
         defaults = {'filenameBackground':'~/kinefly.png',
                     'image_topic':'/camera/image_raw',
                     'use_gui':True,                     # You can turn off the GUI to speed the framerate.
-                    'windows':True,               # Show the helpful extra windows.
+                    'windows':True,                     # Show the helpful extra windows.
                     'symmetric':True,                   # Forces the UI to remain symmetric.
                     'threshold_intensity_flight':0.5,   # Amount of pixel intensity that counts as flying.  Intensity ranges on interval [0,1].
                     'scale_image':1.0,                  # Reducing the image scale will speed the framerate.
@@ -2156,7 +2147,7 @@ class MainWindow:
                                'radius_inner':50,
                                'angle_hi':2.3562, 
                                'angle_lo':0.7854},
-                    'extra':   {'track':True,
+                    'aux':    {'track':True,
                                'subtract_bg':False,
                                'center':{'x':350,
                                          'y':150},
@@ -2254,7 +2245,7 @@ class MainWindow:
             
             x = btn.right+1
             y = btn.top+1
-            btn = Button(pt=[x,y], scale=self.scale, type='checkbox', name='extra', text='extra', state=self.params['extra']['track'])
+            btn = Button(pt=[x,y], scale=self.scale, type='checkbox', name='aux', text='aux', state=self.params['aux']['track'])
             self.wrap_button(btn, image)
             self.buttons.append(btn)
             
@@ -2370,7 +2361,7 @@ class MainWindow:
             paramsScaled[partname]['radius_outer'] = (paramsIn[partname]['radius_outer']*scale)  
             paramsScaled[partname]['radius_inner'] = (paramsIn[partname]['radius_inner']*scale)  
             
-        for partname in ['extra']:
+        for partname in ['aux']:
             paramsScaled[partname]['center']['x'] = (paramsIn[partname]['center']['x']*scale)  
             paramsScaled[partname]['center']['y'] = (paramsIn[partname]['center']['y']*scale)  
             paramsScaled[partname]['radius1'] = (paramsIn[partname]['radius1']*scale)  
@@ -2458,11 +2449,11 @@ class MainWindow:
                     y -= h_text+self.h_gap
                 
     
-                    # Output the extra state.
-                    if (self.params['extra']['track']):
-                        s = 'EXTRA: (%0.3f)' % (self.fly.extra.state.intensity)
+                    # Output the aux state.
+                    if (self.params['aux']['track']):
+                        s = 'AUX: (%0.3f)' % (self.fly.aux.state.intensity)
                         w = 95
-                        cv2.putText(imgOutput, s, (x, y), self.fontface, self.scaleText, self.fly.extra.bgra)
+                        cv2.putText(imgOutput, s, (x, y), self.fontface, self.scaleText, self.fly.aux.bgra)
                         w_text = int(w * self.scale)
                         h_text = int(h * self.scale)
                         #x += w_text+self.w_gap
@@ -2616,7 +2607,7 @@ class MainWindow:
             (partname[1], tag[1]) = self.fly.right.hit_object(ptMouse)
             (partname[2], tag[2]) = self.fly.head.hit_object(ptMouse)
             (partname[3], tag[3]) = self.fly.abdomen.hit_object(ptMouse)
-            (partname[4], tag[4]) = self.fly.extra.hit_object(ptMouse)
+            (partname[4], tag[4]) = self.fly.aux.hit_object(ptMouse)
             i = next((i for i in range(len(tag)) if tag[i]!=None), None)
             if (i is not None):
                 tagHit  = tag[i]
@@ -2665,8 +2656,8 @@ class MainWindow:
             bodypart = self.fly.head
         elif (partname=='abdomen'):
             bodypart = self.fly.abdomen
-        elif (partname=='extra'):
-            bodypart = self.fly.extra
+        elif (partname=='aux'):
+            bodypart = self.fly.aux
         else:
             bodypart = None
             
@@ -2802,7 +2793,7 @@ class MainWindow:
                 
         # Center.
         elif (tagSelected=='center'): 
-            if (partnameSelected=='extra'):
+            if (partnameSelected=='aux'):
 
                 # Move the center point.
                 pt = ptMouse
@@ -2912,7 +2903,7 @@ class MainWindow:
 
                     self.params['left']['subtract_bg']  = self.buttons[iButtonSelected].state
                     self.params['right']['subtract_bg'] = self.buttons[iButtonSelected].state
-                    self.params['extra']['subtract_bg']  = self.buttons[iButtonSelected].state
+                    self.params['aux']['subtract_bg']  = self.buttons[iButtonSelected].state
                     
                 elif (self.nameSelected == self.nameSelectedNow == 'head'):
                     self.params['head']['track'] = self.buttons[iButtonSelected].state
@@ -2924,8 +2915,8 @@ class MainWindow:
                     self.params['right']['track'] = self.buttons[iButtonSelected].state
                     self.params['left']['track']  = self.buttons[iButtonSelected].state
 
-                elif (self.nameSelected == self.nameSelectedNow == 'extra'):
-                    self.params['extra']['track'] = self.buttons[iButtonSelected].state
+                elif (self.nameSelected == self.nameSelectedNow == 'aux'):
+                    self.params['aux']['track'] = self.buttons[iButtonSelected].state
 
                 elif (self.nameSelected == self.nameSelectedNow == 'stabilize'):
                     self.params['head']['stabilize'] = self.buttons[iButtonSelected].state

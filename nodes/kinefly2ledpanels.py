@@ -10,7 +10,7 @@ import numpy as np
 from std_msgs.msg import Float32, Header, String
 
 from ledpanels.msg import MsgPanelsCommand
-from Kinefly.msg import MsgFlystate, MsgWing, MsgBodypart
+from Kinefly.msg import MsgFlystate, MsgWing, MsgBodypart, MsgAux
 
 
 ###############################################################################
@@ -38,7 +38,7 @@ class Kinefly2Ledpanels:
                              'funcx':0,
                              'funcy':0,
                              },
-                         'coeff_usb':{  # When using usb method, coefficients x0,xl1,...,yaa,yar determine the pos or vel command sent to the controller over USB.
+                         'coeff_usb':{  # When using usb method, coefficients x0,xl1,xl2, ... ,yaa,yar,yxi determine the pos or vel command sent to the controller over USB.
                              'x0': 0.0,
                              'xl1':1.0,
                              'xl2':0.0,
@@ -48,6 +48,7 @@ class Kinefly2Ledpanels:
                              'xhr':0.0,
                              'xaa':0.0,
                              'xar':0.0,
+                             'xxi':0.0,
                              'y0': 0.0,
                              'yl1':0.0,
                              'yl2':0.0,
@@ -57,6 +58,7 @@ class Kinefly2Ledpanels:
                              'yhr':0.0,
                              'yaa':0.0,
                              'yar':0.0,
+                             'yxi':0.0,
                              }
                          }
         self.set_dict_with_preserve(self.params, self.defaults)
@@ -124,12 +126,14 @@ class Kinefly2Ledpanels:
                             self.params['coeff_usb']['xl1'], self.params['coeff_usb']['xl2'], 
                             self.params['coeff_usb']['xr1'], self.params['coeff_usb']['xr2'], 
                             self.params['coeff_usb']['xha'], self.params['coeff_usb']['xhr'], 
-                            self.params['coeff_usb']['xaa'], self.params['coeff_usb']['xar']],
+                            self.params['coeff_usb']['xaa'], self.params['coeff_usb']['xar'],
+                            self.params['coeff_usb']['xxi']],
                            [self.params['coeff_usb']['y0'], 
                             self.params['coeff_usb']['yl1'], self.params['coeff_usb']['yl2'], 
                             self.params['coeff_usb']['yr1'], self.params['coeff_usb']['yr2'], 
                             self.params['coeff_usb']['yha'], self.params['coeff_usb']['yhr'], 
-                            self.params['coeff_usb']['yaa'], self.params['coeff_usb']['yar']]
+                            self.params['coeff_usb']['yaa'], self.params['coeff_usb']['yar'],
+                            self.params['coeff_usb']['yxi']]
                           ],
                           dtype=np.float32
                           )
@@ -170,7 +174,8 @@ class Kinefly2Ledpanels:
                           flystate.head.angle,
                           flystate.head.radius,
                           flystate.abdomen.angle,
-                          flystate.abdomen.radius
+                          flystate.abdomen.radius,
+                          flystate.aux.intensity
                           ], dtype=np.float32)
         
         pos = np.dot(self.a, state)
@@ -202,7 +207,8 @@ class Kinefly2Ledpanels:
                           flystate.head.angle,
                           flystate.head.radius,
                           flystate.abdomen.angle,
-                          flystate.abdomen.radius
+                          flystate.abdomen.radius,
+                          flystate.aux.intensity
                           ], dtype=np.float32)
         
         vel = np.dot(self.a, state)

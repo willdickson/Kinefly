@@ -23,8 +23,8 @@ The main window provides an interface to most, but not all, of the functionality
   []Head        Turn on/off head tracking.
   []Abdomen     Turn on/off abdomen tracking.
   []Wings       Turn on/off left & right wing tracking.
-  []Extra       Turn on/off the 'extra' ellipse intensity calculation.
-  []SubtractBG  Turn on/off background subtraction on wings & extra.
+  []Aux         Turn on/off the 'aux' area intensity calculation.
+  []SubtractBG  Turn on/off background subtraction on wings & aux.
   []Stabilize   Turn on/off image stabilization for head & abdomen.  The  
                 quality of stabilization is very dependent upon the region 
                 selected with the handles. (default: false) 
@@ -73,7 +73,7 @@ right:
   angle1: 1.0994397644
   angle2: 1.21830546613
   intensity: 0.626624052158
-extra: 
+aux: 
   intensity: 0.592803359032
  
 
@@ -83,7 +83,7 @@ Angle units are radians.
 Radius units are pixels.  
 Intensity is on the range [0,1], where 0.0 equals all pixels black, and 1.0 equals all pixels white.  The main window shows intensity units in parentheses, ().
 
-Each bodypart (head, abdomen, and wings) has its own angle origin.  The zero angle for the head is directly opposite from the abdomen, and the zero of the abdomen angle is directly opposite from the head.  The zero for each wing is directly opposite from the other wing hinge.  In other words, imagine a line connecting the head and abdomen, and a line connecting each wing hinge. The zero angles are outward along those lines, and the range of each angle is on the range [-pi,+pi].
+Each bodypart (head, abdomen, and wings) has its own angle origin, which in general terms is outward from the body center.  The zero angle for the head is directly opposite from the abdomen, and the zero of the abdomen angle is directly opposite from the head.  The zero for each wing is directly opposite from the other wing hinge.  In other words, imagine a line connecting the head and abdomen hinges, and a line connecting each wing hinge.  The zero angles are outward along those lines, and the range of each angle is on the range [-pi,+pi].
 
 
 Frame Rate
@@ -98,7 +98,7 @@ Kinefly works best internally if the image is white-on-black.  The camera image 
 
 Background Subtraction
 ---------------------------
-Background subtraction is performed only for the wings and extra region, not for the head and abdomen.  The background is initialized with the kinefly.png image on disk, and updates as a moving average with the time constant (in seconds) parameter rc_background. 
+Background subtraction is performed only for the wings and aux region, not for the head and abdomen.  The background is initialized with the kinefly.png image on disk, and updates as a moving average with the time constant (in seconds) parameter rc_background. 
 
   
 Parameters, YAML file.
@@ -155,7 +155,7 @@ Each voltage channel # calculates a voltage by a linear combination of terms of 
         + v#hr * headradius
         + v#aa * abdomenangle
         + v#ar * abdomenradius
-        + v#ei * extraintensity
+        + v#xi * auxintensity
        
 Thus for example, a voltage output such as L-R can be generated on v2 by setting the v2l1=+1 and v2r1=-1.
 
