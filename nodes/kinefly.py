@@ -22,7 +22,7 @@ from Kinefly.msg import MsgFlystate, MsgWing, MsgBodypart, MsgAux, MsgCommand
 from Kinefly.cfg import kineflyConfig
 
 gOffsetHandle = 10 # How far from the point-of-interest we place some of the handles.
-
+gImageTime = 0.0
 
 
 # Colors.
@@ -791,7 +791,7 @@ class WindowFunctions(object):
     
 ###############################################################################
 ###############################################################################
-# Contains the common behavior for tracking a bodypart via pixel intensity.
+# Contains the base behavior for tracking a bodypart via pixel intensity.
 #
 class IntensityTrackedBodypart(object):
     def __init__(self, name=None, params={}, color='white', bEqualizeHist=False):
@@ -813,7 +813,7 @@ class IntensityTrackedBodypart(object):
         self.sumMask = 1.0
         
         self.stampPrev = None
-        self.dt = rospy.Time(0)
+        self.dt = np.inf
 
         self.params = {}
         self.handles = {'center':Handle(np.array([0,0]), self.bgra, name='center'),
@@ -911,7 +911,7 @@ class IntensityTrackedBodypart(object):
         
         
     def update_background(self):
-        dt = max(0, self.dt.to_sec())
+        dt = max(0, self.dt)
         alphaBackground = 1.0 - np.exp(-dt / self.rc_background)
 
         if (self.imgRoiBackground is not None):
@@ -982,9 +982,9 @@ class IntensityTrackedBodypart(object):
         self.iCount += 1
         
         if (self.stampPrev is not None):
-            self.dt = header.stamp - self.stampPrev
+            self.dt = (header.stamp - self.stampPrev).to_sec()
         else:
-            self.dt = rospy.Time(0)
+            self.dt = np.inf
         self.stampPrev = header.stamp
         
         if (self.params[self.name]['track']):
@@ -1075,7 +1075,7 @@ class PolarTrackedBodypart(object):
         self.sumMask = 1.0
         
         self.stampPrev = None
-        self.dt = rospy.Time(0)
+        self.dt = np.inf
         self.polartransforms   = PolarTransforms()
 
         self.params = {}
@@ -1280,7 +1280,7 @@ class PolarTrackedBodypart(object):
         
         
     def update_background(self):
-        dt = max(0, self.dt.to_sec())
+        dt = max(0, self.dt)
         alphaBackground = 1.0 - np.exp(-dt / self.rc_background)
 
         if (self.imgRoiBackground is not None):
@@ -1409,9 +1409,9 @@ class PolarTrackedBodypart(object):
         self.iCount += 1
         
         if (self.stampPrev is not None):
-            self.dt = header.stamp - self.stampPrev
+            self.dt = (header.stamp - self.stampPrev).to_sec()
         else:
-            self.dt = rospy.Time(0)
+            self.dt = np.inf
         self.stampPrev = header.stamp
         
         if (self.params[self.name]['track']):
@@ -1513,6 +1513,232 @@ class PolarTrackedBodypart(object):
                 
 # end class PolarTrackedBodypart
 
+
+
+###############################################################################
+###############################################################################
+class WingbeatDetector(object):
+    def __init__(self, fw_min, fw_max):
+        self.n = 64
+        self.buffer = np.zeros([2*self.n, 2]) # Holds intensities & framerates.
+        self.set(fw_min, fw_max)
+        
+                
+    def set(self, fw_min, fw_max):
+        self.bInitialized = False
+        self.i = 0
+        
+        # Set the desired passband.
+        self.fw_min = fw_min
+        self.fw_max = fw_max
+        self.fw_center = (fw_min + fw_max) / 2.0
+
+        # Framerate needed to measure the desired band.        
+        self.fs_dict = self.fs_dict_from_wingband(fw_min, fw_max)
+        if (len(self.fs_dict['fs_range_list'])>0):
+            (self.fs_lo, self.fs_hi) = self.fs_dict['fs_range_list'][0]
+        else:
+            (self.fs_lo, self.fs_hi) = (0.0, 0.0)
+        
+
+    def warn(self):    
+        rospy.logwarn('Wingbeat detector is set to measure wingbeat frequencies in the range [%0.1f, %0.1f] Hz:' % (self.fw_min, self.fw_max))
+        rospy.logwarn('To make a measurement, the camera framerate must be in, and stay in, one of')
+        rospy.logwarn('the following ranges: %s' % self.fs_dict['fs_range_list'])
+
+
+    # fs_dict_from_wingband()
+    # Compute the camera frequency range [fs_lo, fs_hi] required to undersample the given wingbeat frequency band.
+    # fw_min:    Lower bound for wingbeat frequency.
+    # fw_max:    Upper bound for wingbeat frequency.
+    # fs_lo:   Lower bound for sampling frequency.
+    # fs_hi:   Upper bound for sampling frequency.
+    #
+    # Returns a list of all the possible framerate ranges: [[lo,hi],[lo,hi],...]
+    #
+    def fs_dict_from_wingband(self, fw_min, fw_max):
+        fs_dict = {}
+        fs_range_list = []
+        m_list = []
+        
+        bw = fw_max - fw_min
+        m = 1
+        while (True):
+            fs_hi =     (2.0 * self.fw_center - bw) / m
+            fs_lo = max((2.0 * self.fw_center + bw) / (m+1), 2*bw)
+            if (2*bw < fs_hi):
+                fs_range_list.append([fs_lo, fs_hi])
+                m_list.append(m)
+            else:
+                break
+            m += 1
+        
+        # Put the list into low-to-high order.
+        fs_range_list.reverse()
+        m_list.reverse()
+
+        fs_dict['fs_range_list'] = fs_range_list
+        fs_dict['m_list'] = m_list
+        
+        return fs_dict
+    
+    
+    # wingband_from_fs()
+    # Compute the frequency band we can measure with the given undersampling framerate.
+    # fs:          Sampling frequency, i.e. camera framerate.
+    # fw_center:    Desired center of the wingbeat frequencies. 
+    # fw_min:        Lower frequency of band that can be measured containing fw_center.
+    # fw_max:        Upper frequency of band.
+    # bReversed:   If True, then the aliased frequencies will be in reverse order.
+    #
+    def wingband_from_fs(self, fs_lo, fs_hi, fw_center):
+        # TODO: Note that this function does not work right.  It should return the inverse of self.fs_dict_from_wingband().
+        bw_lo = fs_lo / 2.0
+        
+        fs = (fs_lo+fs_hi)/2.0
+        
+        if (fs != 0.0):
+            # Find which multiples of fs/2 to use.
+            n = np.round(fw_center / (fs/2))
+            if (n*fs/2 < fw_center):
+                fw_min = n*fs/2
+                fw_max = (n+1)*fs/2
+            else:
+                fw_min = (n-1)*fs/2
+                fw_max = n*fs/2
+    
+            bReversed = ((n%2)==1)
+        else:
+            fw_min = 0.0
+            fw_max = 1.0
+            bReversed = False
+            
+        return (fw_min, fw_max, bReversed)
+        
+        
+    # get_baseband_range()
+    # Get the baseband wingbeat alias frequency range for the given sampling frequency and m.
+    def get_baseband_range(self, fs, m):
+        
+        kMax = int(np.floor(2*self.fw_center / m))
+        
+        # If m is even, then step down from fw in multiples of fs, keeping the last valid range above zero.
+        if (m%2==0):
+            for k in range(kMax):
+                fbb_min_tmp = self.fw_min - k * fs   
+                fbb_max_tmp = self.fw_max - k * fs
+                if (fbb_min_tmp >= 0):
+                    fbb_min = fbb_min_tmp   
+                    fbb_max = fbb_max_tmp
+                else:
+                    break
+                   
+        else: # if m is odd, then step up from -fw in multiples of fs, keeping the first valid range above zero.
+            for k in range(kMax):
+                fbb_min = -self.fw_min + k * fs   
+                fbb_max = -self.fw_max + k * fs
+                if (fbb_max >= 0):
+                    break
+            
+        return (fbb_min, fbb_max)
+        
+        
+    # get_baseband_range_from_framerates()
+    # Check if buffered framerates have stayed within an allowable 
+    # range to make a valid measurement of the wingbeat passband.
+    # If so, then compute the baseband frequency range
+    #
+    # Returns (bValid, [fbb_min, fbb_max])
+    #
+    def get_baseband_range_from_framerates(self, framerates):
+        bValid = False
+
+        fs_lo = np.min(framerates)
+        fs_hi = np.max(framerates)
+        #(fw_min, fw_max, bReversed) = self.wingband_from_fs(fs_lo, fs_hi, self.fw_center)
+        for iRange in range(len(self.fs_dict['fs_range_list'])):
+            (fs_min, fs_max) = self.fs_dict['fs_range_list'][iRange]
+            if (fs_min < fs_lo < fs_hi < fs_max):
+                bValid = True
+                break
+
+        m = self.fs_dict['m_list'][iRange]
+
+        if (bValid):
+            fs = np.mean(framerates)
+            (fbb_min, fbb_max) = self.get_baseband_range(fs, m)
+        else:
+            fbb_min = 0.0
+            fbb_max = np.Inf
+
+        
+        return (bValid, np.array([fbb_min, fbb_max]))
+        
+        
+    # freq_from_intensity()
+    # Get the wingbeat frequency by undersampling the image intensity, and then using 
+    # an alias to get the image of the spectrum in a frequency band (typically 180-220hz).
+    #
+    # intensity:     The current pixel intensity.
+    # fs:            The current framerate.
+    #
+    def freq_from_intensity(self, intensity, fs=0):            
+        # Update the sample buffer.
+        self.buffer[self.i]        = [intensity, fs]
+        self.buffer[self.i+self.n] = [intensity, fs]
+
+        # The buffered framerates.        
+        framerates = self.buffer[(self.i+1):(self.i+1+self.n),1]
+        
+        # The baseband alias range.
+        (bValid, fbb_range) = self.get_baseband_range_from_framerates(framerates)
+        if (fbb_range[0] < fbb_range[1]):
+            fbb_min = fbb_range[0]
+            fbb_max = fbb_range[1]
+            bReverse = False
+        else:
+            fbb_min = fbb_range[1]
+            fbb_max = fbb_range[0]
+            bReverse = True
+                    
+        # Get the wingbeat frequency.
+        if (bValid):
+            intensities = self.buffer[(self.i+1):(self.i+1+self.n),0]
+            
+#             # Multiplying by an alternating sequence has the effect of frequency-reversal in freq domain.
+#             if (bReverse):
+#                 a = np.ones(len(intensities))
+#                 a[1:len(a):2] = -1
+#                 intensities *= a
+
+            # Get the dominant frequency, and shift it from baseband to wingband.
+            fft = np.fft.rfft(intensities)
+            fft[0] = 0                      # Ignore the DC component.
+            i_max = np.argmax(np.abs(fft))  # Index of the dominant frequency.
+            f_width = fbb_max - fbb_min     # Width of the passband.
+            f_offset = np.abs(np.fft.fftfreq(self.n)[i_max]) * fs - fbb_min # * 2.0 * f_width    # Offset into the passband of the dominant freq.
+            if (bReverse):
+                freq = self.fw_max - f_offset
+            else:
+                freq = self.fw_min + f_offset
+
+            #rospy.logwarn((fs, [fbb_min, fbb_max], bReverse, i_max, f_width, np.fft.fftfreq(self.n)[i_max], f_offset, freq))
+        
+        else:
+            freq = 0.0
+        
+        # Go the the next sample slot.
+        self.i += 1
+        if (self.i == self.n):
+            self.bInitialized = True
+        self.i %= self.n
+        
+
+        return freq
+    
+# End class WingbeatDetector            
+    
+    
 
 ###############################################################################
 ###############################################################################
@@ -1624,11 +1850,13 @@ class Fly(object):
             
             if (self.bInvertcolor):
                 image = 255-image
-    
+
+            # Get the timestamp.    
             if (header is not None):
                 self.stamp = header.stamp
             else:
                 self.stamp = rospy.Time.now()
+                
             
             self.head.update(header, image)
             self.abdomen.update(header, image)
@@ -1636,7 +1864,6 @@ class Fly(object):
             self.right.update(header, image)
             self.aux.update(header, image)
             
-
             
     def draw(self, image):
         # Draw line to indicate the body axis.
@@ -1703,24 +1930,40 @@ class Fly(object):
 class Aux(IntensityTrackedBodypart):
     def __init__(self, name=None, params={}, color='white', bEqualizeHist=False):
         IntensityTrackedBodypart.__init__(self, name, params, color, bEqualizeHist)
+        
         self.state = Struct()
+        self.state.intensity = 0.0
+        self.state.freq = 0.0
+        
+        self.wingbeat = WingbeatDetector(0, 1000)
+
         self.set_params(params)
 
+        
     
     # set_params()
     # Set the given params dict into this object.
     #
     def set_params(self, params):
         IntensityTrackedBodypart.set_params(self, params)
+
         self.imgRoiBackground = None
         self.iCount = 0
         self.state.intensity = 0.0
+
+        self.wingbeat.set(self.params['wingbeat_min'], 
+                          self.params['wingbeat_max'])
 
         
     # update_state()
     #
     def update_state(self):
-        self.state.intensity = np.sum(self.imgRoiFgMasked).astype(np.float32) / self.sumMask 
+        #f = 175         # Simulate this freq.
+        #t = gImageTime 
+        #self.state.intensity = np.cos(2*np.pi*f*t)
+        self.state.intensity = np.sum(self.imgRoiFgMasked).astype(np.float32) / self.sumMask
+        
+        self.state.freq = self.wingbeat.freq_from_intensity(self.state.intensity, 1.0/self.dt)
     
         
     # update()
@@ -1732,7 +1975,9 @@ class Aux(IntensityTrackedBodypart):
         if (self.params[self.name]['track']):
             self.update_state()
     
-    
+            
+
+
     # draw()
     # Draw the outline.
     #
@@ -1783,11 +2028,11 @@ class BodySegment(PolarTrackedBodypart):
         self.state.radius = 0.0
 
         self.stateLo.intensity = np.inf
-        self.stateLo.angle = np.inf
+        self.stateLo.angle = 4.0*np.pi
         self.stateLo.radius = np.inf
 
         self.stateHi.intensity = -np.inf
-        self.stateHi.angle = -np.inf
+        self.stateHi.angle = -4.0*np.pi
         self.stateHi.radius = -np.inf
         
         self.windowStabilized.set_enable(self.params['windows'] and self.params[self.name]['track'] and self.params[self.name]['stabilize'])
@@ -2080,8 +2325,8 @@ class MainWindow:
     def __init__(self):
         self.bInitialized = False
         self.stampPrev = None
-        self.dt = rospy.Time(0)
-        self.lock = threading.Lock()
+        self.dt = np.inf
+        self.lockParams = threading.Lock()
         
         # initialize
         rospy.init_node('kinefly', anonymous=True)
@@ -2093,7 +2338,7 @@ class MainWindow:
         
         # Load the parameters yaml file.
         self.parameterfile = os.path.expanduser(rospy.get_param('kinefly/parameterfile', '~/kinefly.yaml'))
-        with self.lock:
+        with self.lockParams:
             try:
                 self.params = rosparam.load_file(self.parameterfile)[0][0]
             except (rosparam.RosParamException, IndexError), e:
@@ -2109,10 +2354,12 @@ class MainWindow:
                     'scale_image':1.0,                  # Reducing the image scale will speed the framerate.
                     'n_edges':1,                        # Number of edges per wing to find.  1 or 2.
                     'rc_background':1000.0,             # Time constant of the moving average background.
+                    'wingbeat_min':180,                 # Bounds for wingbeat frequency measurement.
+                    'wingbeat_max':220,
                     'head':   {'track':True,            # To track, or not to track.
                                'autozero':True,         # Automatically figure out where is the center of motion.
                                'subtract_bg':False,     # Use background subtraction?
-                               'stabilize':False,
+                               'stabilize':False,       # Image stabilization of the bodypart.
                                'hinge':{'x':300,        # Hinge position in image coordinates.
                                         'y':150},
                                'radius_outer':80,      # Outer radius in pixel units.
@@ -2181,12 +2428,13 @@ class MainWindow:
         self.hz = 0.0
         self.hzSum = 0.0
         self.iCount = 0
+        self.imgScaled = None
         
         # Publishers.
         self.pubCommand            = rospy.Publisher('kinefly/command', MsgCommand)
 
         # Subscriptions.        
-        self.subImageRaw           = rospy.Subscriber(self.params['image_topic'], Image, self.image_callback, queue_size=2)
+        self.subImageRaw           = rospy.Subscriber(self.params['image_topic'], Image, self.image_callback, queue_size=1)
         self.subCommand            = rospy.Subscriber('kinefly/command', MsgCommand, self.command_callback)
 
         self.h_gap = int(5 * self.scale)
@@ -2311,7 +2559,7 @@ class MainWindow:
         
         # Set it into the wings.
         self.fly.set_params(self.scale_params(self.params, self.scale))
-        with self.lock:
+        with self.lockParams:
             rosparam.dump_params(self.parameterfile, 'kinefly')
         
         return config
@@ -2378,13 +2626,11 @@ class MainWindow:
 
 
     def image_callback(self, rosimage):
-        if (self.stampPrev is not None):
-            self.dt = rosimage.header.stamp - self.stampPrev
-        else:
-            self.dt = rospy.Time(0)
-        self.stampPrev = rosimage.header.stamp
+        self.header = rosimage.header
+        global gImageTime
+        gImageTime = self.header.stamp.to_sec()
 
-        # Receive an image:
+        # Receive the image:
         try:
             img = np.uint8(cv.GetMat(self.cvbridge.imgmsg_to_cv(rosimage, 'passthrough')))
             
@@ -2399,7 +2645,17 @@ class MainWindow:
         	self.imgScaled = cv2.resize(img, (0,0), fx=self.scale, fy=self.scale) 
                 
                 
+                
+    def process_image(self):
         if (self.imgScaled is not None):
+            t0 = rospy.Time.now().to_sec()
+            
+            if (self.stampPrev is not None):
+                self.dt = (self.header.stamp - self.stampPrev).to_sec()
+            else:
+                self.dt = np.inf
+            self.stampPrev = self.header.stamp
+            
             self.shapeImage = self.imgScaled.shape # (height,width)
             
             # Create the button bar if needed.    
@@ -2425,13 +2681,13 @@ class MainWindow:
                 # Output the framerate.
                 w = 55
                 if (not self.bMousing):
-                    tNow = rospy.Time.now().to_sec()
-                    dt = tNow - self.tPrev
-                    self.tPrev = tNow
-                    hzNow = 1/dt if (dt != 0.0) else 0.0
+#                     tNow = rospy.Time.now().to_sec()
+#                     dt = tNow - self.tPrev
+#                     self.tPrev = tNow
+                    hzNow = 1/self.dt
                     self.iCount += 1
                     if (self.iCount > 100):                     
-                        a= 0.04
+                        a= 0.04 # Filter the framerate.
                         self.hz = (1-a)*self.hz + a*hzNow 
                     else:                                       
                         if (self.iCount>20):             # Get past the transient response.       
@@ -2452,6 +2708,17 @@ class MainWindow:
                     # Output the aux state.
                     if (self.params['aux']['track']):
                         s = 'AUX: (%0.3f)' % (self.fly.aux.state.intensity)
+                        w = 95
+                        cv2.putText(imgOutput, s, (x, y), self.fontface, self.scaleText, self.fly.aux.bgra)
+                        w_text = int(w * self.scale)
+                        h_text = int(h * self.scale)
+                        #x += w_text+self.w_gap
+                        y -= h_text+self.h_gap
+                    
+                        if (self.fly.aux.state.freq != 0.0):
+                            s = 'WB Freq: %0.0fhz' % (self.fly.aux.state.freq)
+                        else:
+                            s = 'WB Freq: ---'
                         w = 95
                         cv2.putText(imgOutput, s, (x, y), self.fontface, self.scaleText, self.fly.aux.bgra)
                         w_text = int(w * self.scale)
@@ -2562,12 +2829,17 @@ class MainWindow:
 
             if (not self.bMousing):
                 # Update the fly internals.
-                self.fly.update(rosimage.header, self.imgScaled)
+                self.fly.update(self.header, self.imgScaled)
     
                 # Publish the outputs.
                 self.fly.publish()
-            
-            
+                
+                
+            self.imgScaled = None
+            t1 = rospy.Time.now().to_sec()
+            #rospy.logwarn('dt=%f' % (t1-t0))
+
+                
 
     # save_background()
     # Save the current camera image as the background.
@@ -2917,6 +3189,9 @@ class MainWindow:
 
                 elif (self.nameSelected == self.nameSelectedNow == 'aux'):
                     self.params['aux']['track'] = self.buttons[iButtonSelected].state
+                    if (self.params['aux']['track']):
+                        self.fly.aux.wingbeat.warn()
+                    
 
                 elif (self.nameSelected == self.nameSelectedNow == 'stabilize'):
                     self.params['head']['stabilize'] = self.buttons[iButtonSelected].state
@@ -2934,7 +3209,7 @@ class MainWindow:
                 SetDict().set_dict_with_preserve(self.params, rospy.get_param('kinefly'))
 
                 rospy.set_param('kinefly', self.params)
-                with self.lock:
+                with self.lockParams:
                     rosparam.dump_params(self.parameterfile, 'kinefly')
 
             # Dump the params to the screen, for debugging.
@@ -2956,13 +3231,17 @@ class MainWindow:
             
                 
     def run(self):
-        rospy.spin()
+        if (self.params['aux']['track']):
+            self.fly.aux.wingbeat.warn()
+        
+        while (not rospy.is_shutdown()):
+            self.process_image()
+            rospy.sleep(-1) # Returns immediately.  Equivalent to rospy.spinOnce(), if it existed.
 
         cv2.destroyAllWindows()
 
 
 if __name__ == '__main__':
-
     main = MainWindow()
 
     rospy.logwarn('')

@@ -23,7 +23,7 @@ The main window provides an interface to most, but not all, of the functionality
   []Head        Turn on/off head tracking.
   []Abdomen     Turn on/off abdomen tracking.
   []Wings       Turn on/off left & right wing tracking.
-  []Aux         Turn on/off the 'aux' area intensity calculation.
+  []Aux         Turn on/off the 'aux' area intensity & wingbeat frequency calculations.
   []SubtractBG  Turn on/off background subtraction on wings & aux.
   []Stabilize   Turn on/off image stabilization for head & abdomen.  The  
                 quality of stabilization is very dependent upon the region 
@@ -75,6 +75,7 @@ right:
   intensity: 0.626624052158
 aux: 
   intensity: 0.592803359032
+  freq: 198.85736183952
  
 
 Units
@@ -99,6 +100,11 @@ Kinefly works best internally if the image is white-on-black.  The camera image 
 Background Subtraction
 ---------------------------
 Background subtraction is performed only for the wings and aux region, not for the head and abdomen.  The background is initialized with the kinefly.png image on disk, and updates as a moving average with the time constant (in seconds) parameter rc_background. 
+
+
+Wingbeat Frequency:
+---------------------------
+We make an attempt to measure the wingbeat frequency using the frequency spectrum of the aux intensity.  For this to work, several criteria must be met.  First, you must set the valid range of wingbeat frequencies in the kinefly.yaml file.  Upon the next launch, Kinefly will print out the compatible camera framerate needed (the lowest typically being slightly higher than twice the wingbeat passband width).  Next, set the camera to that framerate.  If the camera framerate can be maintained within the valid range, then Kinefly will compute the wingbeat frequency.  Since the framerate is typically much less than the Nyquist frequency needed to cover the wingbeat range, we use an undersampling technique and look at a baseband alias of the wingbeat frequencies.  Proper camera framerate is critical to the functioning of this feature, and the computer must be fast enough to process the frames in the allowed time, with no camera framerate variation outside of the allowed range.      
 
   
 Parameters, YAML file.
@@ -127,11 +133,15 @@ Parameters that apply to all bodyparts:
     use_gui:                    Turn on/off the graphical user interface to
                                 speed the framerate. (default: true)
   
-Parameters set individually for head & abdomen:
+Parameters that apply only to head & abdomen:
     autozero:                   Automatically (true) determine the zero 
                                 angle based on center of motion, or (false)
                                 use the first valid frame as the zero angle.
                                 (default: true)
+
+Parameters that apply only to aux:
+    wingbeat_lo:
+    wingbeat_hi:
 
                              
 Voltage Output
