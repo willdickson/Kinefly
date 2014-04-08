@@ -1740,7 +1740,7 @@ class Fly(object):
         self.left    = Wing(name='left',           params=params, color='green',   bEqualizeHist=False)
         self.aux     = Aux(name='aux',             params=params, color='yellow',  bEqualizeHist=False)
 
-        self.windowThorax      = ImageWindow(False, 'Thorax')
+        self.windowInvertColorArea      = ImageWindow(False, 'InvertColorArea')
         
         self.bgra_body = bgra_dict['light_gray']
         self.ptBodyIndicator1 = None
@@ -1749,6 +1749,7 @@ class Fly(object):
         self.iCount  = 0
         self.stampPrev = None
         self.stampPrevAlt = None
+        self.stamp = rospy.Time(0)
         
 
         self.pubFlystate = rospy.Publisher('kinefly/flystate', MsgFlystate)
@@ -1775,7 +1776,7 @@ class Fly(object):
         self.ptBodyIndicator2 = tuple((self.ptBodyCenter_i - r * np.array([np.cos(self.angleBody_i), np.sin(self.angleBody_i)])).astype(int))
         
         # Radius of an area approximately where the thorax would be.
-        self.rThorax = np.linalg.norm(np.array([params['head']['hinge']['x'], params['head']['hinge']['y']]) - np.array([params['abdomen']['hinge']['x'], params['abdomen']['hinge']['y']]))/2.0
+        self.rInvertColorArea = np.linalg.norm(np.array([params['head']['hinge']['x'], params['head']['hinge']['y']]) - np.array([params['abdomen']['hinge']['x'], params['abdomen']['hinge']['y']]))/2.0
         self.bInvertColorValid = False
         
     
@@ -1798,19 +1799,19 @@ class Fly(object):
     # Calculate what we think the bInvertcolor flag should be to make white-on-black.        
     def calc_invertcolor(self, image):
         # Get a roi around the body center.
-        xMin = max(0,self.ptBodyCenter_i[0]-int(0.75*self.rThorax))
-        yMin = max(0,self.ptBodyCenter_i[1]-int(0.75*self.rThorax))
-        xMax = min(self.ptBodyCenter_i[0]+int(0.75*self.rThorax), image.shape[1]-1)
-        yMax = min(self.ptBodyCenter_i[1]+int(0.75*self.rThorax), image.shape[0]-1)
-        imgThorax = image[yMin:yMax, xMin:xMax]
-        self.windowThorax.set_image(imgThorax)
+        xMin = max(0,self.ptBodyCenter_i[0]-int(0.75*self.rInvertColorArea))
+        yMin = max(0,self.ptBodyCenter_i[1]-int(0.75*self.rInvertColorArea))
+        xMax = min(self.ptBodyCenter_i[0]+int(0.75*self.rInvertColorArea), image.shape[1]-1)
+        yMax = min(self.ptBodyCenter_i[1]+int(0.75*self.rInvertColorArea), image.shape[0]-1)
+        imgInvertColorArea = image[yMin:yMax, xMin:xMax]
+        self.windowInvertColorArea.set_image(imgInvertColorArea)
 
         # Midpoint between darkest & lightest colors.
         threshold = np.mean(image) 
-        #rospy.logwarn((np.min(image), np.median(image), np.mean(image), np.max(image), np.mean(imgThorax)))
+        #rospy.logwarn((np.min(image), np.median(image), np.mean(image), np.max(image), np.mean(imgInvertColorArea)))
         
         # If the roi is too dark, then set bInvertcolor.
-        if (np.mean(imgThorax) <= threshold):
+        if (np.mean(imgInvertColorArea) <= threshold):
             self.bInvertcolor = True
         else:
             self.bInvertcolor = False
@@ -1837,15 +1838,17 @@ class Fly(object):
 
     def update(self, header=None, image=None):
         if (image is not None):
+            self.header = header
+            
             if (not self.bInvertColorValid):
                 self.calc_invertcolor(image)
             
             if (self.bInvertcolor):
                 image = 255-image
 
-            # Get the header.    
-            self.header = header
-                
+            # Get the dt.  Keep track of both the camera timestamp, and the now() timestamp,
+            # and use the now() timestamp only if the camera timestamp isn't changing.
+            self.stamp = self.header.stamp
             stampAlt = rospy.Time.now()
             if (self.stampPrev is not None):
                 dt = (self.header.stamp - self.stampPrev).to_sec()
@@ -1853,6 +1856,7 @@ class Fly(object):
                 # If the camera is not giving good timestamps, then use our own clock.
                 if (dt == 0.0):
                     dt = (stampAlt - self.stampPrevAlt).to_sec()
+                    self.stamp = stampAlt
             else:
                 dt = np.inf
             self.stampPrev = self.header.stamp
@@ -1876,12 +1880,12 @@ class Fly(object):
         self.right.draw(image)
         self.aux.draw(image)
 
-        self.windowThorax.show()
+        self.windowInvertColorArea.show()
         
     
     def publish(self):
         flystate              = MsgFlystate()
-        flystate.header       = Header(seq=self.iCount, stamp=self.header.stamp, frame_id='Fly')
+        flystate.header       = Header(seq=self.iCount, stamp=self.stamp, frame_id='Fly')
         if (self.params['left']['track']) and (self.left.state.angle1 is not None) and (self.left.state.angle2 is not None):
             flystate.left     = MsgWing(intensity=self.left.state.intensity, 
                                         angle1=self.left.state.angle1, 
