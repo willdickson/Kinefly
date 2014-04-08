@@ -3,7 +3,8 @@
     <!-- ========================================================== -->
     <!-- Launch the camera.                                         -->
     <!-- ========================================================== -->
-
-    <node name="playbag" pkg="rosbag" type="play" args="--clock --delay=1 --rate=10 --loop /home/ssafarik/flyhead.bag" required="true" /> <!-- kinefly_2photon2 flyhead -->
+    <param name="use_sim_time" type="bool" value="false"/>
+    <node name="image_proc"       pkg="image_proc"  type="image_proc" ns="camera" />
+    <node name="playbag" pkg="rosbag" type="play" args="--clock --delay=1 --rate=1 --loop /home/ssafarik/flyhead.bag" required="true" /> <!-- kinefly_2photon2 flyhead mosquito -->
   
 </launch>
