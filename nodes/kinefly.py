@@ -2433,7 +2433,9 @@ class MainWindow:
         self.hz = 0.0
         self.hzSum = 0.0
         self.iCount = 0
-        self.imgScaled = None
+        
+        self.imgScaled = [None,None]
+        self.iImgWorking = 0  # Index of the image being processed.  Callback should write to the other image.
         
         # Publishers.
         self.pubCommand            = rospy.Publisher('kinefly/command', MsgCommand)
@@ -2456,74 +2458,74 @@ class MainWindow:
         
 
     # Check the given button to see if it extends outside the image, and if so then reposition it to the next line.
-    def wrap_button(self, btn, image):
-        if (btn.right >= image.shape[1]):
+    def wrap_button(self, btn, shape):
+        if (btn.right >= shape[1]):
             btn.set_pos(pt=[1, btn.bottom+1])
 
         
     # Create the button bar, with overflow onto more than one line if needed to fit on the image.        
-    def create_buttons(self, image):
+    def create_buttons(self, shape):
         if (self.buttons is None):
             # UI button specs.
             self.buttons = []
             x = 1
             y = 1
             btn = Button(pt=[x,y], scale=self.scale, type='pushbutton', name='exit', text='exit')
-            self.wrap_button(btn, image)
+            self.wrap_button(btn, shape)
             self.buttons.append(btn)
             
             x = btn.right+1
             y = btn.top+1
             btn = Button(pt=[x,y], scale=self.scale, type='pushbutton', name='save_bg', text='saveBG')
-            self.wrap_button(btn, image)
+            self.wrap_button(btn, shape)
             self.buttons.append(btn)
             
             x = btn.right+1
             y = btn.top+1
             btn = Button(pt=[x,y], scale=self.scale, type='checkbox', name='head', text='head', state=self.params['head']['track'])
-            self.wrap_button(btn, image)
+            self.wrap_button(btn, shape)
             self.buttons.append(btn)
             
             x = btn.right+1
             y = btn.top+1
             btn = Button(pt=[x,y], scale=self.scale, type='checkbox', name='abdomen', text='abdomen', state=self.params['abdomen']['track'])
-            self.wrap_button(btn, image)
+            self.wrap_button(btn, shape)
             self.buttons.append(btn)
             
             x = btn.right+1
             y = btn.top+1
             btn = Button(pt=[x,y], scale=self.scale, type='checkbox', name='wings', text='wings', state=self.params['right']['track'])
-            self.wrap_button(btn, image)
+            self.wrap_button(btn, shape)
             self.buttons.append(btn)
             
             x = btn.right+1
             y = btn.top+1
             btn = Button(pt=[x,y], scale=self.scale, type='checkbox', name='aux', text='aux', state=self.params['aux']['track'])
-            self.wrap_button(btn, image)
+            self.wrap_button(btn, shape)
             self.buttons.append(btn)
             
             x = btn.right+1
             y = btn.top+1
             btn = Button(pt=[x,y], scale=self.scale, type='checkbox', name='subtract_bg', text='subtractBG', state=self.params['right']['subtract_bg'])
-            self.wrap_button(btn, image)
+            self.wrap_button(btn, shape)
             self.buttons.append(btn)
             
             x = btn.right+1
             y = btn.top+1
             btn = Button(pt=[x,y], scale=self.scale, type='checkbox', name='stabilize', text='stabilize', state=self.params['head']['stabilize'])
-            self.wrap_button(btn, image)
+            self.wrap_button(btn, shape)
             self.buttons.append(btn)
             
             x = btn.right+1
             y = btn.top+1
             btn = Button(pt=[x,y], scale=self.scale, type='checkbox', name='symmetry', text='symmetric', state=self.params['symmetric'])
-            self.wrap_button(btn, image)
+            self.wrap_button(btn, shape)
             self.buttons.append(btn)
             
             x = btn.right+1
             y = btn.top+1
             btn = Button(pt=[x,y], scale=self.scale, type='checkbox', name='windows', text='windows', state=self.params['windows'])
-            self.wrap_button(btn, image)
+            self.wrap_button(btn, shape)
             self.buttons.append(btn)
             
             self.yToolbar = btn.bottom + 1
@@ -2635,24 +2637,27 @@ class MainWindow:
         global gImageTime
         gImageTime = self.header.stamp.to_sec()
 
+        # Point to the non-working image.
+        iImgLoading = (self.iImgWorking+1) % 2
+        
         # Receive the image:
         try:
             img = np.uint8(cv.GetMat(self.cvbridge.imgmsg_to_cv(rosimage, 'passthrough')))
             
         except CvBridgeError, e:
             rospy.logwarn ('Exception converting background image from ROS to opencv:  %s' % e)
-            self.imgScaled = None
+            self.imgScaled[iImgLoading] = None
         
         # Scale the image.
         if (self.scale == 1.0):              
-        	self.imgScaled = img
+        	self.imgScaled[iImgLoading] = img
         else:  
-        	self.imgScaled = cv2.resize(img, (0,0), fx=self.scale, fy=self.scale) 
+        	self.imgScaled[iImgLoading] = cv2.resize(img, (0,0), fx=self.scale, fy=self.scale) 
                 
                 
                 
     def process_image(self):
-        if (self.imgScaled is not None):
+        if (self.imgScaled[self.iImgWorking] is not None):
             stampAlt = rospy.Time.now()
             
             if (self.stampPrev is not None):
@@ -2666,10 +2671,10 @@ class MainWindow:
             self.stampPrev = self.header.stamp
             self.stampPrevAlt = stampAlt
             
-            self.shapeImage = self.imgScaled.shape # (height,width)
+            self.shapeImage = self.imgScaled[self.iImgWorking].shape # (height,width)
             
             # Create the button bar if needed.    
-            self.create_buttons(self.imgScaled)
+            self.create_buttons(self.imgScaled[self.iImgWorking].shape)
         
             if (not self.bInitialized):
                 self.fly.create_masks(self.shapeImage)
@@ -2677,7 +2682,7 @@ class MainWindow:
                                 
             if (self.params['use_gui']):
         
-                imgOutput = cv2.cvtColor(self.imgScaled, cv2.COLOR_GRAY2RGB)
+                imgOutput = cv2.cvtColor(self.imgScaled[self.iImgWorking], cv2.COLOR_GRAY2RGB)
                 self.fly.draw(imgOutput)
                 self.draw_buttons(imgOutput)
             
@@ -2839,13 +2844,17 @@ class MainWindow:
 
             if (not self.bMousing):
                 # Update the fly internals.
-                self.fly.update(self.header, self.imgScaled)
+                self.fly.update(self.header, self.imgScaled[self.iImgWorking])
     
                 # Publish the outputs.
                 self.fly.publish()
                 
-                
-            self.imgScaled = None
+            
+            # Mark this image as done.
+            self.imgScaled[self.iImgWorking] = None
+            
+        # Go to the other image.
+        self.iImgWorking = (self.iImgWorking+1) % 2
 
                 
 
@@ -3243,8 +3252,11 @@ class MainWindow:
             self.fly.aux.wingbeat.warn()
         
         while (not rospy.is_shutdown()):
-            self.process_image()
-            rospy.sleep(-1) # Returns immediately.  Equivalent to rospy.spinOnce(), if it existed.
+            try:
+                self.process_image()
+                rospy.sleep(0) # Returns immediately.  Equivalent to rospy.spinOnce(), if it existed.
+            except rospy.exceptions.ROSInterruptException:
+                rospy.logwarn('Time moved backward.')
 
         cv2.destroyAllWindows()
 
