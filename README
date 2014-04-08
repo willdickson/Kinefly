@@ -23,7 +23,8 @@ The main window provides an interface to most, but not all, of the functionality
   []Head        Turn on/off head tracking.
   []Abdomen     Turn on/off abdomen tracking.
   []Wings       Turn on/off left & right wing tracking.
-  []Aux         Turn on/off the 'aux' area intensity & wingbeat frequency calculations.
+  []Aux         Turn on/off the 'aux' area intensity & wingbeat frequency
+                calculations.
   []SubtractBG  Turn on/off background subtraction on wings & aux.
   []Stabilize   Turn on/off image stabilization for head & abdomen.  The  
                 quality of stabilization is very dependent upon the region 

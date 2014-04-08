@@ -812,7 +812,6 @@ class IntensityTrackedBodypart(object):
         self.maskRoi           = None
         self.sumMask = 1.0
         
-        self.stampPrev = None
         self.dt = np.inf
 
         self.params = {}
@@ -978,14 +977,10 @@ class IntensityTrackedBodypart(object):
     # update()
     # Update all the internals given a foreground camera image.
     #
-    def update(self, header, image):
+    def update(self, dt, image):
         self.iCount += 1
         
-        if (self.stampPrev is not None):
-            self.dt = (header.stamp - self.stampPrev).to_sec()
-        else:
-            self.dt = np.inf
-        self.stampPrev = header.stamp
+        self.dt = dt
         
         if (self.params[self.name]['track']):
             if (not self.bInitializedMasks):
@@ -1074,7 +1069,6 @@ class PolarTrackedBodypart(object):
         self.maskRoi           = None
         self.sumMask = 1.0
         
-        self.stampPrev = None
         self.dt = np.inf
         self.polartransforms   = PolarTransforms()
 
@@ -1317,7 +1311,7 @@ class PolarTrackedBodypart(object):
             if (self.bEqualizeHist):
                 if (self.imgRoiFg is not None):
                     self.imgRoiFg -= np.min(self.imgRoiFg)
-                    max2 = np.max(self.imgRoiFg)
+                    max2 = np.max([1.0, np.max(self.imgRoiFg)])
                     self.imgRoiFg *= (255.0/float(max2))
                 
             self.windowFG.set_image(self.imgRoiFg) 
@@ -1405,14 +1399,10 @@ class PolarTrackedBodypart(object):
     # update()
     # Update all the internals given a foreground camera image.
     #
-    def update(self, header, image):
+    def update(self, dt, image):
         self.iCount += 1
         
-        if (self.stampPrev is not None):
-            self.dt = (header.stamp - self.stampPrev).to_sec()
-        else:
-            self.dt = np.inf
-        self.stampPrev = header.stamp
+        self.dt = dt
         
         if (self.params[self.name]['track']):
             if (not self.bInitializedMasks):
@@ -1757,7 +1747,9 @@ class Fly(object):
         self.ptBodyIndicator2 = None
         self.bInvertcolor = False
         self.iCount  = 0
-        self.stamp   = 0
+        self.stampPrev = None
+        self.stampPrevAlt = None
+        
 
         self.pubFlystate = rospy.Publisher('kinefly/flystate', MsgFlystate)
  
@@ -1851,18 +1843,27 @@ class Fly(object):
             if (self.bInvertcolor):
                 image = 255-image
 
-            # Get the timestamp.    
-            if (header is not None):
-                self.stamp = header.stamp
-            else:
-                self.stamp = rospy.Time.now()
+            # Get the header.    
+            self.header = header
                 
+            stampAlt = rospy.Time.now()
+            if (self.stampPrev is not None):
+                dt = (self.header.stamp - self.stampPrev).to_sec()
+                
+                # If the camera is not giving good timestamps, then use our own clock.
+                if (dt == 0.0):
+                    dt = (stampAlt - self.stampPrevAlt).to_sec()
+            else:
+                dt = np.inf
+            self.stampPrev = self.header.stamp
+            self.stampPrevAlt = stampAlt
+
             
-            self.head.update(header, image)
-            self.abdomen.update(header, image)
-            self.left.update(header, image)
-            self.right.update(header, image)
-            self.aux.update(header, image)
+            self.head.update(dt, image)
+            self.abdomen.update(dt, image)
+            self.left.update(dt, image)
+            self.right.update(dt, image)
+            self.aux.update(dt, image)
             
             
     def draw(self, image):
@@ -1880,7 +1881,7 @@ class Fly(object):
     
     def publish(self):
         flystate              = MsgFlystate()
-        flystate.header       = Header(seq=self.iCount, stamp=self.stamp, frame_id='Fly')
+        flystate.header       = Header(seq=self.iCount, stamp=self.header.stamp, frame_id='Fly')
         if (self.params['left']['track']) and (self.left.state.angle1 is not None) and (self.left.state.angle2 is not None):
             flystate.left     = MsgWing(intensity=self.left.state.intensity, 
                                         angle1=self.left.state.angle1, 
@@ -1962,15 +1963,14 @@ class Aux(IntensityTrackedBodypart):
         #t = gImageTime 
         #self.state.intensity = np.cos(2*np.pi*f*t)
         self.state.intensity = np.sum(self.imgRoiFgMasked).astype(np.float32) / self.sumMask
-        
         self.state.freq = self.wingbeat.freq_from_intensity(self.state.intensity, 1.0/self.dt)
     
         
     # update()
     # Update all the internals given a foreground camera image.
     #
-    def update(self, header, image):
-        IntensityTrackedBodypart.update(self, header, image)
+    def update(self, dt, image):
+        IntensityTrackedBodypart.update(self, dt, image)
 
         if (self.params[self.name]['track']):
             self.update_state()
@@ -2104,8 +2104,8 @@ class BodySegment(PolarTrackedBodypart):
     # update()
     # Update all the internals given a foreground camera image.
     #
-    def update(self, header, image):
-        PolarTrackedBodypart.update(self, header, image)
+    def update(self, dt, image):
+        PolarTrackedBodypart.update(self, dt, image)
 
         if (self.imgComparison is None) and (self.iCount>1):
             self.imgComparison = self.imgRoiFgMaskedPolarCroppedWindowed
@@ -2245,8 +2245,8 @@ class Wing(PolarTrackedBodypart):
     # update()
     # Update all the internals given a foreground camera image.
     #
-    def update(self, header, image):
-        PolarTrackedBodypart.update(self, header, image)
+    def update(self, dt, image):
+        PolarTrackedBodypart.update(self, dt, image)
 
         if (self.params[self.name]['track']):
             self.update_state()
@@ -2325,6 +2325,7 @@ class MainWindow:
     def __init__(self):
         self.bInitialized = False
         self.stampPrev = None
+        self.stampPrevAlt = None
         self.dt = np.inf
         self.lockParams = threading.Lock()
         
@@ -2404,7 +2405,7 @@ class MainWindow:
 
                     }
         SetDict().set_dict_with_preserve(self.params, defaults)
-        SetDict().set_dict_with_preserve(self.params, rospy.get_param('kinefly'))
+        SetDict().set_dict_with_preserve(self.params, rospy.get_param('kinefly', {}))
         self.params = self.legalizeParams(self.params)
         rospy.set_param('kinefly', self.params)
         
@@ -2648,13 +2649,18 @@ class MainWindow:
                 
     def process_image(self):
         if (self.imgScaled is not None):
-            t0 = rospy.Time.now().to_sec()
+            stampAlt = rospy.Time.now()
             
             if (self.stampPrev is not None):
                 self.dt = (self.header.stamp - self.stampPrev).to_sec()
+                
+                # If the camera is not giving good timestamps, then use our own clock.
+                if (self.dt == 0.0):
+                    self.dt = (stampAlt - self.stampPrevAlt).to_sec()
             else:
                 self.dt = np.inf
             self.stampPrev = self.header.stamp
+            self.stampPrevAlt = stampAlt
             
             self.shapeImage = self.imgScaled.shape # (height,width)
             
@@ -2836,8 +2842,6 @@ class MainWindow:
                 
                 
             self.imgScaled = None
-            t1 = rospy.Time.now().to_sec()
-            #rospy.logwarn('dt=%f' % (t1-t0))
 
                 
 
