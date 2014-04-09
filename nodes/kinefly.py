@@ -17,7 +17,7 @@ import dynamic_reconfigure.server
 from cv_bridge import CvBridge, CvBridgeError
 from sensor_msgs.msg import Image
 from std_msgs.msg import Float32, Header, String
-from Kinefly.srv import SrvFloat32List, SrvFloat32ListResponse
+from Kinefly.srv import SrvWingdata, SrvWingdataResponse
 from Kinefly.msg import MsgFlystate, MsgWing, MsgBodypart, MsgAux, MsgCommand
 from Kinefly.cfg import kineflyConfig
 
@@ -2193,9 +2193,7 @@ class Wing(PolarTrackedBodypart):
         self.set_params(params)
 
         # Services, for live intensities plots via live_wing_histograms.py
-        self.service_angles      = rospy.Service('wing_angles_'+name, SrvFloat32List, self.serve_angles_callback)
-        self.service_intensities = rospy.Service('wing_intensities_'+name, SrvFloat32List, self.serve_intensities_callback)
-        self.service_edges       = rospy.Service('wing_edges_'+name, SrvFloat32List, self.serve_edges_callback)
+        self.service_wingdata    = rospy.Service('wingdata_'+name, SrvWingdata, self.serve_wingdata_callback)
     
     
     # set_params()
@@ -2305,30 +2303,27 @@ class Wing(PolarTrackedBodypart):
             self.windowTest.show()
         
         
-    def serve_angles_callback(self, request):
-        return SrvFloat32ListResponse(np.linspace(self.params[self.name]['angle_lo'], 
-                                               self.params[self.name]['angle_hi'], 
-                                               len(self.edgedetector.intensitiesF))) # -5)))
+    def serve_wingdata_callback(self, request):
+        angles = np.linspace(self.params[self.name]['angle_lo'], self.params[self.name]['angle_hi'], len(self.edgedetector.intensitiesF))
         
-    def serve_intensities_callback(self, request):
-        rv = SrvFloat32ListResponse([])
+        intensities = []
+        diffs = []
         if (self.edgedetector.intensitiesF is not None) and (len(self.edgedetector.intensitiesF)>0):
+            n=5
+            diffsRaw = self.edgedetector.intensitiesF[n:] - self.edgedetector.intensitiesF[:-n]
+            diffs = filter_median(diffsRaw, q=1).astype(np.float32)
+            diffs = np.append(diffs,np.zeros(n))
+            
             intensities = (self.edgedetector.intensitiesF - np.min(self.edgedetector.intensitiesF)).astype(np.float32)
-            
-            #diff = self.edgedetector.intensitiesF[5:] - self.edgedetector.intensitiesF[:-5]
-            #diffF = filter_median(diff, q=1)
-            #intensities = (diffF - np.min(diffF)).astype(np.float32)
-            
             intensities /= np.max(intensities)
-            rv = SrvFloat32ListResponse(intensities)
             
-        return rv
+        edge1 = (((self.angleOutward_i-self.angleBody_i) + np.pi) % (2*np.pi)) - np.pi + self.sense*self.state.angle1
+        edge2 = (((self.angleOutward_i-self.angleBody_i) + np.pi) % (2*np.pi)) - np.pi + self.sense*self.state.angle2
+        edges = [edge1, edge2]
+
+        return SrvWingdataResponse(angles, intensities, diffs, edges)
         
-    def serve_edges_callback(self, request):
-        angle1 = (((self.angleOutward_i-self.angleBody_i) + np.pi) % (2*np.pi)) - np.pi + self.sense*self.state.angle1
-        angle2 = (((self.angleOutward_i-self.angleBody_i) + np.pi) % (2*np.pi)) - np.pi + self.sense*self.state.angle2
-        return SrvFloat32ListResponse([angle1, angle1])
-            
+        
 # end class Wing
 
     
@@ -2793,7 +2788,7 @@ class MainWindow:
                                 leftminusright = self.fly.left.state.angle1 - self.fly.right.state.angle1
                                 s = 'L-R:% 7.4f' % leftminusright
                             else:
-                                s = 'L+R: *'
+                                s = 'L-R: *'
                             w = 82
                             cv2.putText(imgOutput, s, (x, y), self.fontface, self.scaleText, bgra_dict['blue'])
                             w_text = int(w * self.scale)

@@ -14,6 +14,20 @@ You need ROS, a camera to supply a ROS image stream, and Kinefly.  If you want t
 Refer to the file 'install.txt' for detailed instructions.
 
 
+Running:
+---------------------------
+To run Kinefly, you first need to ensure that roscore is running.  In a terminal window (note below that the $ is the command prompt, not typed by you):
+$ roscore
+
+Next, depending on if you have an ethernet or firewire or USB camera, edit the main.launch file as appropriate (found in Kinefly/launch).  The default is set up for a firewire (i.e. 1394) camera.  You may also need to edit the parameters .launch file for your camera to set exposure, framerate, etc.  
+
+Then in another terminal window use the roslaunch command to launch Kinefly:
+$ roslaunch Kinefly main.launch
+
+There is an additional tool that is helpful for setting wing edge detection thresholds, etc, and this can be run via:
+$ rosrun Kinefly plot_wingdata.py 
+
+
 Main Window
 ---------------------------
 The main window provides an interface to most, but not all, of the functionality. The buttons and checkboxes on the toolbar, and the handles on the image, function as follows:
@@ -119,7 +133,11 @@ Most parameters are set by manipulating the main window interface, but a few are
 Parameters that apply to all bodyparts:
     filenameBackground:         Location to store the background image.  
                                 (default: ~/kinefly.png)
-    image_topic:                ROS topic for the image stream. 
+    image_topic:                ROS topic for the image stream.  Running
+                                the ROS node image_proc in addition to
+                                Kinefly and setting this to image_mono
+                                may help with some cameras that provide
+                                bayer encoded images.
                                 (default: /camera/image_raw)
     n_edges:                    Display 1 or 2 wing edges. (default: 1)
     parameterfile:              Location of the YAML file. 
@@ -140,9 +158,19 @@ Parameters that apply only to head & abdomen:
                                 use the first valid frame as the zero angle.
                                 (default: true)
 
+Parameters that apply only to wings:
+    threshold:                  This is the threshold for the intensity
+                                gradient to detect a wing edge.  Intensity 
+                                gradients less than this value will result 
+                                in the edge showing as pi radians.  You may
+                                run the program in plot_wingdata.py for help 
+                                setting these thresholds.
+
 Parameters that apply only to aux:
-    wingbeat_lo:
-    wingbeat_hi:
+    wingbeat_lo:                The lower frequency (hz) of wingbeats from 
+                                your insect.
+    wingbeat_hi:                The upper frequency (hz) of wingbeats from 
+                                your insect.
 
                              
 Voltage Output
