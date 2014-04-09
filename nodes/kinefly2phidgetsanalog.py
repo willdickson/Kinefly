@@ -52,8 +52,8 @@ class Kinefly2PhidgetsAnalog:
         self.analog.setOnDetachHandler(self.detach_callback)
 
         # Subscriptions.        
-        self.subFlystate = rospy.Subscriber('kinefly/flystate', MsgFlystate, self.flystate_callback)
-        self.subCommand  = rospy.Subscriber('kinefly2phidgetsanalog/command', String, self.command_callback)
+        self.subFlystate = rospy.Subscriber('kinefly/flystate', MsgFlystate, self.flystate_callback, queue_size=1000)
+        self.subCommand  = rospy.Subscriber('kinefly2phidgetsanalog/command', String, self.command_callback, queue_size=1000)
         rospy.sleep(1) # Allow time to connect publishers & subscribers.
 
         self.bInitialized = True

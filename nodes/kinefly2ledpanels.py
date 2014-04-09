@@ -72,8 +72,8 @@ class Kinefly2Ledpanels:
         self.pubPanelsCommand = rospy.Publisher('ledpanels/command', MsgPanelsCommand)
         
         # Subscriptions.        
-        self.subFlystate = rospy.Subscriber('kinefly/flystate', MsgFlystate, self.flystate_callback)
-        self.subCommand  = rospy.Subscriber('kinefly2ledpanels/command', String, self.command_callback)
+        self.subFlystate = rospy.Subscriber('kinefly/flystate', MsgFlystate, self.flystate_callback, queue_size=1000)
+        self.subCommand  = rospy.Subscriber('kinefly2ledpanels/command', String, self.command_callback, queue_size=1000)
         rospy.sleep(1) # Time to connect publishers & subscribers.
 
 
