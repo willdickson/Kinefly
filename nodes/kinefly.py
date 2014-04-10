@@ -706,23 +706,26 @@ class PhaseCorrelation(object):
 # Find the two largest gradients in the horizontal intensity profile of an image.
 #
 class EdgeDetector(object):
-    intensities = []
-    intensitiesF = []
-    diff = []
-    diffF = []
+    def __init__(self, threshold=0.0):
+        self.intensities = []
+        self.diff = []
+        self.diffF = []
+        self.threshold = threshold
+
+
+    def set_threshold(self, threshold):
+        self.threshold = threshold
+
 
     # get_edges()
-    # Get the angles of the two wing edges.
+    # Get the horizontal pixel position of all the vertical edge pairs that exceed a magnitude threshold.
     #
     def get_edges(self, image):
-        angle1 = 0.0
-        angle2 = 0.0
+        intensitiesRaw = np.sum(image, 0).astype(np.int64)
+        self.intensities = filter_median(intensitiesRaw, q=1)
         
-        self.intensities = np.sum(image, 0).astype(np.int64)
-        self.intensitiesF = filter_median(self.intensities, q=1)
-        
-        #diff = np.diff(intensitiesF) 
-        diff = self.intensitiesF[5:] - self.intensitiesF[:-5]
+        # Compute the intensity gradient. 
+        diff = self.intensities[5:] - self.intensities[:-5]
         diffF = filter_median(diff, q=1)
 
         iMax = np.argmax(diffF)
@@ -730,7 +733,40 @@ class EdgeDetector(object):
         absMax = np.abs(diffF[iMax])
         absMin = np.abs(diffF[iMin])
          
-        if (absMax > absMin): 
+        if True:#(absMax > absMin): 
+            (iMajor,iMinor) = (iMax,iMin)
+            (absMajor, absMinor) = (absMax, absMin)   
+        else:
+            (iMajor,iMinor) = (iMin,iMax)
+            (absMajor, absMinor) = (absMin, absMax)   
+        
+        return ((iMajor,absMajor), (iMinor,absMinor))
+    
+    
+    # get_edges()
+    # Get the horizontal pixel position of all the vertical edge pairs that exceed a magnitude threshold.
+    #
+    def get_edges2(self, image):
+        iEdges = []
+        
+        intensitiesRaw = np.sum(image, 0).astype(np.int64)
+        self.intensities = filter_median(intensitiesRaw, q=1)
+        
+        # Compute the intensity gradient. 
+        diff = self.intensities[5:] - self.intensities[:-5]
+        diffF = filter_median(diff, q=1)
+
+        # Set all the under-threshold values to zero.
+        iZero = np.where(np.abs(diffF)<self.threshold)[0]
+        diffF[iZero] = 0
+        
+        while (0.0 < np.max(diffF)):
+            iMax = np.argmax(diffF)
+            iMin = np.argmin(diffF)
+            absMax = np.abs(diffF[iMax])
+            absMin = np.abs(diffF[iMin])
+         
+        if True:#(absMax > absMin): 
             (iMajor,iMinor) = (iMax,iMin)
             (absMajor, absMinor) = (absMax, absMin)   
         else:
@@ -1867,7 +1903,6 @@ class Fly(object):
             self.stampPrev = self.header.stamp
             self.stampPrevAlt = stampAlt
 
-            
             self.head.update(dt, image)
             self.abdomen.update(dt, image)
             self.left.update(dt, image)
@@ -2204,7 +2239,7 @@ class Wing(PolarTrackedBodypart):
         
         self.imgRoiBackground = None
         self.iCount = 0
-
+        self.edgedetector.set_threshold(params[self.name]['threshold'])
         self.state.intensity = 0.0
         self.state.angle1 = np.pi
         self.state.angle2 = np.pi
@@ -2304,17 +2339,17 @@ class Wing(PolarTrackedBodypart):
         
         
     def serve_wingdata_callback(self, request):
-        angles = np.linspace(self.params[self.name]['angle_lo'], self.params[self.name]['angle_hi'], len(self.edgedetector.intensitiesF))
+        angles = np.linspace(self.params[self.name]['angle_lo'], self.params[self.name]['angle_hi'], len(self.edgedetector.intensities))
         
         intensities = []
         diffs = []
-        if (self.edgedetector.intensitiesF is not None) and (len(self.edgedetector.intensitiesF)>0):
+        if (self.edgedetector.intensities is not None) and (len(self.edgedetector.intensities)>0):
             n=5
-            diffsRaw = self.edgedetector.intensitiesF[n:] - self.edgedetector.intensitiesF[:-n]
+            diffsRaw = self.edgedetector.intensities[n:] - self.edgedetector.intensities[:-n]
             diffs = filter_median(diffsRaw, q=1).astype(np.float32)
             diffs = np.append(diffs,np.zeros(n))
             
-            intensities = (self.edgedetector.intensitiesF - np.min(self.edgedetector.intensitiesF)).astype(np.float32)
+            intensities = (self.edgedetector.intensities - np.min(self.edgedetector.intensities)).astype(np.float32)
             intensities /= np.max(intensities)
             
         edge1 = (((self.angleOutward_i-self.angleBody_i) + np.pi) % (2*np.pi)) - np.pi + self.sense*self.state.angle1
@@ -2854,11 +2889,9 @@ class MainWindow:
                         y -= h_text+self.h_gap
                 
 
-
                 # Display the image.
                 cv2.imshow(self.window_name, imgOutput)
                 cv2.waitKey(1)
-
 
             if (not self.bMousing):
                 # Update the fly internals.
@@ -2880,8 +2913,8 @@ class MainWindow:
     # Save the current camera image as the background.
     #
     def save_background(self):
-        self.fly.set_background(self.imgScaled)
-        self.imgFullBackground = self.imgScaled
+        self.fly.set_background(self.imgScaled[self.iImgWorking])
+        self.imgFullBackground = self.imgScaled[self.iImgWorking]
         rospy.logwarn ('Saving new background image %s' % self.filenameBackground)
         cv2.imwrite(self.filenameBackground, self.imgFullBackground)
     

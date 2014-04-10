@@ -197,7 +197,7 @@ class WingPlotter:
                       self.plot2_edges_minor_left, 
                       self.plot2_edges_major_left)
         
-        except ServiceException:
+        except rospy.ServiceException:
             pass
         
         except Exception,e:
