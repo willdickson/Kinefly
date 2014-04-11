@@ -718,7 +718,7 @@ class EdgeDetector(object):
 
 
     # get_edges()
-    # Get the horizontal pixel position of all the vertical edge pairs that exceed a magnitude threshold.
+    # Get the horizontal pixel position of the vertical edges that exceed a magnitude threshold.
     #
     def get_edges(self, image):
         intensitiesRaw = np.sum(image, 0).astype(np.int64)
@@ -733,7 +733,7 @@ class EdgeDetector(object):
         absMax = np.abs(diffF[iMax])
         absMin = np.abs(diffF[iMin])
          
-        if True:#(absMax > absMin): 
+        if (absMax > absMin): 
             (iMajor,iMinor) = (iMax,iMin)
             (absMajor, absMinor) = (absMax, absMin)   
         else:
@@ -747,7 +747,8 @@ class EdgeDetector(object):
     # Get the horizontal pixel position of all the vertical edge pairs that exceed a magnitude threshold.
     #
     def get_edges2(self, image):
-        iEdges = []
+        iEdgesPos = []
+        iEdgesNeg = []
         
         intensitiesRaw = np.sum(image, 0).astype(np.int64)
         self.intensities = filter_median(intensitiesRaw, q=1)
@@ -755,16 +756,21 @@ class EdgeDetector(object):
         # Compute the intensity gradient. 
         diff = self.intensities[5:] - self.intensities[:-5]
         diffF = filter_median(diff, q=1)
-
-        # Set all the under-threshold values to zero.
-        iZero = np.where(np.abs(diffF)<self.threshold)[0]
-        diffF[iZero] = 0
         
-        while (0.0 < np.max(diffF)):
-            iMax = np.argmax(diffF)
-            iMin = np.argmin(diffF)
-            absMax = np.abs(diffF[iMax])
-            absMin = np.abs(diffF[iMin])
+        diffP = copy.copy(diffF)
+        diffN = copy.copy(diffF)
+
+        # Threshold the positive and negative diffs.
+        iZero = np.where(diffP<self.threshold)[0]
+        diffP[iZero] = 0
+        iZero = np.where(-self.threshold<diffN)[0]
+        diffN[iZero] = 0
+
+        while (0.0 < np.max(diffP)):
+            iMax = np.argmax(diffP)
+            absMax = np.abs(diffP[iMax])
+            
+            
          
         if True:#(absMax > absMin): 
             (iMajor,iMinor) = (iMax,iMin)
@@ -1988,9 +1994,11 @@ class Fly(object):
             flystate.abdomen  = MsgBodypart(intensity=0.0, angle=0.0, radius=0.0)
 
         if (self.params['aux']['track']):
-            flystate.aux  = MsgAux(intensity=self.aux.state.intensity)
+            flystate.aux  = MsgAux(intensity=self.aux.state.intensity,
+                                   freq=self.aux.state.freq)
         else:
-            flystate.aux  = MsgAux(intensity=0.0)
+            flystate.aux  = MsgAux(intensity=0.0,
+                                   freq=0.0)
 
 
         self.iCount += 1
@@ -2319,6 +2327,8 @@ class Wing(PolarTrackedBodypart):
             self.state.intensity = intensity
 
         
+    # update_flight_status()
+    # Determine if the fly is flying.  Current implementation doesn't work very well.
     def update_flight_status(self):
         if (self.state.intensity > self.params['threshold_intensity_flight']):
             self.bFlying = True
@@ -2798,7 +2808,6 @@ class MainWindow:
                     
                     w_text = int(w * self.scale)
                     h_text = int(h * self.scale)
-                    #x += w_text+self.w_gap
                     y -= h_text+self.h_gap
                 
     
@@ -2809,7 +2818,6 @@ class MainWindow:
                         cv2.putText(imgOutput, s, (x, y), self.fontface, self.scaleText, self.fly.aux.bgra)
                         w_text = int(w * self.scale)
                         h_text = int(h * self.scale)
-                        #x += w_text+self.w_gap
                         y -= h_text+self.h_gap
                     
                         if (self.fly.aux.state.freq != 0.0):
@@ -2820,24 +2828,22 @@ class MainWindow:
                         cv2.putText(imgOutput, s, (x, y), self.fontface, self.scaleText, self.fly.aux.bgra)
                         w_text = int(w * self.scale)
                         h_text = int(h * self.scale)
-                        #x += w_text+self.w_gap
                         y -= h_text+self.h_gap
                     
     
                     # Output the wings state.
                     if (self.params['right']['track']):
-                        # Output flight status
-                        if (self.fly.left.bFlying and self.fly.right.bFlying):
-                            s = 'Flying: (%0.3f)' % np.mean([self.fly.left.state.intensity,self.fly.right.state.intensity]) 
-                        else:
-                            s = 'Not flying: (%0.3f)' % np.mean([self.fly.left.state.intensity,self.fly.right.state.intensity]) 
-                        
-                        w = 150
-                        cv2.putText(imgOutput, s, (x, y), self.fontface, self.scaleText, bgra_dict['blue'])
-                        w_text = int(w * self.scale)
-                        h_text = int(h * self.scale)
-                        #x += w_text+self.w_gap
-                        y -= h_text+self.h_gap
+                        # Flight status
+                        #if (self.fly.left.bFlying and self.fly.right.bFlying):
+                        #    s = 'Flying: (%0.3f)' % np.mean([self.fly.left.state.intensity,self.fly.right.state.intensity]) 
+                        #else:
+                        #    s = 'Not flying: (%0.3f)' % np.mean([self.fly.left.state.intensity,self.fly.right.state.intensity]) 
+                       # 
+                       # w = 150
+                       # cv2.putText(imgOutput, s, (x, y), self.fontface, self.scaleText, bgra_dict['blue'])
+                       # w_text = int(w * self.scale)
+                       # h_text = int(h * self.scale)
+                       # y -= h_text+self.h_gap
                 
                         # L+R
                         if (self.fly.left.state.angle1 is not None) and (self.fly.right.state.angle1 is not None):
@@ -2850,7 +2856,6 @@ class MainWindow:
                             cv2.putText(imgOutput, s, (x, y), self.fontface, self.scaleText, bgra_dict['blue'])
                             w_text = int(w * self.scale)
                             h_text = int(h * self.scale)
-                            #x += w_text+self.w_gap
                             y -= h_text+self.h_gap
         
                             
@@ -2865,7 +2870,6 @@ class MainWindow:
                             cv2.putText(imgOutput, s, (x, y), self.fontface, self.scaleText, bgra_dict['blue'])
                             w_text = int(w * self.scale)
                             h_text = int(h * self.scale)
-                            #x += w_text+self.w_gap
                             y -= h_text+self.h_gap
         
                         # Right
@@ -2881,7 +2885,6 @@ class MainWindow:
                             cv2.putText(imgOutput, s, (x, y), self.fontface, self.scaleText, self.fly.right.bgra)
                             w_text = int(w * self.scale)
                             h_text = int(h * self.scale)
-                            #x += w_text+self.w_gap
                             y -= h_text+self.h_gap
             
                         # Left
@@ -2897,7 +2900,6 @@ class MainWindow:
                             cv2.putText(imgOutput, s, (x, y), self.fontface, self.scaleText, self.fly.left.bgra)
                             w_text = int(w * self.scale)
                             h_text = int(h * self.scale)
-                            #x += w_text+self.w_gap
                             y -= h_text+self.h_gap
                         
                             
@@ -2911,7 +2913,6 @@ class MainWindow:
                         cv2.putText(imgOutput, s, (x, y), self.fontface, self.scaleText, self.fly.abdomen.bgra)
                         w_text = int(w * self.scale)
                         h_text = int(h * self.scale)
-                        #x += w_text+self.w_gap
                         y -= h_text+self.h_gap
                     
     
@@ -2922,7 +2923,6 @@ class MainWindow:
                         cv2.putText(imgOutput, s, (x, y), self.fontface, self.scaleText, self.fly.head.bgra)
                         w_text = int(w * self.scale)
                         h_text = int(h * self.scale)
-                        #x += w_text+self.w_gap
                         y -= h_text+self.h_gap
                 
 
