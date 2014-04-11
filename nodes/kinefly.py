@@ -950,6 +950,14 @@ class IntensityTrackedBodypart(object):
         self.imgRoiBackground = None
         
         
+    # invert_background()
+    # Invert the color of the background image.
+    #                
+    def invert_background(self):
+        if (self.imgRoiBackground is not None):
+            self.imgRoiBackground = 255-self.imgRoiBackground
+        
+        
     def update_background(self):
         dt = max(0, self.dt)
         alphaBackground = 1.0 - np.exp(-dt / self.rc_background)
@@ -968,33 +976,43 @@ class IntensityTrackedBodypart(object):
         self.windowBG.set_image(self.imgRoiBackground)
         
 
-    def update_roi(self, image):
+    def update_roi(self, image, bInvertColor):
         self.shape = image.shape
 
         # Extract the ROI images.
-        self.imgRoi = copy.deepcopy(image[self.roi[1]:self.roi[3], self.roi[0]:self.roi[2]])
+        if (self.roi is not None):
+            self.imgRoi = copy.deepcopy(image[self.roi[1]:self.roi[3], self.roi[0]:self.roi[2]])
+    
+    
+            # Background Subtraction.
+            if (bInvertColor):
+                self.imgRoiFg = 255-self.imgRoi
+            else:
+                self.imgRoiFg = self.imgRoi
 
-
-        # Background Subtraction.
-        self.imgRoiFg = self.imgRoi
-        if (self.params[self.name]['subtract_bg']):
-            if (self.imgRoiBackground is not None):
-                if (self.imgRoiBackground.shape==self.imgRoi.shape):
-                    self.imgRoiFg = cv2.absdiff(self.imgRoi, self.imgRoiBackground.astype(np.uint8))
-
-            
-        # Equalize the brightness/contrast.
-        if (self.bEqualizeHist):
-            if (self.imgRoiFg is not None):
-                self.imgRoiFg -= np.min(self.imgRoiFg)
-                max2 = np.max(self.imgRoiFg)
-                self.imgRoiFg *= (255.0/float(max2))
-            
-        # Apply the mask.
-        if (self.maskRoi is not None):
-            self.imgRoiFgMasked = cv2.bitwise_and(self.imgRoiFg, self.maskRoi)
-
-        self.windowFG.set_image(self.imgRoiFgMasked) 
+            if (self.params[self.name]['subtract_bg']):
+                if (self.imgRoiBackground is not None):
+                    if (self.imgRoiBackground.shape==self.imgRoiFg.shape):
+                        if (bInvertColor):
+                            self.imgRoiFg = cv2.absdiff(self.imgRoiFg, 255-self.imgRoiBackground.astype(np.uint8))
+                        else:
+                            self.imgRoiFg = cv2.absdiff(self.imgRoiFg, self.imgRoiBackground.astype(np.uint8))
+    
+    
+                    
+                
+            # Equalize the brightness/contrast.
+            if (self.bEqualizeHist):
+                if (self.imgRoiFg is not None):
+                    self.imgRoiFg -= np.min(self.imgRoiFg)
+                    max2 = np.max(self.imgRoiFg)
+                    self.imgRoiFg *= (255.0/float(max2))
+                
+            # Apply the mask.
+            if (self.maskRoi is not None):
+                self.imgRoiFgMasked = cv2.bitwise_and(self.imgRoiFg, self.maskRoi)
+    
+            self.windowFG.set_image(self.imgRoiFgMasked) 
         
 
             
@@ -1018,7 +1036,7 @@ class IntensityTrackedBodypart(object):
     # update()
     # Update all the internals given a foreground camera image.
     #
-    def update(self, dt, image):
+    def update(self, dt, image, bInvertColor):
         self.iCount += 1
         
         self.dt = dt
@@ -1028,7 +1046,7 @@ class IntensityTrackedBodypart(object):
                 self.create_mask(image.shape)
                 
             self.update_background()
-            self.update_roi(image)
+            self.update_roi(image, bInvertColor)
 
 
     # hit_object()
@@ -1314,6 +1332,14 @@ class PolarTrackedBodypart(object):
         self.imgRoiBackground = None
         
         
+    # invert_background()
+    # Invert the color of the background image.
+    #                
+    def invert_background(self):
+        if (self.imgRoiBackground is not None):
+            self.imgRoiBackground = 255-self.imgRoiBackground
+        
+        
     def update_background(self):
         dt = max(0, self.dt)
         alphaBackground = 1.0 - np.exp(-dt / self.rc_background)
@@ -1332,7 +1358,7 @@ class PolarTrackedBodypart(object):
         self.windowBG.set_image(self.imgRoiBackground)
         
 
-    def update_roi(self, image):
+    def update_roi(self, image, bInvertColor):
         self.image = image
         self.shape = image.shape
         
@@ -1341,12 +1367,19 @@ class PolarTrackedBodypart(object):
             self.imgRoi = copy.deepcopy(image[self.roi[1]:self.roi[3], self.roi[0]:self.roi[2]])
 
             # Background Subtraction.
-            self.imgRoiFg = self.imgRoi
+            if (bInvertColor):
+                self.imgRoiFg = 255-self.imgRoi
+            else:
+                self.imgRoiFg = self.imgRoi
+
             if (self.params[self.name]['subtract_bg']):
                 if (self.imgRoiBackground is not None):
-                    if (self.imgRoiBackground.shape==self.imgRoi.shape):
-                        self.imgRoiFg = cv2.absdiff(self.imgRoi, self.imgRoiBackground.astype(np.uint8))
-
+                    if (self.imgRoiBackground.shape==self.imgRoiFg.shape):
+                        if (bInvertColor):
+                            self.imgRoiFg = cv2.absdiff(self.imgRoiFg, 255-self.imgRoiBackground.astype(np.uint8))
+                        else:
+                            self.imgRoiFg = cv2.absdiff(self.imgRoiFg, self.imgRoiBackground.astype(np.uint8))
+                        
                 
             # Equalize the brightness/contrast.
             if (self.bEqualizeHist):
@@ -1440,7 +1473,7 @@ class PolarTrackedBodypart(object):
     # update()
     # Update all the internals given a foreground camera image.
     #
-    def update(self, dt, image):
+    def update(self, dt, image, bInvertColor):
         self.iCount += 1
         
         self.dt = dt
@@ -1450,7 +1483,7 @@ class PolarTrackedBodypart(object):
                 self.create_mask(image.shape)
                 
             self.update_background()
-            self.update_roi(image)
+            self.update_roi(image, bInvertColor)
             self.update_polar()
 
 
@@ -1573,9 +1606,10 @@ class WingbeatDetector(object):
         
 
     def warn(self):    
-        rospy.logwarn('Wingbeat detector is set to measure wingbeat frequencies in the range [%0.1f, %0.1f] Hz:' % (self.fw_min, self.fw_max))
-        rospy.logwarn('To make a measurement, the camera framerate must be in, and stay in, one of')
-        rospy.logwarn('the following ranges: %s' % self.fs_dict['fs_range_list'])
+        rospy.logwarn('Note: The wingbeat detector is set to measure wingbeat frequencies in the ')
+        rospy.logwarn('range [%0.1f, %0.1f] Hz.  To make a valid measurement, the camera ' % (self.fw_min, self.fw_max))
+        rospy.logwarn('framerate must be in, and stay in, one of the following ranges:')
+        rospy.logwarn(self.fs_dict['fs_range_list'])
 
 
     # fs_dict_from_wingband()
@@ -1786,7 +1820,7 @@ class Fly(object):
         self.bgra_body = bgra_dict['light_gray']
         self.ptBodyIndicator1 = None
         self.ptBodyIndicator2 = None
-        self.bInvertcolor = False
+        self.bInvertColor = False
         self.iCount  = 0
         self.stampPrev = None
         self.stampPrevAlt = None
@@ -1837,8 +1871,8 @@ class Fly(object):
         return angleBody_i
         
 
-    # Calculate what we think the bInvertcolor flag should be to make white-on-black.        
-    def calc_invertcolor(self, image):
+    # Calculate what we think the bInvertColor flag should be to make white-on-black.        
+    def get_invertcolor(self, image):
         # Get a roi around the body center.
         xMin = max(0,self.ptBodyCenter_i[0]-int(0.75*self.rInvertColorArea))
         yMin = max(0,self.ptBodyCenter_i[1]-int(0.75*self.rInvertColorArea))
@@ -1851,13 +1885,13 @@ class Fly(object):
         threshold = np.mean(image) 
         #rospy.logwarn((np.min(image), np.median(image), np.mean(image), np.max(image), np.mean(imgInvertColorArea)))
         
-        # If the roi is too dark, then set bInvertcolor.
+        # If the roi is too dark, then set bInvertColor.
         if (np.mean(imgInvertColorArea) <= threshold):
-            self.bInvertcolor = True
+            bInvertColor = True
         else:
-            self.bInvertcolor = False
-            
-        self.bInvertColorValid = True
+            bInvertColor = False
+
+        return bInvertColor
         
         
                 
@@ -1882,11 +1916,10 @@ class Fly(object):
             self.header = header
             
             if (not self.bInvertColorValid):
-                self.calc_invertcolor(image)
-            
-            if (self.bInvertcolor):
-                image = 255-image
+                self.bInvertColor = self.get_invertcolor(image)
+                self.bInvertColorValid = True
 
+            
             # Get the dt.  Keep track of both the camera timestamp, and the now() timestamp,
             # and use the now() timestamp only if the camera timestamp isn't changing.
             self.stamp = self.header.stamp
@@ -1903,11 +1936,11 @@ class Fly(object):
             self.stampPrev = self.header.stamp
             self.stampPrevAlt = stampAlt
 
-            self.head.update(dt, image)
-            self.abdomen.update(dt, image)
-            self.left.update(dt, image)
-            self.right.update(dt, image)
-            self.aux.update(dt, image)
+            self.head.update(dt, image, self.bInvertColor)
+            self.abdomen.update(dt, image, self.bInvertColor)
+            self.left.update(dt, image, self.bInvertColor)
+            self.right.update(dt, image, self.bInvertColor)
+            self.aux.update(dt, image, self.bInvertColor)
             
             
     def draw(self, image):
@@ -2013,8 +2046,8 @@ class Aux(IntensityTrackedBodypart):
     # update()
     # Update all the internals given a foreground camera image.
     #
-    def update(self, dt, image):
-        IntensityTrackedBodypart.update(self, dt, image)
+    def update(self, dt, image, bInvertColor):
+        IntensityTrackedBodypart.update(self, dt, image, bInvertColor)
 
         if (self.params[self.name]['track']):
             self.update_state()
@@ -2148,8 +2181,8 @@ class BodySegment(PolarTrackedBodypart):
     # update()
     # Update all the internals given a foreground camera image.
     #
-    def update(self, dt, image):
-        PolarTrackedBodypart.update(self, dt, image)
+    def update(self, dt, image, bInvertColor):
+        PolarTrackedBodypart.update(self, dt, image, bInvertColor)
 
         if (self.imgComparison is None) and (self.iCount>1):
             self.imgComparison = self.imgRoiFgMaskedPolarCroppedWindowed
@@ -2296,8 +2329,8 @@ class Wing(PolarTrackedBodypart):
     # update()
     # Update all the internals given a foreground camera image.
     #
-    def update(self, dt, image):
-        PolarTrackedBodypart.update(self, dt, image)
+    def update(self, dt, image, bInvertColor):
+        PolarTrackedBodypart.update(self, dt, image, bInvertColor)
 
         if (self.params[self.name]['track']):
             self.update_state()
@@ -2463,9 +2496,13 @@ class MainWindow:
         
         # Background image.
         self.filenameBackground = os.path.expanduser(self.params['filenameBackground'])
-        self.imgFullBackground  = cv2.imread(self.filenameBackground, cv2.CV_LOAD_IMAGE_GRAYSCALE)
-        if (self.imgFullBackground is not None):
-            self.fly.set_background(self.imgFullBackground)
+        imgFullBackground  = cv2.imread(self.filenameBackground, cv2.CV_LOAD_IMAGE_GRAYSCALE)
+        if (imgFullBackground is not None):
+            self.fly.set_background(imgFullBackground)
+            self.bHaveBackground = True
+        else:
+            self.bHaveBackground = False
+        
         
         self.scale = self.params['scale_image']
         self.bMousing = False
@@ -2914,9 +2951,9 @@ class MainWindow:
     #
     def save_background(self):
         self.fly.set_background(self.imgScaled[self.iImgWorking])
-        self.imgFullBackground = self.imgScaled[self.iImgWorking]
         rospy.logwarn ('Saving new background image %s' % self.filenameBackground)
-        cv2.imwrite(self.filenameBackground, self.imgFullBackground)
+        cv2.imwrite(self.filenameBackground, self.imgScaled[self.iImgWorking])
+        self.bHaveBackground = True
     
     
     # hit_object()
@@ -3237,7 +3274,7 @@ class MainWindow:
                     self.params['symmetric'] = self.buttons[self.iButtonSelected].state
                     
                 elif (self.nameSelected == self.nameSelectedNow == 'subtract_bg'):
-                    if (self.imgFullBackground is None):
+                    if (not self.bHaveBackground):
                         self.buttons[iButtonSelected].state = False
                         rospy.logwarn('No background image.  Cannot use background subtraction.')
 
