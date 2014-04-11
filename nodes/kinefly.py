@@ -747,18 +747,18 @@ class EdgeDetector(object):
     # Get the horizontal pixel position of all the vertical edge pairs that exceed a magnitude threshold.
     #
     def get_edges2(self, image):
-        iEdgesPos = []
-        iEdgesNeg = []
+        iEdgesP = []
+        iEdgesN = []
         
         intensitiesRaw = np.sum(image, 0).astype(np.int64)
         self.intensities = filter_median(intensitiesRaw, q=1)
         
         # Compute the intensity gradient. 
-        diff = self.intensities[5:] - self.intensities[:-5]
-        diffF = filter_median(diff, q=1)
+        diffRaw = self.intensities[5:] - self.intensities[:-5]
+        diffF = filter_median(diffRaw, q=1)
         
         diffP = copy.copy(diffF)
-        diffN = copy.copy(diffF)
+        diffN = copy.copy(-diffF)
 
         # Threshold the positive and negative diffs.
         iZero = np.where(diffP<self.threshold)[0]
@@ -766,20 +766,27 @@ class EdgeDetector(object):
         iZero = np.where(-self.threshold<diffN)[0]
         diffN[iZero] = 0
 
-        while (0.0 < np.max(diffP)):
-            iMax = np.argmax(diffP)
-            absMax = np.abs(diffP[iMax])
+        for (diff,iEdges) in [(diffP,iEdgesP), (diffN,iEdgesN)]:
+            while (0.0 < np.max(diff)):
+                # Get the max point.
+                iMax = np.argmax(diff)
+                absMax = np.abs(diff[iMax])
+                iEdges.append(iMax)
+                
+                # Zero the entire peak related to iMax.
+                for i in range(iMax-1, -1, -1):
+                    if (diff[i] > 0.0):
+                        diff[i] = 0.0
+                    else:
+                        break
+                for i in range(iMax, len(diff)):
+                    if (diff[i] > 0.0):
+                        diff[i] = 0.0
+                    else:
+                        break
+                
             
-            
-         
-        if True:#(absMax > absMin): 
-            (iMajor,iMinor) = (iMax,iMin)
-            (absMajor, absMinor) = (absMax, absMin)   
-        else:
-            (iMajor,iMinor) = (iMin,iMax)
-            (absMajor, absMinor) = (absMin, absMax)   
-        
-        return ((iMajor,absMajor), (iMinor,absMinor))
+        return (iEdgesP, iEdgesN)
     
     
     
@@ -2304,6 +2311,8 @@ class Wing(PolarTrackedBodypart):
         if (imgNow is not None):
             # Pixel position and strength of the edges.
             ((iEdge1,absEdge1), (iEdge2,absEdge2)) = self.edgedetector.get_edges(imgNow)
+            if self.name=='right':
+                rospy.logwarn(self.edgedetector.get_edges2(imgNow))
             #rospy.logwarn((absEdge1, absEdge2))
             intensity = np.mean(imgNow)/255.0
             anglePerPixel = (self.params[self.name]['angle_hi']-self.params[self.name]['angle_lo']) / float(imgNow.shape[1])
