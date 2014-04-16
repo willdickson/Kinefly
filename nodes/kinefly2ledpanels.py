@@ -166,11 +166,16 @@ class Kinefly2Ledpanels:
     # Return a message to set the panels position.
     #
     def create_msgpanels_pos(self, flystate):
+        leftMajor = flystate.left.angleMajor[0] if (0<len(flystate.left.angleMajor)) else 0.0
+        leftMinor = flystate.left.angleMinor[0] if (0<len(flystate.left.angleMinor)) else 0.0
+        rightMajor = flystate.right.angleMajor[0] if (0<len(flystate.right.angleMajor)) else 0.0
+        rightMinor = flystate.right.angleMinor[0] if (0<len(flystate.right.angleMinor)) else 0.0
+
         state = np.array([1.0,
-                          flystate.left.angle1,
-                          flystate.left.angle2,
-                          flystate.right.angle1,
-                          flystate.right.angle2,
+                          leftMajor,
+                          leftMinor,
+                          rightMajor,
+                          rightMinor,
                           flystate.head.angle,
                           flystate.head.radius,
                           flystate.abdomen.angle,
@@ -199,11 +204,16 @@ class Kinefly2Ledpanels:
     # Return a message to set the panels velocity.
     #
     def create_msgpanels_vel(self, flystate):
+        leftMajor = flystate.left.angleMajor[0] if (0<len(flystate.left.angleMajor)) else 0.0
+        leftMinor = flystate.left.angleMinor[0] if (0<len(flystate.left.angleMinor)) else 0.0
+        rightMajor = flystate.right.angleMajor[0] if (0<len(flystate.right.angleMajor)) else 0.0
+        rightMinor = flystate.right.angleMinor[0] if (0<len(flystate.right.angleMinor)) else 0.0
+
         state = np.array([1.0,
-                          flystate.left.angle1,
-                          flystate.left.angle2,
-                          flystate.right.angle1,
-                          flystate.right.angle2,
+                          leftMajor,
+                          leftMinor,
+                          rightMajor,
+                          rightMinor,
                           flystate.head.angle,
                           flystate.head.radius,
                           flystate.abdomen.angle,

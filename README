@@ -192,15 +192,15 @@ PhidgetsAnalog parameters are located in the kinefly.yaml file under the phidget
 
 
 Each voltage channel # calculates a voltage by a linear combination of terms of the form:
- v#out =  v#l1 * leftangle1
-        + v#l2 * leftangle2
-        + v#r1 * rightangle1
-        + v#r2 * rightangle2
-        + v#ha * headangle
-        + v#hr * headradius
-        + v#aa * abdomenangle
-        + v#ar * abdomenradius
-        + v#xi * auxintensity
+ v#out =  v#l1 * left.anglesMajor[0]
+        + v#l2 * left.anglesMinor[0]
+        + v#r1 * right.anglesMajor[0]
+        + v#r2 * right.anglesMinor[0]
+        + v#ha * head.angle
+        + v#hr * head.radius
+        + v#aa * abdomen.angle
+        + v#ar * abdomen.radius
+        + v#xi * aux.intensity
        
 Thus for example, a voltage output such as L-R can be generated on v2 by setting the v2l1=+1 and v2r1=-1.
 
