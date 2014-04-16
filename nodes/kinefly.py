@@ -385,6 +385,7 @@ class SetDict(object):
     def set_dict_with_overwrite(self, dTarget, dSource):
         self.set_dict(dTarget, dSource, False)
 
+# End class SetDict
 
     
 ###############################################################################
@@ -642,6 +643,7 @@ class PolarTransforms(object):
         
         return imgTransformed
 
+# End class PolarTransforms
 
 
 ###############################################################################
@@ -706,15 +708,17 @@ class PhaseCorrelation(object):
 # Find the two largest gradients in the horizontal intensity profile of an image.
 #
 class EdgeDetector(object):
-    def __init__(self, threshold=0.0):
+    def __init__(self, threshold=0.0, n_edges_max=1000, sense=1):
         self.intensities = []
         self.diff = []
         self.diffF = []
-        self.threshold = threshold
+        self.set_threshold(threshold, n_edges_max, sense)
 
 
-    def set_threshold(self, threshold):
+    def set_threshold(self, threshold, n_edges_max, sense):
         self.threshold = threshold
+        self.n_edges_max = n_edges_max
+        self.sense = sense
 
 
     # get_edges()
@@ -724,70 +728,190 @@ class EdgeDetector(object):
         intensitiesRaw = np.sum(image, 0).astype(np.int64)
         self.intensities = filter_median(intensitiesRaw, q=1)
         
-        # Compute the intensity gradient. 
-        diff = self.intensities[5:] - self.intensities[:-5]
+        # Compute the intensity gradient.
+        n = 5 
+        diff = self.intensities[n:] - self.intensities[:-n]
         diffF = filter_median(diff, q=1)
+        diffF -= np.mean(diffF)
+        self.diff = np.append(diffF, np.zeros(n))
 
         iMax = np.argmax(diffF)
         iMin = np.argmin(diffF)
         absMax = np.abs(diffF[iMax])
         absMin = np.abs(diffF[iMin])
-         
-        if (absMax > absMin): 
+        
+        if (absMax > absMin):
             (iMajor,iMinor) = (iMax,iMin)
             (absMajor, absMinor) = (absMax, absMin)   
         else:
             (iMajor,iMinor) = (iMin,iMax)
             (absMajor, absMinor) = (absMin, absMax)   
         
-        return ((iMajor,absMajor), (iMinor,absMinor))
+        #return ((iMajor,absMajor), (iMinor,absMinor))
+        if (self.threshold <= absMajor):
+            iMajor_list = [iMajor]
+        else:
+            iMajor_list = []
+        if (self.threshold <= absMinor):
+            iMinor_list = [iMinor]
+        else:
+            iMinor_list = []
+            
+        return (iMajor_list, iMinor_list)
     
     
-    # get_edges()
+    # get_edges2()
     # Get the horizontal pixel position of all the vertical edge pairs that exceed a magnitude threshold.
     #
     def get_edges2(self, image):
-        iEdgesP = []
-        iEdgesN = []
-        
-        intensitiesRaw = np.sum(image, 0).astype(np.int64)
+        intensitiesRaw = np.sum(image, 0).astype(np.float32)
+        intensitiesRaw /= (255.0*image.shape[0]) # Put into range [0,1]
         self.intensities = filter_median(intensitiesRaw, q=1)
         
         # Compute the intensity gradient. 
-        diffRaw = self.intensities[5:] - self.intensities[:-5]
+        n = 5
+        diffRaw = self.intensities[n:] - self.intensities[:-n]
         diffF = filter_median(diffRaw, q=1)
+        #diffF -= np.mean(diffF)
+        self.diff = np.append(diffF, np.zeros(n))
         
-        diffP = copy.copy(diffF)
-        diffN = copy.copy(-diffF)
+        # Make copies for positive-going and negative-going edges.
+        diffP = copy.copy( self.sense*diffF)
+        diffN = copy.copy(-self.sense*diffF)
 
         # Threshold the positive and negative diffs.
-        iZero = np.where(diffP<self.threshold)[0]
-        diffP[iZero] = 0
-        iZero = np.where(-self.threshold<diffN)[0]
-        diffN[iZero] = 0
+        iZero = np.where(diffP < self.threshold)[0] # 4*np.std(diffP))[0] #
+        diffP[iZero] = 0.0
+        
+        iZero = np.where(diffN < self.threshold)[0] # 4*np.std(diffN))[0] #
+        diffN[iZero] = 0.0
 
-        for (diff,iEdges) in [(diffP,iEdgesP), (diffN,iEdgesN)]:
-            while (0.0 < np.max(diff)):
-                # Get the max point.
-                iMax = np.argmax(diff)
-                absMax = np.abs(diff[iMax])
-                iEdges.append(iMax)
+        # Find positive-going edges, and negative-going edges, alternately P & N.
+        iEdgesP = [] # Positive-going edges.
+        iEdgesN = [] # Negative-going edges.
+        absP = []
+        absN = []
+        nCount = self.n_edges_max + (self.n_edges_max % 2) # Round up to the next multiple of 2 so that we look at both P and N diffs.
+        q = 0 # Alternate between P & N:  0=P, 1=N
+        diff_list = [diffP, diffN]
+        iEdges_list = [iEdgesP, iEdgesN] 
+        abs_list = [absP, absN] 
+        iCount = 0
+        
+        # While there are edges to find, put them in lists in order of decending strength.
+        while ((0.0 < np.max(diffP)) or (0.0 < np.max(diffN))) and (iCount < nCount):
+
+            # If there's an edge in this diff.
+            if (0.0 < np.max(diff_list[q])):
+                # Append the strongest edge to the list of edges.
+                iMax = np.argmax(diff_list[q])
+                iEdges_list[q].append(iMax)
+                abs_list[q].append(diff_list[q][iMax])
+                iCount += 1
                 
-                # Zero the entire peak related to iMax.
+                # Zero all the values associated with this edge.
                 for i in range(iMax-1, -1, -1):
-                    if (diff[i] > 0.0):
-                        diff[i] = 0.0
+                    if (0.0 < diff_list[q][i]):
+                        diff_list[q][i] = 0.0
                     else:
                         break
-                for i in range(iMax, len(diff)):
-                    if (diff[i] > 0.0):
-                        diff[i] = 0.0
+                for i in range(iMax, len(diff_list[q])):
+                    if (0.0 < diff_list[q][i]):
+                        diff_list[q][i] = 0.0
                     else:
                         break
-                
-            
-        return (iEdgesP, iEdgesN)
+
+            q = (q+1) % 2 # Go to the other list.
+
+
+        #(iEdgesMajor, iEdgesMinor) = self.SortEdgesPairwise(iEdgesP, absP, iEdgesN, absN)
+        (iEdgesMajor, iEdgesMinor) = self.SortEdgesOneEdge(iEdgesP, absP, iEdgesN, absN)
+
+        return (iEdgesMajor, iEdgesMinor)
+           
     
+    # SortEdgesOneEdge()
+    # Make sure that if there's just one edge, that it's in the major list.
+    #
+    def SortEdgesOneEdge(self, iEdgesP, absP, iEdgesN, absN):
+        # If we have too many edges, then remove the weakest one.
+        lP = len(iEdgesP)
+        lN = len(iEdgesN)
+        if (self.n_edges_max < lP+lN):
+            if (0<lP) and (0<lN):
+                if (absP[-1] < absN[-1]):
+                    iEdgesP.pop()
+                    absP.pop()
+                else:
+                    iEdgesN.pop()
+                    absN.pop()
+            elif (0<lP):
+                iEdgesP.pop()
+                absP.pop()
+            elif (0<lN):
+                iEdgesN.pop()
+                absN.pop()
+
+
+        # Sort the edges.            
+        if (len(iEdgesP)==0) and (len(iEdgesN)>0):
+            iEdgesMajor = iEdgesN
+            iEdgesMinor = iEdgesP
+        else:#if (len(iEdgesN)==0) and (len(iEdgesP)>0):
+            iEdgesMajor = iEdgesP
+            iEdgesMinor = iEdgesN
+        #else:
+        #    iEdgesMajor = iEdgesP
+        #    iEdgesMinor = iEdgesN
+
+            
+        return (iEdgesMajor, iEdgesMinor)
+            
+        
+    # SortEdgesPairwise()
+    # For each pair of (p,n) edges, the stronger edge of the pair is the major one.  
+    #
+    def SortEdgesPairwise(self, iEdgesP, absP, iEdgesN, absN):
+        iEdgesMajor = []
+        iEdgesMinor = []
+        iEdges_list = [iEdgesMajor, iEdgesMinor]
+        abs_list = [absP, absN]
+        iCount = 0 
+
+        m = max(len(iEdgesP), len(iEdgesN))
+        for i in range(m):
+            (absP1,iEdgeP1) = (absP[i],iEdgesP[i]) if (i<len(iEdgesP)) else (0.0, 0)
+            (absN1,iEdgeN1) = (absN[i],iEdgesN[i]) if (i<len(iEdgesN)) else (0.0, 0)
+            
+            if (absP1 < absN1) and (iCount < self.n_edges_max):
+                iEdgesMajor.append(iEdgeN1)
+                iCount += 1
+                if (0.0 < absP1) and (iCount < self.n_edges_max):
+                    iEdgesMinor.append(iEdgeP1)
+                    iCount += 1
+                    
+            elif (iCount < self.n_edges_max):
+                iEdgesMajor.append(iEdgeP1)
+                iCount += 1
+                if (0.0 < absN1) and (iCount < self.n_edges_max):
+                    iEdgesMinor.append(iEdgeN1)
+                    iCount += 1
+
+        return (iEdgesMajor, iEdgesMinor)
+
+
+    def SortEdgesMax(self, iEdgesP, absP, iEdgesN, absN):
+        # The P or N list with the 'stronger' edge is considered to be the "major" one.
+        if (np.max(absN) < np.max(absP)):
+            iEdgesMajor = iEdgesP 
+            iEdgesMinor = iEdgesN
+        else:  
+            iEdgesMajor = iEdgesN 
+            iEdgesMinor = iEdgesP 
+            
+        return (iEdgesMajor, iEdgesMinor)
+    
+# End class EdgeDetector
     
     
 ###############################################################################
@@ -855,7 +979,7 @@ class IntensityTrackedBodypart(object):
         self.bInitializedMasks = False
 
         self.bgra        = bgra_dict[color]
-        self.bgra_dim    = tuple(np.array(bgra_dict[color])/2)
+        self.bgra_dim    = tuple(0.5*np.array(bgra_dict[color]))
         self.bgra_state  = bgra_dict[color]#bgra_dict['red']
         self.pixelmax    = 255.0
 
@@ -1126,7 +1250,7 @@ class PolarTrackedBodypart(object):
         self.bInitializedMasks = False
 
         self.bgra        = bgra_dict[color]
-        self.bgra_dim    = tuple(np.array(bgra_dict[color])/2)
+        self.bgra_dim    = tuple(0.5*np.array(bgra_dict[color]))
         self.bgra_state  = bgra_dict[color]#bgra_dict['red']
         self.pixelmax    = 255.0
 
@@ -1972,19 +2096,19 @@ class Fly(object):
     def publish(self):
         flystate              = MsgFlystate()
         flystate.header       = Header(seq=self.iCount, stamp=self.stamp, frame_id='Fly')
-        if (self.params['left']['track']) and (self.left.state.angle1 is not None) and (self.left.state.angle2 is not None):
+        if (self.params['left']['track']):
             flystate.left     = MsgWing(intensity=self.left.state.intensity, 
-                                        angle1=self.left.state.angle1, 
-                                        angle2=self.left.state.angle2)
+                                        anglesMajor=self.left.state.anglesMajor, 
+                                        anglesMinor=self.left.state.anglesMinor)
         else:
-            flystate.left     = MsgWing(intensity=0.0, angle1=0.0, angle2=0.0)
+            flystate.left     = MsgWing(intensity=0.0, anglesMajor=[], anglesMinor=[])
             
-        if (self.params['right']['track']) and (self.right.state.angle1 is not None) and (self.right.state.angle2 is not None):
+        if (self.params['right']['track']):
             flystate.right    = MsgWing(intensity=self.right.state.intensity, 
-                                        angle1=self.right.state.angle1, 
-                                        angle2=self.right.state.angle2)
+                                        anglesMajor=self.right.state.anglesMajor, 
+                                        anglesMinor=self.right.state.anglesMinor)
         else:
-            flystate.right    = MsgWing(intensity=0.0, angle1=0.0, angle2=0.0)
+            flystate.right    = MsgWing(intensity=0.0, anglesMajor=[], anglesMinor=[])
             
         if (self.params['head']['track']):
             flystate.head     = MsgBodypart(intensity=self.head.state.intensity,    
@@ -2287,10 +2411,9 @@ class Wing(PolarTrackedBodypart):
         
         self.imgRoiBackground = None
         self.iCount = 0
-        self.edgedetector.set_threshold(params[self.name]['threshold'])
         self.state.intensity = 0.0
-        self.state.angle1 = np.pi
-        self.state.angle2 = np.pi
+        self.state.anglesMajor = []
+        self.state.anglesMinor = []
 
         # Compute the 'handedness' of the head/abdomen and wing/wing axes.
         matAxes = np.array([[self.params['head']['hinge']['x']-self.params['abdomen']['hinge']['x'], self.params['head']['hinge']['y']-self.params['abdomen']['hinge']['y']],
@@ -2298,6 +2421,8 @@ class Wing(PolarTrackedBodypart):
         self.senseAxes = np.sign(np.linalg.det(matAxes))
         a = 1 if (self.name=='left') else -1
         self.sense = a*self.senseAxes  
+
+        self.edgedetector.set_threshold(params[self.name]['threshold'], params['n_edges_max'], self.sense)
     
         
     # update_state()
@@ -2310,34 +2435,26 @@ class Wing(PolarTrackedBodypart):
         # Get the rotation & expansion between images.
         if (imgNow is not None):
             # Pixel position and strength of the edges.
-            ((iEdge1,absEdge1), (iEdge2,absEdge2)) = self.edgedetector.get_edges(imgNow)
-            if self.name=='right':
-                rospy.logwarn(self.edgedetector.get_edges2(imgNow))
+            (iEdgesMajor, iEdgesMinor) = self.edgedetector.get_edges2(imgNow)
+
             #rospy.logwarn((absEdge1, absEdge2))
-            intensity = np.mean(imgNow)/255.0
             anglePerPixel = (self.params[self.name]['angle_hi']-self.params[self.name]['angle_lo']) / float(imgNow.shape[1])
 
-            # Convert pixel to angle units, and put angle into the bodypart frame.
-            if (self.params[self.name]['threshold'] <= absEdge1):
-                angle1 = self.params[self.name]['angle_lo'] + iEdge1 * anglePerPixel
-                self.state.angle1 = ((angle1 - (self.angleOutward_i-self.angleBody_i) + np.pi) % (2*np.pi) - np.pi) * self.sense
-            else:
-                # If it's below the threshold, then set to pi
-                self.state.angle1 = np.pi
+#            # Convert pixel to angle units, and put angle into the wing frame.
+            self.state.anglesMajor = []
+            self.state.anglesMinor = []
+            for (angles,iEdges) in [(self.state.anglesMajor,iEdgesMajor), (self.state.anglesMinor,iEdgesMinor)]:
+                for iEdge in iEdges:
+                    angle_imageframe = self.params[self.name]['angle_lo'] + iEdge * anglePerPixel
+                    angle_wingframe = ((angle_imageframe - (self.angleOutward_i-self.angleBody_i) + np.pi) % (2*np.pi) - np.pi) * self.sense 
+                    angles.append(angle_wingframe)
+                
 
-            # Convert pixel to angle units, and put angle into the bodypart frame.
-            if (self.params[self.name]['threshold'] <= absEdge2):
-                angle2 = self.params[self.name]['angle_lo'] + iEdge2 * anglePerPixel
-                self.state.angle2 = ((angle2 - (self.angleOutward_i-self.angleBody_i) + np.pi) % (2*np.pi) - np.pi) * self.sense
-            else:
-                # If it's below the threshold, then set to pi
-                self.state.angle2 = np.pi
-
-            self.state.intensity = intensity
+            self.state.intensity = np.mean(imgNow)/255.0
 
         
     # update_flight_status()
-    # Determine if the fly is flying.  Current implementation doesn't work very well.
+    # Determine if the fly is flying.  This implementation doesn't work very well.
     def update_flight_status(self):
         if (self.state.intensity > self.params['threshold_intensity_flight']):
             self.bFlying = True
@@ -2365,50 +2482,50 @@ class Wing(PolarTrackedBodypart):
         PolarTrackedBodypart.draw(self, image)
         
         if (self.params[self.name]['track']):
-            # Leading and trailing edges
-            if (self.state.angle1 is not None) and (self.state.angle1 != np.pi):
-                angle1 =  self.sense*self.state.angle1 + (self.angleOutward_i-self.angleBody_i)
-                angle1_i = self.transform_angle_i_from_b(angle1)
-
-                x0 = self.ptHinge_i[0] + self.params[self.name]['radius_inner'] * np.cos(angle1_i)
-                y0 = self.ptHinge_i[1] + self.params[self.name]['radius_inner'] * np.sin(angle1_i)
-                x1 = self.ptHinge_i[0] + self.params[self.name]['radius_outer'] * np.cos(angle1_i)
-                y1 = self.ptHinge_i[1] + self.params[self.name]['radius_outer'] * np.sin(angle1_i)
-                cv2.line(image, (int(x0),int(y0)), (int(x1),int(y1)), self.bgra, 1)
-                
-            if (self.state.angle2 is not None) and (self.state.angle2 != np.pi) and (self.params['n_edges']==2):
-                angle2 =  self.sense*self.state.angle2 + (self.angleOutward_i-self.angleBody_i)
-                angle2_i = self.transform_angle_i_from_b(angle2)
+            #nEdgesMax = min(self.params['n_edges_max'], len(self.state.anglesMajor)+len(self.state.anglesMinor))
+            nEdgesMax = len(self.state.anglesMajor) + len(self.state.anglesMinor)
             
-                x0 = self.ptHinge_i[0] + self.params[self.name]['radius_inner'] * np.cos(angle2_i)
-                y0 = self.ptHinge_i[1] + self.params[self.name]['radius_inner'] * np.sin(angle2_i)
-                x1 = self.ptHinge_i[0] + self.params[self.name]['radius_outer'] * np.cos(angle2_i)
-                y1 = self.ptHinge_i[1] + self.params[self.name]['radius_outer'] * np.sin(angle2_i)
-                cv2.line(image, (int(x0),int(y0)), (int(x1),int(y1)), self.bgra_dim, 1)
+            # Draw the major and minor edges alternately, until the max number has been reached.
+            q = 0 # 0=major, 1=minor
+            index_list = [0, 0] # index of [major, minor] edge that we're on.
+            angles_list = [self.state.anglesMajor, self.state.anglesMinor]
+            bgra_list = [self.bgra, self.bgra_dim]
+            for i in range(nEdgesMax):
+                if (index_list[q] < len(angles_list[q])):
+                    angle = angles_list[q][index_list[q]]
+                    bgra = bgra_list[q]
+                    bgra_list[q] = tuple(0.25*np.array(bgra_list[q]))
+                    index_list[q] += 1
+                    
+                    angle1 =  self.sense*angle + (self.angleOutward_i-self.angleBody_i)
+                    angle1_i = self.transform_angle_i_from_b(angle1)
     
-
+                    x0 = self.ptHinge_i[0] + self.params[self.name]['radius_inner'] * np.cos(angle1_i)
+                    y0 = self.ptHinge_i[1] + self.params[self.name]['radius_inner'] * np.sin(angle1_i)
+                    x1 = self.ptHinge_i[0] + self.params[self.name]['radius_outer'] * np.cos(angle1_i)
+                    y1 = self.ptHinge_i[1] + self.params[self.name]['radius_outer'] * np.sin(angle1_i)
+                    cv2.line(image, (int(x0),int(y0)), (int(x1),int(y1)), bgra, 1)
+                
+                q = 1-q
+                
+                
             self.windowTest.show()
         
         
     def serve_wingdata_callback(self, request):
         angles = np.linspace(self.params[self.name]['angle_lo'], self.params[self.name]['angle_hi'], len(self.edgedetector.intensities))
         
-        intensities = []
-        diffs = []
-        if (self.edgedetector.intensities is not None) and (len(self.edgedetector.intensities)>0):
-            n=5
-            diffsRaw = self.edgedetector.intensities[n:] - self.edgedetector.intensities[:-n]
-            diffs = filter_median(diffsRaw, q=1).astype(np.float32)
-            diffs = np.append(diffs,np.zeros(n))
             
-            intensities = (self.edgedetector.intensities - np.min(self.edgedetector.intensities)).astype(np.float32)
-            intensities /= np.max(intensities)
-            
-        edge1 = (((self.angleOutward_i-self.angleBody_i) + np.pi) % (2*np.pi)) - np.pi + self.sense*self.state.angle1
-        edge2 = (((self.angleOutward_i-self.angleBody_i) + np.pi) % (2*np.pi)) - np.pi + self.sense*self.state.angle2
-        edges = [edge1, edge2]
+        anglesMajor = []
+        anglesMinor = []
+        for angle in self.state.anglesMajor:
+            angle_bodyframe = (((self.angleOutward_i - self.angleBody_i + self.sense*angle) + np.pi) % (2*np.pi)) - np.pi
+            anglesMajor.append(angle_bodyframe)
+        for angle in self.state.anglesMinor:
+            angle_bodyframe = (((self.angleOutward_i - self.angleBody_i + self.sense*angle) + np.pi) % (2*np.pi)) - np.pi
+            anglesMinor.append(angle_bodyframe)
 
-        return SrvWingdataResponse(angles, intensities, diffs, edges)
+        return SrvWingdataResponse(angles, self.edgedetector.intensities, self.edgedetector.diff, anglesMajor, anglesMinor)
         
         
 # end class Wing
@@ -2452,7 +2569,7 @@ class MainWindow:
                     'symmetric':True,                   # Forces the UI to remain symmetric.
                     'threshold_intensity_flight':0.5,   # Amount of pixel intensity that counts as flying.  Intensity ranges on interval [0,1].
                     'scale_image':1.0,                  # Reducing the image scale will speed the framerate.
-                    'n_edges':1,                        # Number of edges per wing to find.  1 or 2.
+                    'n_edges_max':1,                    # Max number of edges per wing to find, subject to threshold.
                     'rc_background':1000.0,             # Time constant of the moving average background.
                     'wingbeat_min':180,                 # Bounds for wingbeat frequency measurement.
                     'wingbeat_max':220,
@@ -2815,7 +2932,6 @@ class MainWindow:
                         
                     cv2.putText(imgOutput, '%5.1f Hz' % self.hz, (x, y), self.fontface, self.scaleText, bgra_dict['dark_yellow'] )
                     
-                    w_text = int(w * self.scale)
                     h_text = int(h * self.scale)
                     y -= h_text+self.h_gap
                 
@@ -2823,19 +2939,14 @@ class MainWindow:
                     # Output the aux state.
                     if (self.params['aux']['track']):
                         s = 'AUX: (%0.3f)' % (self.fly.aux.state.intensity)
-                        w = 95
                         cv2.putText(imgOutput, s, (x, y), self.fontface, self.scaleText, self.fly.aux.bgra)
-                        w_text = int(w * self.scale)
                         h_text = int(h * self.scale)
                         y -= h_text+self.h_gap
                     
+                        s = 'WB Freq: '
                         if (self.fly.aux.state.freq != 0.0):
-                            s = 'WB Freq: %0.0fhz' % (self.fly.aux.state.freq)
-                        else:
-                            s = 'WB Freq: *'
-                        w = 95
+                            s += '%0.0fhz' % (self.fly.aux.state.freq)
                         cv2.putText(imgOutput, s, (x, y), self.fontface, self.scaleText, self.fly.aux.bgra)
-                        w_text = int(w * self.scale)
                         h_text = int(h * self.scale)
                         y -= h_text+self.h_gap
                     
@@ -2848,68 +2959,48 @@ class MainWindow:
                         #else:
                         #    s = 'Not flying: (%0.3f)' % np.mean([self.fly.left.state.intensity,self.fly.right.state.intensity]) 
                        # 
-                       # w = 150
                        # cv2.putText(imgOutput, s, (x, y), self.fontface, self.scaleText, bgra_dict['blue'])
-                       # w_text = int(w * self.scale)
                        # h_text = int(h * self.scale)
                        # y -= h_text+self.h_gap
                 
                         # L+R
-                        if (self.fly.left.state.angle1 is not None) and (self.fly.right.state.angle1 is not None):
-                            if (self.fly.left.state.angle1!=np.pi) and (self.fly.right.state.angle1!=np.pi):
-                                leftplusright = self.fly.left.state.angle1 + self.fly.right.state.angle1
-                                s = 'L+R:% 7.4f' % leftplusright
-                            else:
-                                s = 'L+R: *'
-                            w = 82
-                            cv2.putText(imgOutput, s, (x, y), self.fontface, self.scaleText, bgra_dict['blue'])
-                            w_text = int(w * self.scale)
-                            h_text = int(h * self.scale)
-                            y -= h_text+self.h_gap
+                        s = 'L+R:'
+                        if (len(self.fly.left.state.anglesMajor)>0) and (len(self.fly.right.state.anglesMajor)>0):
+                            leftplusright = self.fly.left.state.anglesMajor[0] + self.fly.right.state.anglesMajor[0]
+                            s += '% 7.4f' % leftplusright
+                        cv2.putText(imgOutput, s, (x, y), self.fontface, self.scaleText, bgra_dict['blue'])
+                        h_text = int(h * self.scale)
+                        y -= h_text+self.h_gap
         
                             
                         # L-R
-                        if (self.fly.left.state.angle1 is not None) and (self.fly.right.state.angle1 is not None):
-                            if (self.fly.left.state.angle1!=np.pi) and (self.fly.right.state.angle1!=np.pi):
-                                leftminusright = self.fly.left.state.angle1 - self.fly.right.state.angle1
-                                s = 'L-R:% 7.4f' % leftminusright
-                            else:
-                                s = 'L-R: *'
-                            w = 82
-                            cv2.putText(imgOutput, s, (x, y), self.fontface, self.scaleText, bgra_dict['blue'])
-                            w_text = int(w * self.scale)
-                            h_text = int(h * self.scale)
-                            y -= h_text+self.h_gap
+                        s = 'L-R:'
+                        if (len(self.fly.left.state.anglesMajor)>0) and (len(self.fly.right.state.anglesMajor)>0):
+                            leftminusright = self.fly.left.state.anglesMajor[0] - self.fly.right.state.anglesMajor[0]
+                            s += '% 7.4f' % leftminusright
+                        cv2.putText(imgOutput, s, (x, y), self.fontface, self.scaleText, bgra_dict['blue'])
+                        h_text = int(h * self.scale)
+                        y -= h_text+self.h_gap
         
                         # Right
-                        if (self.fly.right.state.angle1 is not None):
-                            txtR1 = ('% 7.4f' % self.fly.right.state.angle1) if (self.fly.right.state.angle1 != np.pi) else '       *' 
-                            txtR2 = ('% 7.4f' % self.fly.right.state.angle2) if (self.fly.right.state.angle2 != np.pi) else '       *' 
-                            if (self.params['n_edges']==1):
-                                s = 'R:%s' % txtR1
-                                w = 65
-                            else:
-                                s = 'R:%s,%s' % (txtR1, txtR2)
-                                w = 120
-                            cv2.putText(imgOutput, s, (x, y), self.fontface, self.scaleText, self.fly.right.bgra)
-                            w_text = int(w * self.scale)
-                            h_text = int(h * self.scale)
-                            y -= h_text+self.h_gap
+                        s = 'R:'
+                        if (len(self.fly.right.state.anglesMajor)>0):
+                            s += '% 7.4f' % self.fly.right.state.anglesMajor[0]
+                            #for i in range(1,len(self.fly.right.state.anglesMajor)):
+                            #    s += ', % 7.4f' % self.fly.right.state.anglesMajor[i]
+                        cv2.putText(imgOutput, s, (x, y), self.fontface, self.scaleText, self.fly.right.bgra)
+                        h_text = int(h * self.scale)
+                        y -= h_text+self.h_gap
             
                         # Left
-                        if (self.fly.left.state.angle1 is not None):
-                            txtL1 = ('% 7.4f' % self.fly.left.state.angle1) if (self.fly.left.state.angle1 != np.pi) else '       *' 
-                            txtL2 = ('% 7.4f' % self.fly.left.state.angle2) if (self.fly.left.state.angle2 != np.pi) else '       *' 
-                            if (self.params['n_edges']==1):
-                                s = 'L:%s' % txtL1
-                                w = 65
-                            else:
-                                s = 'L:%s,%s' % (txtL1, txtL2)
-                                w = 120
-                            cv2.putText(imgOutput, s, (x, y), self.fontface, self.scaleText, self.fly.left.bgra)
-                            w_text = int(w * self.scale)
-                            h_text = int(h * self.scale)
-                            y -= h_text+self.h_gap
+                        s = 'L:'
+                        if (len(self.fly.left.state.anglesMajor)>0):
+                            s += '% 7.4f' % self.fly.left.state.anglesMajor[0]
+                            #for i in range(1,len(self.fly.left.state.anglesMajor)):
+                            #    s += ', % 7.4f' % self.fly.left.state.anglesMajor[i]
+                        cv2.putText(imgOutput, s, (x, y), self.fontface, self.scaleText, self.fly.left.bgra)
+                        h_text = int(h * self.scale)
+                        y -= h_text+self.h_gap
                         
                             
                     # end if (self.params['right']['track'])
@@ -2918,9 +3009,7 @@ class MainWindow:
                     # Output the abdomen state.
                     if (self.params['abdomen']['track']):
                         s = 'ABDOMEN:% 7.4f' % (self.fly.abdomen.state.angle)
-                        w = 115
                         cv2.putText(imgOutput, s, (x, y), self.fontface, self.scaleText, self.fly.abdomen.bgra)
-                        w_text = int(w * self.scale)
                         h_text = int(h * self.scale)
                         y -= h_text+self.h_gap
                     
@@ -2928,9 +3017,7 @@ class MainWindow:
                     # Output the head state.
                     if (self.params['head']['track']):
                         s = 'HEAD:% 7.4f' % (self.fly.head.state.angle)
-                        w = 90
                         cv2.putText(imgOutput, s, (x, y), self.fontface, self.scaleText, self.fly.head.bgra)
-                        w_text = int(w * self.scale)
                         h_text = int(h * self.scale)
                         y -= h_text+self.h_gap
                 

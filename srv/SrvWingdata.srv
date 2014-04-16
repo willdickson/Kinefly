@@ -3,4 +3,5 @@ bool query
 float32[] angles
 float32[] intensities
 float32[] diffs
-float32[] edges
+float32[] anglesMajor
+float32[] anglesMinor

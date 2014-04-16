@@ -1,3 +1,3 @@
-float64 angle1
-float64 angle2
+float64[] anglesMajor
+float64[] anglesMinor
 float64 intensity

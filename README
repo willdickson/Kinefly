@@ -2,7 +2,7 @@ Kinefly
 ----------------
 Kinefly extracts kinematics variables from the camera image of a tethered winged insect.
 
-The reported variables are wing major and minor edge angles, head and abdomen angles & radii, and the pixel intensity of an arbitrary elliptical region of the image (intended to capture leg motion, etc). 
+The reported variables are wing edge angles, head and abdomen angles & radii, and the pixel intensity of an arbitrary elliptical region of the image (intended to capture leg motion, etc). 
 
 The software runs on ROS, the Robot Operating System, and can use any camera or other source that provides a ROS image stream, e.g. /camera/image_raw.
 
@@ -62,35 +62,33 @@ Output Variables
 ---------------------------
 The output is published on the ROS topic '/kinefly/flystate', and can be retrieved either by running the command 'rostopic echo kinefly/flystate' or by writing your own ROS node and subscribing to that topic.
 
-There are two angles per wing, and angle1 is the 'stronger' edge in terms of intensity gradient, and is not necessarily the leading edge.  Angle2 is the edge with the next stronger gradient with the inverse sign.  In other words, the edges are found by looking at the intensity gradient across the wingstroke, and the strongest is labelled angle1.  Angle2 is the next strongest gradient with a sign opposite the gradient of angle1.  
-
 An example of the flystate output is shown here:
 ---
 header: 
-  seq: 843
+  seq: 150
   stamp: 
-    secs: 1393885539
-    nsecs: 751821041
+    secs: 1397605659
+    nsecs: 152694940
   frame_id: Fly
 head: 
-  radius: 56.592949767
-  angle: -0.167498539458
-  intensity: 0.376857756377
+  radius: 59.8374752679
+  angle: -0.00591256314513
+  intensity: 0.815291098945
 abdomen: 
-  radius: 109.989494885
-  angle: 0.0321847366966
-  intensity: 0.638065271683
+  radius: 0.0
+  angle: 0.0
+  intensity: 0.0
 left: 
-  angle1: 0.575350079497
-  angle2: -0.629515897126
-  intensity: 0.837157232885
+  anglesMajor: [-1.3870444530186634, -0.8856356116626198]
+  anglesMinor: [-1.3545457318196608]
+  intensity: 0.708161842024
 right: 
-  angle1: 1.0994397644
-  angle2: 1.21830546613
-  intensity: 0.626624052158
+  anglesMajor: [-1.2988336383356556]
+  anglesMinor: [-1.2709775915936534, -1.4798979421586713]
+  intensity: 0.607313199728
 aux: 
-  intensity: 0.592803359032
-  freq: 198.85736183952
+  intensity: 0.0
+  freq: 0.0
  
 
 Units
@@ -117,6 +115,14 @@ Background Subtraction
 Background subtraction is performed only for the wings and aux region, not for the head and abdomen.  The background is initialized with the kinefly.png image on disk, and updates as a moving average with the time constant (in seconds) parameter rc_background. 
 
 
+Wing Edges:
+---------------------------
+We find multiple edge angles per wing (so you can track legs etc too, if desired), the number being specified via parameter 'n_edges_max'.  The edges are in two lists, one each for rising and falling intensity levels, however if there is only one edge it will be in the 'anglesMajor' list.  The edges are found by looking at the intensity gradient across the wingstroke, and each list is sorted in descending order of gradient.
+
+The parameter 'threshold' can be used to reduce false detections when no edge is present, and will typically be a low value such as 0.02.  It is set independently for each wing.  You may run the program in plot_wingdata.py for help finding a good value to use, for example:
+$ rosrun Kinefly plot_wingdata.py     
+
+
 Wingbeat Frequency:
 ---------------------------
 We make an attempt to measure the wingbeat frequency using the frequency spectrum of the aux intensity.  For this to work, several criteria must be met.  First, you must set the valid range of wingbeat frequencies in the kinefly.yaml file.  Upon the next launch, Kinefly will print out the compatible camera framerate needed (the lowest typically being slightly higher than twice the wingbeat passband width).  Next, set the camera to that framerate.  If the camera framerate can be maintained within the valid range, then Kinefly will compute the wingbeat frequency.  Since the framerate is typically much less than the Nyquist frequency needed to cover the wingbeat range, we use an undersampling technique and look at a baseband alias of the wingbeat frequencies.  Proper camera framerate is critical to the functioning of this feature, and the computer must be fast enough to process the frames in the allowed time, with no camera framerate variation outside of the allowed range.  Seriously consider using the parameter scale_image.      
@@ -139,7 +145,7 @@ Parameters that apply to all bodyparts:
                                 may help with some cameras that provide
                                 bayer encoded images.
                                 (default: /camera/image_raw)
-    n_edges:                    Display 1 or 2 wing edges. (default: 1)
+    n_edges_max:                Max number of wing edges to find. (default: 1)
     parameterfile:              Location of the YAML file. 
                                 (default: ~/kinefly.yaml)
     rc_background:              Time constant of the moving average background
@@ -160,11 +166,11 @@ Parameters that apply only to head & abdomen:
 
 Parameters that apply only to wings:
     threshold:                  This is the threshold for the intensity
-                                gradient to detect a wing edge.  Intensity 
-                                gradients less than this value will result 
-                                in the edge showing as pi radians.  You may
+                                gradient to detect a wing edge.  You may
                                 run the program in plot_wingdata.py for help 
-                                setting these thresholds.
+                                setting these thresholds, for example:
+                                rosrun Kinefly plot_wingdata.py
+                                (default: 0.0)
 
 Parameters that apply only to aux:
     wingbeat_lo:                The lower frequency (hz) of wingbeats from 
