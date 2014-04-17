@@ -31,8 +31,8 @@ class Kinefly2PhidgetsAnalog:
         self.defaults = {'v0enable':True, 'v1enable':True, 'v2enable':True, 'v3enable':True, 
                         'v00': 0.0, 'v0l1':1.0, 'v0l2':0.0, 'v0r1':0.0, 'v0r2':0.0, 'v0ha':0.0, 'v0hr':0.0, 'v0aa':0.0, 'v0ar':0.0, 'v0xi':0.0, # L
                         'v10': 0.0, 'v1l1':0.0, 'v1l2':0.0, 'v1r1':1.0, 'v1r2':0.0, 'v1ha':0.0, 'v1hr':0.0, 'v1aa':0.0, 'v1ar':0.0, 'v1xi':0.0, # R
-                        'v20': 0.0, 'v2l1':1.0, 'v2l2':0.0, 'v2r1':1.0, 'v2r2':0.0, 'v2ha':0.0, 'v2hr':0.0, 'v2aa':0.0, 'v2ar':0.0, 'v2xi':0.0, # L+R
-                        'v30': 0.0, 'v3l1':1.0, 'v3l2':0.0, 'v3r1':-1.0, 'v3r2':0.0, 'v3ha':0.0, 'v3hr':0.0, 'v3aa':0.0, 'v3ar':0.0, 'v3xi':0.0, # L-R
+                        'v20': 0.0, 'v2l1':1.0, 'v2l2':0.0, 'v2r1':-1.0, 'v2r2':0.0, 'v2ha':0.0, 'v2hr':0.0, 'v2aa':0.0, 'v2ar':0.0, 'v2xi':0.0, # L-R
+                        'v30': 0.0, 'v3l1':1.0, 'v3l2':0.0, 'v3r1':1.0, 'v3r2':0.0, 'v3ha':0.0, 'v3hr':0.0, 'v3aa':0.0, 'v3ar':0.0, 'v3xi':0.0, # L+R
                          'autorange':False
                          }
         self.set_dict_with_preserve(self.params, self.defaults)
@@ -172,10 +172,10 @@ class Kinefly2PhidgetsAnalog:
     # get_voltages()
     #
     def voltages_from_flystate(self, flystate):
-        leftMajor = flystate.left.angleMajor[0] if (0<len(flystate.left.angleMajor)) else 0.0
-        leftMinor = flystate.left.angleMinor[0] if (0<len(flystate.left.angleMinor)) else 0.0
-        rightMajor = flystate.right.angleMajor[0] if (0<len(flystate.right.angleMajor)) else 0.0
-        rightMinor = flystate.right.angleMinor[0] if (0<len(flystate.right.angleMinor)) else 0.0
+        leftMajor = flystate.left.anglesMajor[0] if (0<len(flystate.left.anglesMajor)) else 0.0
+        leftMinor = flystate.left.anglesMinor[0] if (0<len(flystate.left.anglesMinor)) else 0.0
+        rightMajor = flystate.right.anglesMajor[0] if (0<len(flystate.right.anglesMajor)) else 0.0
+        rightMinor = flystate.right.anglesMinor[0] if (0<len(flystate.right.anglesMinor)) else 0.0
             
         state = np.array([1.0,
                           leftMajor,
