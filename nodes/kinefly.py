@@ -6,6 +6,7 @@ import rospy
 import rosparam
 
 import copy
+#import cProfile
 import cv
 import cv2
 import numpy as np
@@ -731,7 +732,7 @@ class EdgeDetector(object):
         # Compute the intensity gradient.
         n = 5 
         diff = self.intensities[n:] - self.intensities[:-n]
-        diffF = filter_median(diff, q=1)
+        diffF = diff#filter_median(diff, q=1)
         diffF -= np.mean(diffF)
         self.diff = np.append(diffF, np.zeros(n))
 
@@ -766,12 +767,12 @@ class EdgeDetector(object):
     def get_edges2(self, image):
         intensitiesRaw = np.sum(image, 0).astype(np.float32)
         intensitiesRaw /= (255.0*image.shape[0]) # Put into range [0,1]
-        self.intensities = filter_median(intensitiesRaw, q=1)
+        self.intensities = intensitiesRaw#filter_median(intensitiesRaw, q=1)
         
         # Compute the intensity gradient. 
         n = 5
         diffRaw = self.intensities[n:] - self.intensities[:-n]
-        diffF = filter_median(diffRaw, q=1)
+        diffF = diffRaw#filter_median(diffRaw, q=1)
         #diffF -= np.mean(diffF)
         self.diff = np.append(diffF, np.zeros(n))
         
@@ -2652,7 +2653,7 @@ class MainWindow:
         self.hzSum = 0.0
         self.iCount = 0
         
-        self.imgScaled = [None,None]
+        self.rosimage = [None,None]
         self.iImgWorking = 0  # Index of the image being processed.  Callback should write to the other image.
         
         # Publishers.
@@ -2859,23 +2860,12 @@ class MainWindow:
         iImgLoading = (self.iImgWorking+1) % 2
         
         # Receive the image:
-        try:
-            img = np.uint8(cv.GetMat(self.cvbridge.imgmsg_to_cv(rosimage, 'passthrough')))
-            
-        except CvBridgeError, e:
-            rospy.logwarn ('Exception converting background image from ROS to opencv:  %s' % e)
-            self.imgScaled[iImgLoading] = None
-        
-        # Scale the image.
-        if (self.scale == 1.0):              
-        	self.imgScaled[iImgLoading] = img
-        else:  
-        	self.imgScaled[iImgLoading] = cv2.resize(img, (0,0), fx=self.scale, fy=self.scale) 
+        self.rosimage[iImgLoading] = rosimage
                 
                 
                 
     def process_image(self):
-        if (self.imgScaled[self.iImgWorking] is not None):
+        if (self.rosimage[self.iImgWorking] is not None):
             stampAlt = rospy.Time.now()
             
             if (self.stampPrev is not None):
@@ -2889,18 +2879,41 @@ class MainWindow:
             self.stampPrev = self.header.stamp
             self.stampPrevAlt = stampAlt
             
-            self.shapeImage = self.imgScaled[self.iImgWorking].shape # (height,width)
+            try:
+                img = np.uint8(cv.GetMat(self.cvbridge.imgmsg_to_cv(self.rosimage[self.iImgWorking], 'passthrough')))
+                
+            except CvBridgeError, e:
+                rospy.logwarn ('Exception converting background image from ROS to opencv:  %s' % e)
+                img = np.zeros((320,240))
+            
+            # Scale the image.
+            if (self.scale == 1.0):              
+                self.imgScaled = img
+            else:  
+                self.imgScaled = cv2.resize(img, (0,0), fx=self.scale, fy=self.scale) 
+
+            
+            self.shapeImage = self.imgScaled.shape # (height,width)
             
             # Create the button bar if needed.    
-            self.create_buttons(self.imgScaled[self.iImgWorking].shape)
+            self.create_buttons(self.imgScaled.shape)
         
             if (not self.bInitialized):
                 self.fly.create_masks(self.shapeImage)
                 self.bInitialized = True
                                 
+
+            if (not self.bMousing):
+                # Update the fly internals.
+                self.fly.update(self.header, self.imgScaled)
+    
+                # Publish the outputs.
+                self.fly.publish()
+                
+            
             if (self.params['use_gui']):
         
-                imgOutput = cv2.cvtColor(self.imgScaled[self.iImgWorking], cv2.COLOR_GRAY2RGB)
+                imgOutput = cv2.cvtColor(self.imgScaled, cv2.COLOR_GRAY2RGB)
                 self.fly.draw(imgOutput)
                 self.draw_buttons(imgOutput)
             
@@ -3026,16 +3039,8 @@ class MainWindow:
                 cv2.imshow(self.window_name, imgOutput)
                 cv2.waitKey(1)
 
-            if (not self.bMousing):
-                # Update the fly internals.
-                self.fly.update(self.header, self.imgScaled[self.iImgWorking])
-    
-                # Publish the outputs.
-                self.fly.publish()
-                
-            
             # Mark this image as done.
-            self.imgScaled[self.iImgWorking] = None
+            self.rosimage[self.iImgWorking] = None
             
         # Go to the other image.
         self.iImgWorking = (self.iImgWorking+1) % 2
@@ -3463,4 +3468,15 @@ if __name__ == '__main__':
     rospy.logwarn('')
     rospy.logwarn('')
 
+
     main.run()
+
+    #cProfile.run('main.run()', '/home/ssafarik/profile.pstats')
+    # Note to do profiling:
+    # $ sudo apt-get install graphviz
+    # $ git clone https://code.google.com/p/jrfonseca.gprof2dot/ gprof2dot
+    # $ mkdir ~/bin
+    # $ ln -s "$PWD"/gprof2dot/gprof2dot.py ~/bin
+    # $ cd /home/ssafarik
+    # $ ~/bin/gprof2dot.py -f pstats profile.pstats | dot -Tsvg -o callgraph.svg
+    
