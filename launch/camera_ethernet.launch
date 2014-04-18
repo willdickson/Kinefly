@@ -7,5 +7,6 @@
     <param name="camera/image_rect/compressed/format"  type="string" value="png" />
     
     <node name="camera"           pkg="camera_aravis"  type="camnode" />
+    <node name="image_proc"       pkg="image_proc"  type="image_proc" ns="camera" />
   
 </launch>
