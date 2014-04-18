@@ -1560,11 +1560,11 @@ class PolarTrackedBodypart(object):
                                                      theta_1 = max(theta_0a,theta_1a),
                                                      amplifyTheta = 1.0)
                 
-            # Find the y value where the black band should be cropped out.
+            # Find the y value where the black band should be cropped out (but leave at least one raster if image is all-black).
             sumY = np.sum(self.imgRoiFgMaskedPolar,1)
             iSumY = np.where(sumY==0)[0]
             if (len(iSumY)>0):
-                iMinY = np.min(iSumY)
+                iMinY = np.max([1,np.min(iSumY)])
             else:
                 iMinY = self.imgRoiFgMaskedPolar.shape[0]
 
@@ -2960,7 +2960,7 @@ class MainWindow:
                             
                         self.hz = self.hzSum / self.iCount
                         
-                    cv2.putText(imgOutput, '%5.1f Hz' % self.hz, (x, y), self.fontface, self.scaleText, bgra_dict['dark_yellow'] )
+                    cv2.putText(imgOutput, '%5.1f Hz' % self.hz, (x, y), self.fontface, self.scaleText, bgra_dict['dark_red'] )
                     
                     h_text = int(h * self.scale)
                     y -= h_text+self.h_gap
