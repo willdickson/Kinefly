@@ -4,15 +4,6 @@
 	<!-- ========================================================== -->
 
 
-    <include file="$(find Kinefly)/launch/params_kinefly.launch" />
-
-    <include file="$(find Kinefly)/launch/params_camera1394.launch"   ns="camera" />
-    <include file="$(find Kinefly)/launch/camera_1394.launch" />
-
-
-    <node name="ledpanels"               pkg="ledpanels" type="ledpanels.py"  />
-    <node name="kinefly"                 pkg="Kinefly"   type="kinefly.py"  required="true"      />
-    <node name="kinefly2ledpanels"       pkg="Kinefly"   type="kinefly2ledpanels.py"  /> 
-    <node name="kinefly2phidgetsanalog"  pkg="Kinefly"   type="kinefly2phidgetsanalog.py"  />
+    <include file="$(find Kinefly)/launch/main_ethernet.launch" />
     
 </launch>
