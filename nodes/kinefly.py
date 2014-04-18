@@ -1097,8 +1097,7 @@ class IntensityTrackedBodypart(object):
         
         
     def update_background(self):
-        dt = max(0, self.dt)
-        alphaBackground = 1.0 - np.exp(-dt / self.rc_background)
+        alphaBackground = 1.0 - np.exp(-self.dt / self.rc_background)
 
         if (self.imgRoiBackground is not None):
             if (self.imgRoi is not None):
@@ -1303,6 +1302,9 @@ class PolarTrackedBodypart(object):
 
         self.rc_background = self.params['rc_background']
         self.angleBody_i = self.get_bodyangle_i()
+        self.cosAngleBody = np.cos(self.angleBody_i)
+        self.sinAngleBody = np.sin(self.angleBody_i)
+
         self.ptHinge_i = np.array([self.params[self.name]['hinge']['x'], self.params[self.name]['hinge']['y']])
         
         # Compute the body-outward-facing angle, which is the angle from the body center to the bodypart hinge.
@@ -1479,8 +1481,7 @@ class PolarTrackedBodypart(object):
         
         
     def update_background(self):
-        dt = max(0, self.dt)
-        alphaBackground = 1.0 - np.exp(-dt / self.rc_background)
+        alphaBackground = 1.0 - np.exp(-self.dt / self.rc_background)
 
         if (self.imgRoiBackground is not None):
             if (self.imgRoi is not None):
@@ -2063,12 +2064,17 @@ class Fly(object):
             self.stamp = self.header.stamp
             stampAlt = rospy.Time.now()
             if (self.stampPrev is not None):
-                dt = (self.header.stamp - self.stampPrev).to_sec()
+                dt = max(0.0, (self.header.stamp - self.stampPrev).to_sec())
                 
                 # If the camera is not giving good timestamps, then use our own clock.
                 if (dt == 0.0):
-                    dt = (stampAlt - self.stampPrevAlt).to_sec()
+                    dt = max(0.0, (stampAlt - self.stampPrevAlt).to_sec())
                     self.stamp = stampAlt
+
+                # If time wrapped, then just assume a value.
+                if (dt == 0.0):
+                    dt = 1.0
+                    
             else:
                 dt = np.inf
             self.stampPrev = self.header.stamp
@@ -2305,10 +2311,16 @@ class BodySegment(PolarTrackedBodypart):
                 
                 # Stabilize the bodypart in the entire camera image.
                 center = (self.params[self.name]['hinge']['x'], self.params[self.name]['hinge']['y'])
-                size = (self.image.shape[1], self.image.shape[0]) 
+                size = (self.image.shape[1], self.image.shape[0])
+                
+                # Stabilize the rotation. 
                 T = cv2.getRotationMatrix2D(center, np.rad2deg(self.state.angle), 1.0)
+                
+                # Stabilize the expansion.
+                T[0,2] -= rShift * self.cosAngleBody
+                T[1,2] -= rShift * self.sinAngleBody 
+                
                 self.imgStabilized = cv2.warpAffine(self.image, T, size)
-                 
                 self.windowStabilized.set_image(self.imgStabilized)
 
             
@@ -2869,11 +2881,16 @@ class MainWindow:
             stampAlt = rospy.Time.now()
             
             if (self.stampPrev is not None):
-                self.dt = (self.header.stamp - self.stampPrev).to_sec()
+                self.dt = max(0, (self.header.stamp - self.stampPrev).to_sec())
                 
                 # If the camera is not giving good timestamps, then use our own clock.
                 if (self.dt == 0.0):
-                    self.dt = (stampAlt - self.stampPrevAlt).to_sec()
+                    self.dt = max(0,0, (stampAlt - self.stampPrevAlt).to_sec())
+                    
+                # If time wrapped, then just assume a value.
+                if (self.dt == 0.0):
+                    self.dt = 1.0
+                    
             else:
                 self.dt = np.inf
             self.stampPrev = self.header.stamp
