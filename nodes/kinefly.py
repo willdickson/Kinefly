@@ -3458,11 +3458,7 @@ class MainWindow:
             self.fly.aux.wingbeat.warn()
         
         while (not rospy.is_shutdown()):
-            try:
-                self.process_image()
-                rospy.sleep(0) # Returns immediately.  Equivalent to rospy.spinOnce(), if it existed.
-            except rospy.exceptions.ROSInterruptException:
-                rospy.logwarn('Time moved backward.')
+            self.process_image()
 
         cv2.destroyAllWindows()
 
