@@ -1208,29 +1208,29 @@ class IntensityTrackedBodypart(object):
 #
 class PolarTrackedBodypart(object):
     def __init__(self, name=None, params={}, color='white', bEqualizeHist=False):
-        self.name        = name
-        self.bEqualizeHist = bEqualizeHist
+        self.name           = name
+        self.bEqualizeHist  = bEqualizeHist
 
         self.bInitializedMasks = False
 
-        self.bgra        = bgra_dict[color]
-        self.bgra_dim    = tuple(0.5*np.array(bgra_dict[color]))
-        self.bgra_state  = bgra_dict[color]#bgra_dict['red']
-        self.pixelmax    = 255.0
-
-        self.shape     = (np.inf, np.inf)
-        self.ptHinge_i = np.array([0,0])
-        self.roi       = None
+        self.bgra           = bgra_dict[color]
+        self.bgra_dim       = tuple(0.5*np.array(bgra_dict[color]))
+        self.bgra_state     = bgra_dict[color]#bgra_dict['red']
+        self.pixelmax       = 255.0
+                        
+        self.shape          = (np.inf, np.inf)
+        self.ptHinge_i      = np.array([0,0])
+        self.roi            = None
         
         self.create_wfn               = WindowFunctions().create_wfn_tukey
         self.wfnRoi                   = None
         self.wfnRoiMaskedPolarCropped = None
         
-        self.maskRoi           = None
-        self.sumMask = 1.0
+        self.maskRoi        = None
+        self.sumMask        = 1.0
         
         self.dt = np.inf
-        self.polartransforms   = PolarTransforms()
+        self.polartransforms = PolarTransforms()
 
         self.params = {}
         self.handles = {'hinge':Handle(np.array([0,0]), self.bgra, name='hinge'),
@@ -1266,8 +1266,8 @@ class PolarTrackedBodypart(object):
 
         self.rc_background = self.params['rc_background']
         self.angleBody_i = self.get_bodyangle_i()
-        self.cosAngleBody = np.cos(self.angleBody_i)
-        self.sinAngleBody = np.sin(self.angleBody_i)
+        self.cosAngleBody_i = np.cos(self.angleBody_i)
+        self.sinAngleBody_i = np.sin(self.angleBody_i)
 
         self.ptHinge_i = np.array([self.params[self.name]['hinge']['x'], self.params[self.name]['hinge']['y']])
         
@@ -1286,11 +1286,13 @@ class PolarTrackedBodypart(object):
                         'right':'left'}
         self.angleOutward_i = float(np.arctan2(self.params[self.name]['hinge']['y']-self.params[nameRelative[self.name]]['hinge']['y'], 
                                                self.params[self.name]['hinge']['x']-self.params[nameRelative[self.name]]['hinge']['x']))
+        self.angleOutward_b = self.angleOutward_i - self.angleBody_i
 
         
-        self.cosAngleOutward = np.cos(self.angleOutward_i)
-        self.sinAngleOutward = np.sin(self.angleOutward_i)
-        self.R = np.array([[self.cosAngleOutward, -self.sinAngleOutward], [self.sinAngleOutward, self.cosAngleOutward]])
+        cosAngleOutward_i = np.cos(self.angleOutward_i)
+        sinAngleOutward_i = np.sin(self.angleOutward_i)
+        self.R = np.array([[cosAngleOutward_i, -sinAngleOutward_i], 
+                           [sinAngleOutward_i, cosAngleOutward_i]])
 
         # Turn on/off the extra windows.
         self.windowPolar.set_enable(self.params['windows'] and self.params[self.name]['track'])
@@ -2209,7 +2211,7 @@ class BodySegment(PolarTrackedBodypart):
         self.iCount = 0
 
         self.stateOrigin.intensity = 0.0
-        self.stateOrigin.angle = 0.0
+        self.stateOrigin.angle = self.angleOutward_b + (self.params[self.name]['angle_hi']+self.params[self.name]['angle_lo'])/2.0
         self.stateOrigin.radius = (self.params[self.name]['radius_outer']+self.params[self.name]['radius_inner'])/2.0
 
         self.state.intensity = 0.0
@@ -2234,9 +2236,11 @@ class BodySegment(PolarTrackedBodypart):
     def update_state(self):
         imgNow = self.imgRoiFgMaskedPolarCroppedWindowed
         
-        # Get the rotation & expansion between images.
         if (imgNow is not None) and (self.imgComparison is not None):
+            # Get the rotation & expansion between images.
             (rShift, aShift) = self.phasecorr.get_shift(imgNow, self.imgComparison)
+            
+            # Convert polar pixel shifts to radians rotation & pixel expansion.
             dAngleOffset = aShift * (self.params[self.name]['angle_hi']-self.params[self.name]['angle_lo']) / float(imgNow.shape[1])
             dRadiusOffset = rShift
             self.state.angle  = self.stateOrigin.angle  + dAngleOffset
@@ -2283,8 +2287,8 @@ class BodySegment(PolarTrackedBodypart):
                 T = cv2.getRotationMatrix2D(center, np.rad2deg(self.state.angle), 1.0)
                 
                 # Stabilize the expansion.
-                T[0,2] -= rShift * self.cosAngleBody
-                T[1,2] -= rShift * self.sinAngleBody 
+                T[0,2] -= rShift * self.cosAngleBody_i
+                T[1,2] -= rShift * self.sinAngleBody_i 
                 
                 self.imgStabilized = cv2.warpAffine(self.image, T, size)
                 self.windowStabilized.set_image(self.imgStabilized)
@@ -3199,32 +3203,31 @@ class MainWindow:
 
 
 
-        # High angle.
-        elif (tagSelected in ['angle_hi','angle_lo']): 
+        elif (tagSelected in ['angle_hi','angle_lo']):
             pt = ptMouse - bodypartSelected.ptHinge_i
             if (tagSelected=='angle_lo'): 
                 angle_lo_b = float(bodypartSelected.transform_angle_b_from_i(np.arctan2(pt[1], pt[0])))
-                if (partnameSelected in ['head','abdomen']):
+
+                if (partnameSelected in ['head','abdomen']) and (paramsScaled['symmetric']):
                     angle_hi_b = -angle_lo_b
                 else:
                     angle_hi_b = paramsScaled[partnameSelected][tagOther]
-    #            angle_hi_b = paramsScaled[partnameSelected][tagOther]
+
             elif (tagSelected=='angle_hi'):
                 angle_hi_b = float(bodypartSelected.transform_angle_b_from_i(np.arctan2(pt[1], pt[0])))
                 
-                if (partnameSelected in ['head','abdomen']):
+                if (partnameSelected in ['head','abdomen']) and (paramsScaled['symmetric']):
                     angle_lo_b = -angle_hi_b
                 else:
                     angle_lo_b = paramsScaled[partnameSelected][tagOther]
-    #            angle_lo_b = paramsScaled[partnameSelected][tagOther]
             
             paramsScaled[partnameSelected]['radius_outer'] = float(max(bodypartSelected.params[partnameSelected]['radius_inner']+2*self.scale, 
                                                                       np.linalg.norm(bodypartSelected.ptHinge_i - ptMouse)))
                 
-            # Make angles relative to bodypart origin. 
+            # Make angles relative to bodypart origin.
             angle_lo_b -= (bodypartSelected.angleOutward_i - bodypartSelected.angleBody_i)
-            angle_hi_b -= (bodypartSelected.angleOutward_i - bodypartSelected.angleBody_i)
             angle_lo_b = (angle_lo_b+np.pi) % (2.0*np.pi) - np.pi
+            angle_hi_b -= (bodypartSelected.angleOutward_i - bodypartSelected.angleBody_i)
             angle_hi_b = (angle_hi_b+np.pi) % (2.0*np.pi) - np.pi
             
             # Switch to the other handle.
@@ -3297,11 +3300,11 @@ class MainWindow:
             
             # Get the name and ui nearest the current point.
             (ui, tag, partname, iButtonSelected) = self.hit_object(ptMouse)
-            self.nameSelected = self.name_from_tagpartname(tag,partname)
-            self.tagSelected = tag
-            self.partnameSelected = partname
-            self.uiSelected = ui
-            self.iButtonSelected = iButtonSelected
+            self.tagSelected = tag                                          # hinge, angle_hi, angle_lo, center, radius1, radius2, radius_inner.
+            self.partnameSelected = partname                                # left, right, head, abdomen.
+            self.uiSelected = ui                                            # pushbutton, checkbox, handle.
+            self.iButtonSelected = iButtonSelected                          # Index of the button.
+            self.nameSelected = self.name_from_tagpartname(tag,partname)    # tag_partname.
             #rospy.logwarn((ui, tag, partname, iButtonSelected))
 
             if (self.iButtonSelected is not None):
