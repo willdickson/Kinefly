@@ -24,7 +24,6 @@ from Kinefly.srv import SrvWingdata, SrvWingdataResponse
 from Kinefly.msg import MsgFlystate, MsgWing, MsgBodypart, MsgAux, MsgCommand
 from Kinefly.cfg import kineflyConfig
 
-gOffsetHandle = 10 # How far from the point-of-interest we place some of the handles.
 gImageTime = 0.0
 
 
@@ -1933,7 +1932,7 @@ class Fly(object):
         self.stamp = rospy.Time(0)
         
 
-        self.pubFlystate = rospy.Publisher(self.nodename+'/flystate', MsgFlystate)
+        self.pubFlystate = rospy.Publisher(self.nodename.rstrip('/')+'/flystate', MsgFlystate)
  
 
     def set_params(self, params):
@@ -2535,7 +2534,7 @@ class MainWindow:
         self.cvbridge = CvBridge()
         
         # Load the parameters yaml file.
-        self.parameterfile = os.path.expanduser(rospy.get_param(self.nodename+'/parameterfile', '~/%s.yaml' % self.nodename))
+        self.parameterfile = os.path.expanduser(rospy.get_param(self.nodename.rstrip('/')+'/parameterfile', '~/%s.yaml' % self.nodename.strip('/')))
         with self.lockParams:
             try:
                 self.params = rosparam.load_file(self.parameterfile)[0][0]
@@ -2543,7 +2542,7 @@ class MainWindow:
                 rospy.logwarn('%s.  Using default values.' % e)
                 self.params = {}
             
-        defaults = {'filenameBackground':'~/%s.png' % self.nodename,
+        defaults = {'filenameBackground':'~/%s.png' % self.nodename.strip('/'),
                     'image_topic':'/camera/image_raw',
                     'use_gui':True,                     # You can turn off the GUI to speed the framerate.
                     'windows':True,                     # Show the helpful extra windows.
@@ -2604,28 +2603,31 @@ class MainWindow:
 
                     }
 
-        for p in sys.path:
-            rospy.logwarn(p)
         SetDict().set_dict_with_preserve(self.params, defaults)
         SetDict().set_dict_with_preserve(self.params, rospy.get_param(self.nodename, {}))
         self.params = self.legalizeParams(self.params)
         rospy.set_param(self.nodename, self.params)
+        
+        self.scale = self.params['scale_image']
+        self.bMousing = False
         
         # Create the fly.
         self.fly = Fly(self.params)
         
         # Background image.
         self.filenameBackground = os.path.expanduser(self.params['filenameBackground'])
-        imgFullBackground  = cv2.imread(self.filenameBackground, cv2.CV_LOAD_IMAGE_GRAYSCALE)
-        if (imgFullBackground is not None):
+        imgDisk  = cv2.imread(self.filenameBackground, cv2.CV_LOAD_IMAGE_GRAYSCALE)
+        if (imgDisk is not None):
+            if (self.scale == 1.0):              
+                imgFullBackground = imgDisk
+            else:  
+                imgFullBackground = cv2.resize(imgDisk, (0,0), fx=self.scale, fy=self.scale)
+             
             self.fly.set_background(imgFullBackground)
             self.bHaveBackground = True
         else:
             self.bHaveBackground = False
         
-        
-        self.scale = self.params['scale_image']
-        self.bMousing = False
         
         self.nameSelected = None
         self.uiSelected = None
@@ -2638,13 +2640,15 @@ class MainWindow:
         
         self.rosimage = [None,None]
         self.iImgWorking = 0  # Index of the image being processed.  Callback should write to the other image.
+        self.imgUnscaled = None
+        self.imgScaled = None
         
         # Publishers.
-        self.pubCommand            = rospy.Publisher(self.nodename+'/command', MsgCommand)
+        self.pubCommand            = rospy.Publisher(self.nodename.rstrip('/')+'/command', MsgCommand)
 
         # Subscriptions.        
         self.subImageRaw           = rospy.Subscriber(self.params['image_topic'], Image, self.image_callback, queue_size=1)
-        self.subCommand            = rospy.Subscriber(self.nodename+'/command', MsgCommand, self.command_callback, queue_size=1000)
+        self.subCommand            = rospy.Subscriber(self.nodename.rstrip('/')+'/command', MsgCommand, self.command_callback, queue_size=1000)
 
         self.h_gap = int(5 * self.scale)
         self.w_gap = int(10 * self.scale)
@@ -2793,7 +2797,7 @@ class MainWindow:
             
         
         if (self.command == 'help'):
-            rospy.logwarn('The %s/command topic accepts the following string commands:' % self.nodename)
+            rospy.logwarn('The %s/command topic accepts the following string commands:' % self.nodename.rstrip('/'))
             rospy.logwarn('  help                 This message.')
             rospy.logwarn('  save_background      Save the instant camera image to disk for')
             rospy.logwarn('                       background subtraction.')
@@ -2801,7 +2805,7 @@ class MainWindow:
             rospy.logwarn('  exit                 Exit the program.')
             rospy.logwarn('')
             rospy.logwarn('You can send the above commands at the shell prompt via:')
-            rospy.logwarn('rostopic pub -1 %s/command Kinefly/MsgCommand commandtext arg1' % self.nodename)
+            rospy.logwarn('rostopic pub -1 %s/command Kinefly/MsgCommand commandtext arg1' % self.nodename.rstrip('/'))
             rospy.logwarn('')
             rospy.logwarn('You may also set some parameters via ROS dynamic_reconfigure, all others')
             rospy.logwarn('are settable as launch-time parameters.')
@@ -2875,8 +2879,9 @@ class MainWindow:
                 img = np.zeros((320,240))
             
             # Scale the image.
+            self.imgUnscaled = img
             if (self.scale == 1.0):              
-                self.imgScaled = img
+                self.imgScaled = self.imgUnscaled
             else:  
                 self.imgScaled = cv2.resize(img, (0,0), fx=self.scale, fy=self.scale) 
 
@@ -3039,9 +3044,9 @@ class MainWindow:
     # Save the current camera image as the background.
     #
     def save_background(self):
-        self.fly.set_background(self.imgScaled[self.iImgWorking])
         rospy.logwarn ('Saving new background image %s' % self.filenameBackground)
-        cv2.imwrite(self.filenameBackground, self.imgScaled[self.iImgWorking])
+        cv2.imwrite(self.filenameBackground, self.imgUnscaled)
+        self.fly.set_background(self.imgScaled)
         self.bHaveBackground = True
     
     
