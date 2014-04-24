@@ -15,6 +15,8 @@ import sys
 import threading
 import dynamic_reconfigure.server
 
+from setdict import SetDict
+
 from cv_bridge import CvBridge, CvBridgeError
 from sensor_msgs.msg import Image
 from std_msgs.msg import Float32, Header, String
@@ -352,43 +354,6 @@ class Handle(object):
 # end class Handle
                 
 
-###############################################################################
-###############################################################################
-class SetDict(object):
-    # set_dict(self, dTarget, dSource, bPreserve)
-    # Takes a target dictionary, and enters values from the source dictionary, overwriting or not, as asked.
-    # For example,
-    #    dT={'a':1, 'b':2}
-    #    dS={'a':0, 'c':0}
-    #    Set(dT, dS, True)
-    #    dT is {'a':1, 'b':2, 'c':0}
-    #
-    #    dT={'a':1, 'b':2}
-    #    dS={'a':0, 'c':0}
-    #    Set(dT, dS, False)
-    #    dT is {'a':0, 'b':2, 'c':0}
-    #
-    def set_dict(self, dTarget, dSource, bPreserve):
-        for k,v in dSource.iteritems():
-            bKeyExists = (k in dTarget)
-            if (not bKeyExists) and type(v)==type({}):
-                dTarget[k] = {}
-            if ((not bKeyExists) or not bPreserve) and (type(v)!=type({})):
-                dTarget[k] = v
-                    
-            if type(v)==type({}):
-                self.set_dict(dTarget[k], v, bPreserve)
-    
-    
-    def set_dict_with_preserve(self, dTarget, dSource):
-        self.set_dict(dTarget, dSource, True)
-    
-    def set_dict_with_overwrite(self, dTarget, dSource):
-        self.set_dict(dTarget, dSource, False)
-
-# End class SetDict
-
-    
 ###############################################################################
 ###############################################################################
 class PolarTransforms(object):
@@ -1948,6 +1913,8 @@ class WingbeatDetector(object):
 ###############################################################################
 class Fly(object):
     def __init__(self, params={}):
+        self.nodename = rospy.get_name()
+        
         self.head    = BodySegment(name='head',    params=params, color='cyan',    bEqualizeHist=True) 
         self.abdomen = BodySegment(name='abdomen', params=params, color='magenta', bEqualizeHist=True) 
         self.right   = Wing(name='right',          params=params, color='red',     bEqualizeHist=False)
@@ -1966,7 +1933,7 @@ class Fly(object):
         self.stamp = rospy.Time(0)
         
 
-        self.pubFlystate = rospy.Publisher('kinefly/flystate', MsgFlystate)
+        self.pubFlystate = rospy.Publisher(self.nodename+'/flystate', MsgFlystate)
  
 
     def set_params(self, params):
@@ -2559,15 +2526,16 @@ class MainWindow:
         self.lockParams = threading.Lock()
         
         # initialize
-        rospy.init_node('kinefly', anonymous=True)
+        rospy.init_node('kinefly')
+        self.nodename = rospy.get_name()
         
         # initialize display
-        self.window_name = 'Kinefly'
+        self.window_name = self.nodename.strip('/')
         cv2.namedWindow(self.window_name,1)
         self.cvbridge = CvBridge()
         
         # Load the parameters yaml file.
-        self.parameterfile = os.path.expanduser(rospy.get_param('kinefly/parameterfile', '~/kinefly.yaml'))
+        self.parameterfile = os.path.expanduser(rospy.get_param(self.nodename+'/parameterfile', '~/%s.yaml' % self.nodename))
         with self.lockParams:
             try:
                 self.params = rosparam.load_file(self.parameterfile)[0][0]
@@ -2575,7 +2543,7 @@ class MainWindow:
                 rospy.logwarn('%s.  Using default values.' % e)
                 self.params = {}
             
-        defaults = {'filenameBackground':'~/kinefly.png',
+        defaults = {'filenameBackground':'~/%s.png' % self.nodename,
                     'image_topic':'/camera/image_raw',
                     'use_gui':True,                     # You can turn off the GUI to speed the framerate.
                     'windows':True,                     # Show the helpful extra windows.
@@ -2635,10 +2603,13 @@ class MainWindow:
                                'angle':0.0},
 
                     }
+
+        for p in sys.path:
+            rospy.logwarn(p)
         SetDict().set_dict_with_preserve(self.params, defaults)
-        SetDict().set_dict_with_preserve(self.params, rospy.get_param('kinefly', {}))
+        SetDict().set_dict_with_preserve(self.params, rospy.get_param(self.nodename, {}))
         self.params = self.legalizeParams(self.params)
-        rospy.set_param('kinefly', self.params)
+        rospy.set_param(self.nodename, self.params)
         
         # Create the fly.
         self.fly = Fly(self.params)
@@ -2669,11 +2640,11 @@ class MainWindow:
         self.iImgWorking = 0  # Index of the image being processed.  Callback should write to the other image.
         
         # Publishers.
-        self.pubCommand            = rospy.Publisher('kinefly/command', MsgCommand)
+        self.pubCommand            = rospy.Publisher(self.nodename+'/command', MsgCommand)
 
         # Subscriptions.        
         self.subImageRaw           = rospy.Subscriber(self.params['image_topic'], Image, self.image_callback, queue_size=1)
-        self.subCommand            = rospy.Subscriber('kinefly/command', MsgCommand, self.command_callback, queue_size=1000)
+        self.subCommand            = rospy.Subscriber(self.nodename+'/command', MsgCommand, self.command_callback, queue_size=1000)
 
         self.h_gap = int(5 * self.scale)
         self.w_gap = int(10 * self.scale)
@@ -2798,7 +2769,7 @@ class MainWindow:
         # Set it into the wings.
         self.fly.set_params(self.scale_params(self.params, self.scale))
         with self.lockParams:
-            rosparam.dump_params(self.parameterfile, 'kinefly')
+            rosparam.dump_params(self.parameterfile, self.nodename)
         
         return config
 
@@ -2822,7 +2793,7 @@ class MainWindow:
             
         
         if (self.command == 'help'):
-            rospy.logwarn('The kinefly/command topic accepts the following string commands:')
+            rospy.logwarn('The %s/command topic accepts the following string commands:' % self.nodename)
             rospy.logwarn('  help                 This message.')
             rospy.logwarn('  save_background      Save the instant camera image to disk for')
             rospy.logwarn('                       background subtraction.')
@@ -2830,7 +2801,7 @@ class MainWindow:
             rospy.logwarn('  exit                 Exit the program.')
             rospy.logwarn('')
             rospy.logwarn('You can send the above commands at the shell prompt via:')
-            rospy.logwarn('rostopic pub -1 kinefly/command Kinefly/MsgCommand commandtext arg1')
+            rospy.logwarn('rostopic pub -1 %s/command Kinefly/MsgCommand commandtext arg1' % self.nodename)
             rospy.logwarn('')
             rospy.logwarn('You may also set some parameters via ROS dynamic_reconfigure, all others')
             rospy.logwarn('are settable as launch-time parameters.')
@@ -3429,11 +3400,11 @@ class MainWindow:
                 self.fly.create_masks(self.shapeImage)
     
                 # Save the results.
-                SetDict().set_dict_with_preserve(self.params, rospy.get_param('kinefly'))
+                SetDict().set_dict_with_preserve(self.params, rospy.get_param(self.nodename, {}))
 
-                rospy.set_param('kinefly', self.params)
+                rospy.set_param(self.nodename, self.params)
                 with self.lockParams:
-                    rosparam.dump_params(self.parameterfile, 'kinefly')
+                    rosparam.dump_params(self.parameterfile, self.nodename)
 
             # Dump the params to the screen, for debugging.
 #             for k,v in self.params.iteritems():

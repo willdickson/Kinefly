@@ -11,6 +11,7 @@ from std_msgs.msg import Float32, Header, String
 
 from ledpanels.msg import MsgPanelsCommand
 from Kinefly.msg import MsgFlystate, MsgWing, MsgBodypart, MsgAux
+from setdict import SetDict
 
 
 ###############################################################################
@@ -61,7 +62,7 @@ class Kinefly2Ledpanels:
                              'yxi':0.0,
                              }
                          }
-        self.set_dict_with_preserve(self.params, self.defaults)
+        SetDict().set_dict_with_preserve(self.params, self.defaults)
         self.update_coefficients_from_params()
         rospy.set_param('kinefly/ledpanels', self.params)
         
@@ -142,7 +143,7 @@ class Kinefly2Ledpanels:
     def flystate_callback(self, flystate):
         if (self.bRunning):
             self.params = rospy.get_param('kinefly/ledpanels', {})
-            self.set_dict_with_preserve(self.params, self.defaults)
+            SetDict().set_dict_with_preserve(self.params, self.defaults)
             self.update_coefficients_from_params()
             
             if (self.params['method']=='usb'):
@@ -280,38 +281,6 @@ class Kinefly2Ledpanels:
 
     
         
-    # set_dict(self, dTarget, dSource, bPreserve)
-    # Takes a target dictionary, and enters values from the source dictionary, overwriting or not, as asked.
-    # For example,
-    #    dT={'a':1, 'b':2}
-    #    dS={'a':0, 'c':0}
-    #    Set(dT, dS, True)
-    #    dT is {'a':1, 'b':2, 'c':0}
-    #
-    #    dT={'a':1, 'b':2}
-    #    dS={'a':0, 'c':0}
-    #    Set(dT, dS, False)
-    #    dT is {'a':0, 'b':2, 'c':0}
-    #
-    def set_dict(self, dTarget, dSource, bPreserve):
-        for k,v in dSource.iteritems():
-            bKeyExists = (k in dTarget)
-            if (not bKeyExists) and type(v)==type({}):
-                dTarget[k] = {}
-            if ((not bKeyExists) or not bPreserve) and (type(v)!=type({})):
-                dTarget[k] = v
-                    
-            if type(v)==type({}):
-                self.set_dict(dTarget[k], v, bPreserve)
-    
-    
-    def set_dict_with_preserve(self, dTarget, dSource):
-        self.set_dict(dTarget, dSource, True)
-    
-    def set_dict_with_overwrite(self, dTarget, dSource):
-        self.set_dict(dTarget, dSource, False)
-
-
     def run(self):
         rospy.spin()
         self.pubPanelsCommand.publish(MsgPanelsCommand(command='all_off',   arg1=0, arg2=0, arg3=0, arg4=0, arg5=0, arg6=0))
