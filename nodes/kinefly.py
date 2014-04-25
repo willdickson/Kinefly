@@ -2241,10 +2241,10 @@ class BodySegment(PolarTrackedBodypart):
             (rShift, aShift) = self.phasecorr.get_shift(imgNow, self.imgComparison)
             
             # Convert polar pixel shifts to radians rotation & pixel expansion.
-            dAngleOffset = aShift * (self.params[self.name]['angle_hi']-self.params[self.name]['angle_lo']) / float(imgNow.shape[1])
-            dRadiusOffset = rShift
-            self.state.angle  = self.stateOrigin.angle  + dAngleOffset
-            self.state.radius = self.stateOrigin.radius + dRadiusOffset
+            angleOffset = aShift * (self.params[self.name]['angle_hi']-self.params[self.name]['angle_lo']) / float(imgNow.shape[1])
+            radiusOffset = rShift
+            self.state.angle  = self.stateOrigin.angle  + angleOffset
+            self.state.radius = self.stateOrigin.radius + radiusOffset
             
             # Get min,max's
             self.stateLo.angle  = min(self.stateLo.angle, self.state.angle)
@@ -2257,17 +2257,17 @@ class BodySegment(PolarTrackedBodypart):
             # take that image as the new comparison image.  Thus driving the comparison image 
             # toward the midpoint image over time.
             if (self.params[self.name]['autozero']) and (self.iCount>100):
-                # If angle and radius are near their mean values, then take a new initial image, and set the origin.
+                # If angle is closer than the mean of (hi,lo), then take a new initial image, and shift the (hi,lo)
                 refAngle = (self.stateHi.angle + self.stateLo.angle)/2.0
-                
-                if (refAngle < self.state.angle < 0) or (0 < self.state.angle < refAngle):
+
+                if (refAngle < self.state.angle < self.stateOrigin.angle) or (self.stateOrigin.angle < self.state.angle < refAngle):
                     self.imgComparison = imgNow
                     self.windowTest.set_image(self.imgComparison)
 
                     # Converge the origin to zero.
-                    self.stateLo.angle -= self.state.angle
-                    self.stateHi.angle -= self.state.angle
-                    self.state.angle = 0.0
+                    self.stateLo.angle -= angleOffset #-= (self.state.angle - self.stateOrigin.angle)
+                    self.stateHi.angle -= angleOffset #-= (self.state.angle - self.stateOrigin.angle)
+                    self.state.angle = self.stateOrigin.angle
                     
 
             # Stabilized image.
