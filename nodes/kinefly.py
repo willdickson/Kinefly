@@ -2219,6 +2219,8 @@ class BodySegment(PolarTrackedBodypart):
         self.stateOrigin.angle = self.angleOutward_b + (self.params[self.name]['angle_hi']+self.params[self.name]['angle_lo'])/2.0
         self.stateOrigin.radius = (self.params[self.name]['radius_outer']+self.params[self.name]['radius_inner'])/2.0
 
+        self.stateOrigin.angle = ((self.stateOrigin.angle + np.pi) % (2*np.pi)) - np.pi
+        
         self.state.intensity = 0.0
         self.state.angle = 0.0
         self.state.radius = 0.0
@@ -2250,6 +2252,8 @@ class BodySegment(PolarTrackedBodypart):
             radiusOffset = rShift
             self.state.angle  = self.stateOrigin.angle  + angleOffset
             self.state.radius = self.stateOrigin.radius + radiusOffset
+
+            self.state.angle = ((self.state.angle + np.pi) % (2*np.pi)) - np.pi
             
             # Get min,max's
             self.stateLo.angle  = min(self.stateLo.angle, self.state.angle)
