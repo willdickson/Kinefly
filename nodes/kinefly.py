@@ -757,14 +757,14 @@ class EdgeDetector(object):
         diffN[iZero] = 0.0
 
         # Find positive-going edges, and negative-going edges, alternately P & N.
-        iEdgesP = [] # Positive-going edges.
-        iEdgesN = [] # Negative-going edges.
+        edgesP = [] # Positive-going edges.
+        edgesN = [] # Negative-going edges.
         absP = []
         absN = []
         nCount = self.n_edges_max + (self.n_edges_max % 2) # Round up to the next multiple of 2 so that we look at both P and N diffs.
         q = 0 # Alternate between P & N:  0=P, 1=N
         diff_list = [diffP, diffN]
-        iEdges_list = [iEdgesP, iEdgesN] 
+        edges_list = [edgesP, edgesN] 
         abs_list = [absP, absN] 
         iCount = 0
         
@@ -775,7 +775,7 @@ class EdgeDetector(object):
             if (0.0 < np.max(diff_list[q])):
                 # Append the strongest edge to the list of edges.
                 iMax = np.argmax(diff_list[q])
-                iEdges_list[q].append(iMax)
+                edges_list[q].append(iMax)
                 abs_list[q].append(diff_list[q][iMax])
                 iCount += 1
                 
@@ -794,92 +794,106 @@ class EdgeDetector(object):
             q = (q+1) % 2 # Go to the other list.
 
 
-        #(iEdgesMajor, iEdgesMinor) = self.SortEdgesPairwise(iEdgesP, absP, iEdgesN, absN)
-        (iEdgesMajor, iEdgesMinor) = self.SortEdgesOneEdge(iEdgesP, absP, iEdgesN, absN)
+        #(edgesMajor, edgesMinor) = self.SortEdgesPairwise(edgesP, absP, edgesN, absN)
+        (edgesMajor, edgesMinor) = self.SortEdgesOneEdge(edgesP, absP, edgesN, absN)
 
-        return (iEdgesMajor, iEdgesMinor)
+        # Combine & sort the two lists by decreasing absolute gradient.
+        edges = copy.copy(edgesMajor)
+        edges.extend(edgesMinor)
+        if (len(edges)>0):
+            nedges = np.array(edges)
+            gradients = self.diff[nedges]
+            s = np.argsort(np.abs(gradients))
+            edges_sorted = nedges[s[::-1]]
+            gradients_sorted = gradients[s[::-1]]
+        else:
+            edges_sorted = []
+            gradients_sorted = []
+    
+        return (edges_sorted, gradients_sorted)
+        
            
     
     # SortEdgesOneEdge()
     # Make sure that if there's just one edge, that it's in the major list.
     #
-    def SortEdgesOneEdge(self, iEdgesP, absP, iEdgesN, absN):
+    def SortEdgesOneEdge(self, edgesP, absP, edgesN, absN):
         # If we have too many edges, then remove the weakest one.
-        lP = len(iEdgesP)
-        lN = len(iEdgesN)
+        lP = len(edgesP)
+        lN = len(edgesN)
         if (self.n_edges_max < lP+lN):
             if (0<lP) and (0<lN):
                 if (absP[-1] < absN[-1]):
-                    iEdgesP.pop()
+                    edgesP.pop()
                     absP.pop()
                 else:
-                    iEdgesN.pop()
+                    edgesN.pop()
                     absN.pop()
             elif (0<lP):
-                iEdgesP.pop()
+                edgesP.pop()
                 absP.pop()
             elif (0<lN):
-                iEdgesN.pop()
+                edgesN.pop()
                 absN.pop()
 
 
         # Sort the edges.            
-        if (len(iEdgesP)==0) and (len(iEdgesN)>0):
-            iEdgesMajor = iEdgesN
-            iEdgesMinor = iEdgesP
-        else:#if (len(iEdgesN)==0) and (len(iEdgesP)>0):
-            iEdgesMajor = iEdgesP
-            iEdgesMinor = iEdgesN
+        if (len(edgesP)==0) and (len(edgesN)>0):
+            edgesMajor = edgesN
+            edgesMinor = edgesP
+        else:#if (len(edgesN)==0) and (len(edgesP)>0):
+            edgesMajor = edgesP
+            edgesMinor = edgesN
         #else:
-        #    iEdgesMajor = iEdgesP
-        #    iEdgesMinor = iEdgesN
+        #    edgesMajor = edgesP
+        #    edgesMinor = edgesN
 
             
-        return (iEdgesMajor, iEdgesMinor)
+        return (edgesMajor, edgesMinor)
             
         
     # SortEdgesPairwise()
     # For each pair of (p,n) edges, the stronger edge of the pair is the major one.  
     #
-    def SortEdgesPairwise(self, iEdgesP, absP, iEdgesN, absN):
-        iEdgesMajor = []
-        iEdgesMinor = []
-        iEdges_list = [iEdgesMajor, iEdgesMinor]
+    def SortEdgesPairwise(self, edgesP, absP, edgesN, absN):
+        edgesMajor = []
+        edgesMinor = []
+        edges_list = [edgesMajor, edgesMinor]
         abs_list = [absP, absN]
         iCount = 0 
 
-        m = max(len(iEdgesP), len(iEdgesN))
+        m = max(len(edgesP), len(edgesN))
         for i in range(m):
-            (absP1,iEdgeP1) = (absP[i],iEdgesP[i]) if (i<len(iEdgesP)) else (0.0, 0)
-            (absN1,iEdgeN1) = (absN[i],iEdgesN[i]) if (i<len(iEdgesN)) else (0.0, 0)
+            (absP1,edgeP1) = (absP[i],edgesP[i]) if (i<len(edgesP)) else (0.0, 0)
+            (absN1,edgeN1) = (absN[i],edgesN[i]) if (i<len(edgesN)) else (0.0, 0)
             
             if (absP1 < absN1) and (iCount < self.n_edges_max):
-                iEdgesMajor.append(iEdgeN1)
+                edgesMajor.append(edgeN1)
                 iCount += 1
                 if (0.0 < absP1) and (iCount < self.n_edges_max):
-                    iEdgesMinor.append(iEdgeP1)
+                    edgesMinor.append(edgeP1)
                     iCount += 1
                     
             elif (iCount < self.n_edges_max):
-                iEdgesMajor.append(iEdgeP1)
+                edgesMajor.append(edgeP1)
                 iCount += 1
                 if (0.0 < absN1) and (iCount < self.n_edges_max):
-                    iEdgesMinor.append(iEdgeN1)
+                    edgesMinor.append(edgeN1)
                     iCount += 1
 
-        return (iEdgesMajor, iEdgesMinor)
+        return (edgesMajor, edgesMinor)
 
 
-    def SortEdgesMax(self, iEdgesP, absP, iEdgesN, absN):
+    def SortEdgesMax(self, edgesP, absP, edgesN, absN):
         # The P or N list with the 'stronger' edge is considered to be the "major" one.
         if (np.max(absN) < np.max(absP)):
-            iEdgesMajor = iEdgesP 
-            iEdgesMinor = iEdgesN
+            edgesMajor = edgesP 
+            edgesMinor = edgesN
         else:  
-            iEdgesMajor = iEdgesN 
-            iEdgesMinor = iEdgesP 
+            edgesMajor = edgesN 
+            edgesMinor = edgesP 
             
-        return (iEdgesMajor, iEdgesMinor)
+        return (edgesMajor, edgesMinor)
     
 # End class EdgeDetector
     
@@ -2078,17 +2092,17 @@ class Fly(object):
         flystate.header       = Header(seq=self.iCount, stamp=self.stamp, frame_id='Fly')
         if (self.params['left']['track']):
             flystate.left     = MsgWing(intensity=self.left.state.intensity, 
-                                        anglesMajor=self.left.state.anglesMajor, 
-                                        anglesMinor=self.left.state.anglesMinor)
+                                        angles=self.left.state.angles, 
+                                        gradients=self.left.state.gradients)
         else:
-            flystate.left     = MsgWing(intensity=0.0, anglesMajor=[], anglesMinor=[])
+            flystate.left     = MsgWing(intensity=0.0, angles=[], gradients=[])
             
         if (self.params['right']['track']):
             flystate.right    = MsgWing(intensity=self.right.state.intensity, 
-                                        anglesMajor=self.right.state.anglesMajor, 
-                                        anglesMinor=self.right.state.anglesMinor)
+                                        angles=self.right.state.angles, 
+                                        gradients=self.right.state.gradients)
         else:
-            flystate.right    = MsgWing(intensity=0.0, anglesMajor=[], anglesMinor=[])
+            flystate.right    = MsgWing(intensity=0.0, angles=[], gradients=[])
             
         if (self.params['head']['track']):
             flystate.head     = MsgBodypart(intensity=self.head.state.intensity,    
@@ -2403,8 +2417,8 @@ class Wing(PolarTrackedBodypart):
         self.imgRoiBackground = None
         self.iCount = 0
         self.state.intensity = 0.0
-        self.state.anglesMajor = []
-        self.state.anglesMinor = []
+        self.state.angles = []
+        self.state.gradients = []
 
         # Compute the 'handedness' of the head/abdomen and wing/wing axes.
         matAxes = np.array([[self.params['head']['hinge']['x']-self.params['abdomen']['hinge']['x'], self.params['head']['hinge']['y']-self.params['abdomen']['hinge']['y']],
@@ -2426,19 +2440,20 @@ class Wing(PolarTrackedBodypart):
         # Get the rotation & expansion between images.
         if (imgNow is not None):
             # Pixel position and strength of the edges.
-            (iEdgesMajor, iEdgesMinor) = self.edgedetector.get_edges2(imgNow)
+            (edges, gradients) = self.edgedetector.get_edges2(imgNow)
 
-            #rospy.logwarn((absEdge1, absEdge2))
             anglePerPixel = (self.params[self.name]['angle_hi']-self.params[self.name]['angle_lo']) / float(imgNow.shape[1])
 
-#            # Convert pixel to angle units, and put angle into the wing frame.
-            self.state.anglesMajor = []
-            self.state.anglesMinor = []
-            for (angles,iEdges) in [(self.state.anglesMajor,iEdgesMajor), (self.state.anglesMinor,iEdgesMinor)]:
-                for iEdge in iEdges:
-                    angle_imageframe = self.params[self.name]['angle_lo'] + iEdge * anglePerPixel
-                    angle_wingframe = ((angle_imageframe - (self.angleOutward_i-self.angleBody_i) + np.pi) % (2*np.pi) - np.pi) * self.sense 
-                    angles.append(angle_wingframe)
+            # Convert pixel to angle units, and put angle into the wing frame.
+            self.state.angles = []
+            self.state.gradients = []
+            for i in range(len(edges)):
+                edge = edges[i]
+                gradient = gradients[i]
+                angle_imageframe = self.params[self.name]['angle_lo'] + edge * anglePerPixel
+                angle_wingframe = ((angle_imageframe - (self.angleOutward_i-self.angleBody_i) + np.pi) % (2*np.pi) - np.pi) * self.sense 
+                self.state.angles.append(angle_wingframe)
+                self.state.gradients.append(gradient)
                 
 
             self.state.intensity = np.mean(imgNow)/255.0
@@ -2463,50 +2478,38 @@ class Wing(PolarTrackedBodypart):
         PolarTrackedBodypart.draw(self, image)
         
         if (self.params[self.name]['track']):
-            #nEdgesMax = min(self.params['n_edges_max'], len(self.state.anglesMajor)+len(self.state.anglesMinor))
-            nEdgesMax = len(self.state.anglesMajor) + len(self.state.anglesMinor)
-            
             # Draw the major and minor edges alternately, until the max number has been reached.
-            q = 0 # 0=major, 1=minor
-            index_list = [0, 0] # index of [major, minor] edge that we're on.
-            angles_list = [self.state.anglesMajor, self.state.anglesMinor]
-            bgra_list = [self.bgra, self.bgra_dim]
-            for i in range(nEdgesMax):
-                if (index_list[q] < len(angles_list[q])):
-                    angle = angles_list[q][index_list[q]]
-                    bgra = bgra_list[q]
-                    bgra_list[q] = tuple(0.25*np.array(bgra_list[q]))
-                    index_list[q] += 1
-                    
-                    angle1 =  self.sense*angle + (self.angleOutward_i-self.angleBody_i)
-                    angle1_i = self.transform_angle_i_from_b(angle1)
-    
-                    x0 = self.ptHinge_i[0] + self.params[self.name]['radius_inner'] * np.cos(angle1_i)
-                    y0 = self.ptHinge_i[1] + self.params[self.name]['radius_inner'] * np.sin(angle1_i)
-                    x1 = self.ptHinge_i[0] + self.params[self.name]['radius_outer'] * np.cos(angle1_i)
-                    y1 = self.ptHinge_i[1] + self.params[self.name]['radius_outer'] * np.sin(angle1_i)
-                    cv2.line(image, (int(x0),int(y0)), (int(x1),int(y1)), bgra, 1)
+            bgra = self.bgra
+            for i in range(len(self.state.angles)):
+                angle = self.state.angles[i]
                 
-                q = 1-q
-                
+                angle1 =  self.sense*angle + (self.angleOutward_i-self.angleBody_i)
+                angle1_i = self.transform_angle_i_from_b(angle1)
+
+                x0 = self.ptHinge_i[0] + self.params[self.name]['radius_inner'] * np.cos(angle1_i)
+                y0 = self.ptHinge_i[1] + self.params[self.name]['radius_inner'] * np.sin(angle1_i)
+                x1 = self.ptHinge_i[0] + self.params[self.name]['radius_outer'] * np.cos(angle1_i)
+                y1 = self.ptHinge_i[1] + self.params[self.name]['radius_outer'] * np.sin(angle1_i)
+                cv2.line(image, (int(x0),int(y0)), (int(x1),int(y1)), bgra, 1)
+                bgra = tuple(0.5*np.array(bgra))
                 
             self.windowTest.show()
         
         
     def serve_wingdata_callback(self, request):
-        angles = np.linspace(self.params[self.name]['angle_lo'], self.params[self.name]['angle_hi'], len(self.edgedetector.intensities))
+        abscissa = np.linspace(self.params[self.name]['angle_lo'], self.params[self.name]['angle_hi'], len(self.edgedetector.intensities))
         
             
-        anglesMajor = []
-        anglesMinor = []
-        for angle in self.state.anglesMajor:
+        angles = []
+        gradients = []
+        for i in range(len(self.state.angles)):
+            angle = self.state.angles[i]
+            gradient = self.state.gradients[i]
             angle_bodyframe = (((self.angleOutward_i - self.angleBody_i + self.sense*angle) + np.pi) % (2*np.pi)) - np.pi
-            anglesMajor.append(angle_bodyframe)
-        for angle in self.state.anglesMinor:
-            angle_bodyframe = (((self.angleOutward_i - self.angleBody_i + self.sense*angle) + np.pi) % (2*np.pi)) - np.pi
-            anglesMinor.append(angle_bodyframe)
+            angles.append(angle_bodyframe)
+            gradients.append(gradient)
 
-        return SrvWingdataResponse(angles, self.edgedetector.intensities, self.edgedetector.diff, anglesMajor, anglesMinor)
+        return SrvWingdataResponse(abscissa, self.edgedetector.intensities, self.edgedetector.diff, angles, gradients)
         
         
 # end class Wing
@@ -2836,8 +2839,8 @@ class MainWindow:
             paramsScaled[partname]['radius2'] = (paramsIn[partname]['radius2']*scale)  
             
         return paramsScaled  
-	
-	
+    
+    
     # Draw user-interface elements on the image.
     def draw_buttons(self, image):
         if (self.buttons is not None):
@@ -2968,8 +2971,8 @@ class MainWindow:
                     if (self.params['right']['track']):
                         # L+R
                         s = 'L+R:'
-                        if (len(self.fly.left.state.anglesMajor)>0) and (len(self.fly.right.state.anglesMajor)>0):
-                            leftplusright = self.fly.left.state.anglesMajor[0] + self.fly.right.state.anglesMajor[0]
+                        if (len(self.fly.left.state.angles)>0) and (len(self.fly.right.state.angles)>0):
+                            leftplusright = self.fly.left.state.angles[0] + self.fly.right.state.angles[0]
                             s += '% 7.4f' % leftplusright
                         cv2.putText(imgOutput, s, (x, y), self.fontface, self.scaleText, bgra_dict['blue'])
                         h_text = int(h * self.scale)
@@ -2978,8 +2981,8 @@ class MainWindow:
                             
                         # L-R
                         s = 'L-R:'
-                        if (len(self.fly.left.state.anglesMajor)>0) and (len(self.fly.right.state.anglesMajor)>0):
-                            leftminusright = self.fly.left.state.anglesMajor[0] - self.fly.right.state.anglesMajor[0]
+                        if (len(self.fly.left.state.angles)>0) and (len(self.fly.right.state.angles)>0):
+                            leftminusright = self.fly.left.state.angles[0] - self.fly.right.state.angles[0]
                             s += '% 7.4f' % leftminusright
                         cv2.putText(imgOutput, s, (x, y), self.fontface, self.scaleText, bgra_dict['blue'])
                         h_text = int(h * self.scale)
@@ -2987,20 +2990,20 @@ class MainWindow:
         
                         # Right
                         s = 'R:'
-                        if (len(self.fly.right.state.anglesMajor)>0):
-                            s += '% 7.4f' % self.fly.right.state.anglesMajor[0]
-                            #for i in range(1,len(self.fly.right.state.anglesMajor)):
-                            #    s += ', % 7.4f' % self.fly.right.state.anglesMajor[i]
+                        if (len(self.fly.right.state.angles)>0):
+                            s += '% 7.4f' % self.fly.right.state.angles[0]
+                            #for i in range(1,len(self.fly.right.state.angles)):
+                            #    s += ', % 7.4f' % self.fly.right.state.angles[i]
                         cv2.putText(imgOutput, s, (x, y), self.fontface, self.scaleText, self.fly.right.bgra)
                         h_text = int(h * self.scale)
                         y -= h_text+self.h_gap
             
                         # Left
                         s = 'L:'
-                        if (len(self.fly.left.state.anglesMajor)>0):
-                            s += '% 7.4f' % self.fly.left.state.anglesMajor[0]
-                            #for i in range(1,len(self.fly.left.state.anglesMajor)):
-                            #    s += ', % 7.4f' % self.fly.left.state.anglesMajor[i]
+                        if (len(self.fly.left.state.angles)>0):
+                            s += '% 7.4f' % self.fly.left.state.angles[0]
+                            #for i in range(1,len(self.fly.left.state.angles)):
+                            #    s += ', % 7.4f' % self.fly.left.state.angles[i]
                         cv2.putText(imgOutput, s, (x, y), self.fontface, self.scaleText, self.fly.left.bgra)
                         h_text = int(h * self.scale)
                         y -= h_text+self.h_gap

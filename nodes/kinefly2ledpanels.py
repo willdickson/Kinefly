@@ -170,10 +170,10 @@ class Kinefly2Ledpanels:
     # Return a message to set the panels position.
     #
     def create_msgpanels_pos(self, flystate):
-        leftMajor = flystate.left.anglesMajor[0] if (0<len(flystate.left.anglesMajor)) else 0.0
-        leftMinor = flystate.left.anglesMinor[0] if (0<len(flystate.left.anglesMinor)) else 0.0
-        rightMajor = flystate.right.anglesMajor[0] if (0<len(flystate.right.anglesMajor)) else 0.0
-        rightMinor = flystate.right.anglesMinor[0] if (0<len(flystate.right.anglesMinor)) else 0.0
+        leftMajor = flystate.left.angles[0] if (0<len(flystate.left.angles)) else 0.0
+        leftMinor = flystate.left.angles[1] if (1<len(flystate.left.angles)) else 0.0
+        rightMajor = flystate.right.angles[0] if (0<len(flystate.right.angles)) else 0.0
+        rightMinor = flystate.right.angles[1] if (1<len(flystate.right.angles)) else 0.0
 
         state = np.array([1.0,
                           leftMajor,
@@ -208,10 +208,10 @@ class Kinefly2Ledpanels:
     # Return a message to set the panels velocity.
     #
     def create_msgpanels_vel(self, flystate):
-        leftMajor = flystate.left.anglesMajor[0] if (0<len(flystate.left.anglesMajor)) else 0.0
-        leftMinor = flystate.left.anglesMinor[0] if (0<len(flystate.left.anglesMinor)) else 0.0
-        rightMajor = flystate.right.anglesMajor[0] if (0<len(flystate.right.anglesMajor)) else 0.0
-        rightMinor = flystate.right.anglesMinor[0] if (0<len(flystate.right.anglesMinor)) else 0.0
+        leftMajor = flystate.left.angles[0] if (0<len(flystate.left.angles)) else 0.0
+        leftMinor = flystate.left.angles[1] if (1<len(flystate.left.angles)) else 0.0
+        rightMajor = flystate.right.angles[0] if (0<len(flystate.right.angles)) else 0.0
+        rightMinor = flystate.right.angles[1] if (1<len(flystate.right.angles)) else 0.0
 
         state = np.array([1.0,
                           leftMajor,

@@ -65,29 +65,29 @@ The output is published on the ROS topic '/kinefly/flystate', and can be retriev
 An example of the flystate output is shown here:
 ---
 header: 
-  seq: 150
+  seq: 991
   stamp: 
-    secs: 1397605659
-    nsecs: 152694940
+    secs: 1393885520
+    nsecs: 413213015
   frame_id: Fly
 head: 
-  radius: 59.8374752679
-  angle: -0.00591256314513
-  intensity: 0.815291098945
+  radius: 64.9430624431
+  angle: 0.250776147731
+  intensity: 0.275137867647
 abdomen: 
-  radius: 0.0
-  angle: 0.0
-  intensity: 0.0
+  radius: 110.002246519
+  angle: -0.476379218582
+  intensity: 0.569197468259
 left: 
-  anglesMajor: [-1.3870444530186634, -0.8856356116626198]
-  anglesMinor: [-1.3545457318196608]
-  intensity: 0.708161842024
+  angles: [0.8632710420690213, 0.5690290470545278]
+  gradients: [-0.007189512252807617, 0.00013071298599243164]
+  intensity: 0.799198674904
 right: 
-  anglesMajor: [-1.2988336383356556]
-  anglesMinor: [-1.2709775915936534, -1.4798979421586713]
-  intensity: 0.607313199728
+  angles: [0.6320809031290628, 1.1680216797626044]
+  gradients: [0.011241793632507324, -0.004967331886291504]
+  intensity: 0.585692989525
 aux: 
-  intensity: 0.0
+  intensity: 0.672299563885
   freq: 0.0
  
 
@@ -96,6 +96,7 @@ Units
 Angle units are radians.  
 Radius units are pixels.  
 Intensity is on the range [0,1], where 0.0 equals all pixels black, and 1.0 equals all pixels white.  The main window shows intensity units in parentheses, ().
+Gradient is a pixel intensity change per unit angle, and is used for edge classification.  The units are essentially arbitrary.
 
 Each bodypart (head, abdomen, and wings) has its own angle origin, which in general terms is outward from the body center.  The zero angle for the head is directly opposite from the abdomen, and the zero of the abdomen angle is directly opposite from the head.  The zero for each wing is directly opposite from the other wing hinge.  In other words, imagine a line connecting the head and abdomen hinges, and a line connecting each wing hinge.  The zero angles are outward along those lines, and the range of each angle is on the range [-pi,+pi].
 
@@ -117,7 +118,7 @@ Background subtraction is performed only for the wings and aux region, not for t
 
 Wing Edges:
 ---------------------------
-We find multiple edge angles per wing (so you can track legs etc too, if desired), the number being specified via parameter 'n_edges_max'.  The edges are in two lists, one each for rising and falling intensity levels, however if there is only one edge it will be in the 'anglesMajor' list.  The edges are found by looking at the intensity gradient across the wingstroke, and each list is sorted in descending order of gradient.
+We find multiple edge angles per wing (so you can track legs etc too, if desired), the number being specified via parameter 'n_edges_max'.  The edge angles are in one list, and their corresponding intensity gradients are in another.  The edges are found by looking at the intensity gradient across the wingstroke, and each list is sorted in descending order of absolute gradient.
 
 The parameter 'threshold' can be used to reduce false detections when no edge is present, and will typically be a low value such as 0.02.  It is set independently for each wing.  You may run the program in plot_wingdata.py for help finding a good value to use, for example:
 $ rosrun Kinefly plot_wingdata.py     

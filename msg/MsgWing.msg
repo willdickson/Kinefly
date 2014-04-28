@@ -1,3 +1,3 @@
-float64[] anglesMajor
-float64[] anglesMinor
+float64[] angles
+float64[] gradients
 float64 intensity
