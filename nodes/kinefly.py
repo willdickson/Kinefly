@@ -2387,7 +2387,6 @@ class Wing(PolarTrackedBodypart):
         self.name           = name
         self.edgedetector   = EdgeDetector()
         self.state          = Struct()
-        self.bFlying        = False
         self.windowTest     = ImageWindow(False, self.name+'Edge')
         self.set_params(params)
 
@@ -2445,15 +2444,6 @@ class Wing(PolarTrackedBodypart):
             self.state.intensity = np.mean(imgNow)/255.0
 
         
-    # update_flight_status()
-    # Determine if the fly is flying.  This implementation doesn't work very well.
-    def update_flight_status(self):
-        if (self.state.intensity > self.params['threshold_intensity_flight']):
-            self.bFlying = True
-        else:
-            self.bFlying = False
-    
-    
     # update()
     # Update all the internals given a foreground camera image.
     #
@@ -2462,7 +2452,6 @@ class Wing(PolarTrackedBodypart):
 
         if (self.params[self.name]['track']):
             self.update_state()
-            self.update_flight_status()
             
             
     
@@ -2560,7 +2549,6 @@ class MainWindow:
                     'use_gui':True,                     # You can turn off the GUI to speed the framerate.
                     'windows':True,                     # Show the helpful extra windows.
                     'symmetric':True,                   # Forces the UI to remain symmetric.
-                    'threshold_intensity_flight':0.5,   # Amount of pixel intensity that counts as flying.  Intensity ranges on interval [0,1].
                     'scale_image':1.0,                  # Reducing the image scale will speed the framerate.
                     'n_edges_max':1,                    # Max number of edges per wing to find, subject to threshold.
                     'rc_background':1000.0,             # Time constant of the moving average background.
@@ -2798,6 +2786,12 @@ class MainWindow:
         self.command = msg.command
         
         if (self.command == 'exit'):
+            # Save the params.
+            SetDict().set_dict_with_preserve(self.params, rospy.get_param(self.nodename, {}))
+            rospy.set_param(self.nodename, self.params)
+            with self.lockParams:
+                rosparam.dump_params(self.parameterfile, self.nodename)
+
             rospy.signal_shutdown('User requested exit.')
         
         
@@ -2972,16 +2966,6 @@ class MainWindow:
     
                     # Output the wings state.
                     if (self.params['right']['track']):
-                        # Flight status
-                        #if (self.fly.left.bFlying and self.fly.right.bFlying):
-                        #    s = 'Flying: (%0.3f)' % np.mean([self.fly.left.state.intensity,self.fly.right.state.intensity]) 
-                        #else:
-                        #    s = 'Not flying: (%0.3f)' % np.mean([self.fly.left.state.intensity,self.fly.right.state.intensity]) 
-                       # 
-                       # cv2.putText(imgOutput, s, (x, y), self.fontface, self.scaleText, bgra_dict['blue'])
-                       # h_text = int(h * self.scale)
-                       # y -= h_text+self.h_gap
-                
                         # L+R
                         s = 'L+R:'
                         if (len(self.fly.left.state.anglesMajor)>0) and (len(self.fly.right.state.anglesMajor)>0):
