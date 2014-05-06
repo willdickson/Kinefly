@@ -1,6 +1,6 @@
-Header      header
-MsgBodypart head
-MsgBodypart abdomen
-MsgWing     left
-MsgWing     right
-MsgAux      aux
+Header    header
+MsgState  head
+MsgState  abdomen
+MsgState  left
+MsgState  right
+MsgState  aux

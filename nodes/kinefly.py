@@ -21,8 +21,15 @@ from cv_bridge import CvBridge, CvBridgeError
 from sensor_msgs.msg import Image
 from std_msgs.msg import Float32, Header, String
 from Kinefly.srv import SrvWingdata, SrvWingdataResponse
-from Kinefly.msg import MsgFlystate, MsgWing, MsgBodypart, MsgAux, MsgCommand
+from Kinefly.msg import MsgFlystate, MsgState, MsgCommand
 from Kinefly.cfg import kineflyConfig
+
+# Define button sides for drawing.
+SIDE_TOP = 1
+SIDE_BOTTOM = 2
+SIDE_LEFT = 4
+SIDE_RIGHT = 8
+SIDE_ALL = (SIDE_TOP | SIDE_BOTTOM | SIDE_LEFT | SIDE_RIGHT)
 
 gImageTime = 0.0
 
@@ -170,23 +177,39 @@ class ImageWindow(object):
 ###############################################################################
 ###############################################################################
 class Button(object):
-    def __init__(self, name=None, text=None, pt=None, rect=None, scale=1.0, type='pushbutton', state=False):
+    def __init__(self, name=None, text=None, pt=None, rect=None, scale=1.0, type='pushbutton', state=False, sides=SIDE_ALL):
         self.name = name
         self.pt = pt
         self.rect = rect
         self.scale = scale
         self.type = type            # 'pushbutton' or 'checkbox'
         self.state = state
+        self.sides = sides
+        
         self.widthCheckbox = 10*self.scale
         self.set_text(text)
         
-        self.colorWhite = cv.Scalar(255,255,255,0)
-        self.colorBlack = cv.Scalar(0,0,0,0)
-        self.colorFace = cv.Scalar(128,128,128,0)
-        self.colorLightFace = cv.Scalar(192,192,192,0)
-        self.colorHilight = cv.Scalar(192,192,192,0)
-        self.colorLolight = cv.Scalar(64,64,64,0)
-        self.colorText = cv.Scalar(255,255,255,0)
+        # Set the colors of the button types that don't change based on their state.
+        if (self.type=='pushbutton'):
+            self.colorFill = bgra_dict['gray']
+            self.colorText = bgra_dict['white']
+            self.colorCheck = bgra_dict['black']
+        if (self.type=='checkbox'):
+            self.colorOuter = bgra_dict['white']
+            self.colorInner = bgra_dict['black']
+            self.colorHilight = bgra_dict['light_gray']
+            self.colorLolight = bgra_dict['light_gray']
+            self.colorFill = bgra_dict['light_gray']
+            self.colorText = bgra_dict['white']
+            self.colorCheck = bgra_dict['black']
+        elif (self.type=='static'):
+            self.colorOuter = bgra_dict['white']
+            self.colorInner = bgra_dict['black']
+            self.colorHilight = bgra_dict['light_gray']
+            self.colorLolight = bgra_dict['light_gray']
+            self.colorFill = bgra_dict['light_gray']
+            self.colorText = bgra_dict['white']
+            self.colorCheck = bgra_dict['black']
 
 
     # hit_test()
@@ -208,53 +231,70 @@ class Button(object):
         elif (pt is not None):
             self.pt = pt
             self.rect = [0,0,0,0]
-            if (self.type=='pushbutton'):
-                self.rect[0] = self.pt[0]
-                self.rect[1] = self.pt[1]
-                self.rect[2] = self.sizeText[0] + 6
-                self.rect[3] = self.sizeText[1] + 6
-            elif (self.type=='checkbox'):
-                self.rect[0] = self.pt[0]
-                self.rect[1] = self.pt[1]
-                self.rect[2] = int(self.sizeText[0] + 6 + self.widthCheckbox + 4)
-                self.rect[3] = self.sizeText[1] + 6
+            self.rect[0] = self.pt[0]
+            self.rect[1] = self.pt[1]
+            self.rect[2] = self.sizeText[0] + 6
+            self.rect[3] = self.sizeText[1] + 6
+            if (self.type=='checkbox'):
+                self.rect[2] += int(self.widthCheckbox + 4)
+                
         
-            # Get the locations of the various button pieces.        
-            self.ptLT = (self.rect[0],                 self.rect[1])
-            self.ptRT = (self.rect[0]+self.rect[2],    self.rect[1])
-            self.ptLB = (self.rect[0],                 self.rect[1]+self.rect[3])
-            self.ptRB = (self.rect[0]+self.rect[2],    self.rect[1]+self.rect[3])
-    
+            # Position adjustments for missing sides.
+            (l,r,t,b) = (0,0,0,0)
+            if (self.sides & SIDE_LEFT)==0:
+                l = -1
+            if (self.sides & SIDE_RIGHT)==0:
+                r = 1
+            if (self.sides & SIDE_TOP)==0:
+                t = -1
+            if (self.sides & SIDE_BOTTOM)==0:
+                b = 1
+
+
+            # Set the locations of the various button pieces.        
+            
+            # The colorOuter lines.
             self.ptLT0 = (self.rect[0]-1,              self.rect[1]-1)
             self.ptRT0 = (self.rect[0]+self.rect[2]+1, self.rect[1]-1)
             self.ptLB0 = (self.rect[0]-1,              self.rect[1]+self.rect[3]+1)
             self.ptRB0 = (self.rect[0]+self.rect[2]+1, self.rect[1]+self.rect[3]+1)
     
-            self.ptLT1 = (self.rect[0]+1,              self.rect[1]+1)
-            self.ptRT1 = (self.rect[0]+self.rect[2]-1, self.rect[1]+1)
-            self.ptLB1 = (self.rect[0]+1,              self.rect[1]+self.rect[3]-1)
-            self.ptRB1 = (self.rect[0]+self.rect[2]-1, self.rect[1]+self.rect[3]-1)
+            # The colorInner lines.
+            self.ptLT1 = (self.rect[0]+l,                 self.rect[1]+t)
+            self.ptRT1 = (self.rect[0]+self.rect[2]+r,    self.rect[1]+t)
+            self.ptLB1 = (self.rect[0]+l,                 self.rect[1]+self.rect[3]+b)
+            self.ptRB1 = (self.rect[0]+self.rect[2]+r,    self.rect[1]+self.rect[3]+b)
     
-            self.ptLT2 = (self.rect[0]+2,              self.rect[1]+2)
-            self.ptRT2 = (self.rect[0]+self.rect[2]-2, self.rect[1]+2)
-            self.ptLB2 = (self.rect[0]+2,              self.rect[1]+self.rect[3]-2)
-            self.ptRB2 = (self.rect[0]+self.rect[2]-2, self.rect[1]+self.rect[3]-2)
+            # The colorLolight & colorHilight lines.
+            self.ptLT2 = (self.rect[0]+1+2*l,              self.rect[1]+1+2*t)
+            self.ptRT2 = (self.rect[0]+self.rect[2]-1+2*r, self.rect[1]+1+2*t)
+            self.ptLB2 = (self.rect[0]+1+2*l,              self.rect[1]+self.rect[3]-1+2*b)
+            self.ptRB2 = (self.rect[0]+self.rect[2]-1+2*r, self.rect[1]+self.rect[3]-1+2*b)
+    
+            # Fill color.
+            self.ptLT3 = (self.rect[0]+2+3*l,              self.rect[1]+2+3*t)
+            self.ptRT3 = (self.rect[0]+self.rect[2]-2+3*r, self.rect[1]+2+3*t)
+            self.ptLB3 = (self.rect[0]+2+3*l,              self.rect[1]+self.rect[3]-2+3*b)
+            self.ptRB3 = (self.rect[0]+self.rect[2]-2+3*r, self.rect[1]+self.rect[3]-2+3*b)
+
     
             self.left   = self.ptLT0[0]
             self.top    = self.ptLT0[1]
             self.right  = self.ptRB0[0]
             self.bottom = self.ptRB0[1]
             
-            if (self.type=='pushbutton'):
-                self.ptCenter = (int(self.rect[0]+self.rect[2]/2),                       int(self.rect[1]+self.rect[3]/2))
+            if (self.type=='pushbutton') or (self.type=='static'):
+                self.ptCenter = (int(self.rect[0]+self.rect[2]/2),                          int(self.rect[1]+self.rect[3]/2))
                 self.ptText = (self.ptCenter[0] - int(self.sizeText[0]/2) - 1, 
                                self.ptCenter[1] + int(self.sizeText[1]/2) - 1)
             elif (self.type=='checkbox'):
                 self.ptCenter = (int(self.rect[0]+self.rect[2]/2+(self.widthCheckbox+4)/2), int(self.rect[1]+self.rect[3]/2))
                 self.ptText = (self.ptCenter[0] - int(self.sizeText[0]/2) - 1 + 2, 
                                self.ptCenter[1] + int(self.sizeText[1]/2) - 1)
+
+            self.ptText0 = (self.ptText[0], self.ptText[1])
                 
-            self.ptCheckCenter = (int(self.ptLT2[0] + 2 + self.widthCheckbox/2), self.ptCenter[1])
+            self.ptCheckCenter = (int(self.ptLT3[0] + 2 + self.widthCheckbox/2), self.ptCenter[1])
             self.ptCheckLT     = (int(self.ptCheckCenter[0]-self.widthCheckbox/2), int(self.ptCheckCenter[1]-self.widthCheckbox/2))
             self.ptCheckRT     = (int(self.ptCheckCenter[0]+self.widthCheckbox/2), int(self.ptCheckCenter[1]-self.widthCheckbox/2))
             self.ptCheckLB     = (int(self.ptCheckCenter[0]-self.widthCheckbox/2), int(self.ptCheckCenter[1]+self.widthCheckbox/2))
@@ -279,49 +319,52 @@ class Button(object):
     # Draw a 3D shaded button with text.
     # rect is (left, top, width, height), increasing y goes down.
     def draw(self, image):
+        # Pushbutton colors change depending on state.
         if (self.type=='pushbutton'):
             if (not self.state): # 'up'
-                colorOuter = self.colorWhite
-                colorInner = self.colorBlack
-                colorHilight = self.colorHilight
-                colorLolight = self.colorLolight
-                colorFill = self.colorFace
-                colorText = self.colorText
-                colorCheck = self.colorBlack
-                ptText0 = (self.ptText[0], self.ptText[1])
+                self.colorOuter = bgra_dict['white']
+                self.colorInner = bgra_dict['black']
+                self.colorHilight = bgra_dict['light_gray']
+                self.colorLolight = bgra_dict['dark_gray']
+                self.ptText0 = (self.ptText[0], self.ptText[1])
             else:
-                colorOuter = self.colorWhite
-                colorInner = self.colorBlack
-                colorHilight = self.colorLolight
-                colorLolight = self.colorHilight
-                colorFill = self.colorFace
-                colorText = self.colorText
-                colorCheck = self.colorBlack
-                ptText0 = (self.ptText[0]+2, self.ptText[1]+2)
-        elif (self.type=='checkbox'):
-            colorOuter = self.colorWhite
-            colorInner = self.colorBlack
-            colorHilight = self.colorLightFace
-            colorLolight = self.colorLightFace
-            colorFill = self.colorLightFace
-            colorText = self.colorText
-            colorCheck = self.colorBlack
-            ptText0 = (self.ptText[0], self.ptText[1])
+                self.colorOuter = bgra_dict['white']
+                self.colorInner = bgra_dict['black']
+                self.colorHilight = bgra_dict['dark_gray']
+                self.colorLolight = bgra_dict['light_gray']
+                self.ptText0 = (self.ptText[0]+2, self.ptText[1]+2)
             
-        cv2.rectangle(image, self.ptLT0, self.ptRB0, colorOuter, 1)
-        cv2.rectangle(image, self.ptLT, self.ptRB, colorInner, 1)
-        cv2.line(image, self.ptRT1, self.ptRB1, colorLolight)
-        cv2.line(image, self.ptLB1, self.ptRB1, colorLolight)
-        cv2.line(image, self.ptLT1, self.ptRT1, colorHilight)
-        cv2.line(image, self.ptLT1, self.ptLB1, colorHilight)
-        cv2.rectangle(image, self.ptLT2, self.ptRB2, colorFill, cv.CV_FILLED)
-        if (self.type=='checkbox'):
-            cv2.rectangle(image, self.ptCheckLT, self.ptCheckRB, colorCheck, 1)
-            if (self.state): # 'down'
-                cv2.line(image, self.ptCheckLT, self.ptCheckRB, colorCheck)
-                cv2.line(image, self.ptCheckRT, self.ptCheckLB, colorCheck)
 
-        cv2.putText(image, self.text, ptText0, cv2.FONT_HERSHEY_SIMPLEX, 0.4*self.scale, colorText)
+        # Draw outer, inner, hilights & lolights.
+        if (self.sides & SIDE_LEFT):
+            cv2.line(image, self.ptLT0, self.ptLB0, self.colorOuter)
+            cv2.line(image, self.ptLT1, self.ptLB1,  self.colorInner)
+            cv2.line(image, self.ptLT2, self.ptLB2, self.colorHilight)
+        if (self.sides & SIDE_TOP):
+            cv2.line(image, self.ptLT0, self.ptRT0, self.colorOuter)
+            cv2.line(image, self.ptLT1, self.ptRT1,  self.colorInner)
+            cv2.line(image, self.ptLT2, self.ptRT2, self.colorHilight)
+        if (self.sides & SIDE_RIGHT):
+            cv2.line(image, self.ptRT0, self.ptRB0, self.colorOuter)
+            cv2.line(image, self.ptRT1, self.ptRB1,  self.colorInner)
+            cv2.line(image, self.ptRT2, self.ptRB2, self.colorLolight)
+        if (self.sides & SIDE_BOTTOM):
+            cv2.line(image, self.ptLB0, self.ptRB0, self.colorOuter)
+            cv2.line(image, self.ptLB1, self.ptRB1,  self.colorInner)
+            cv2.line(image, self.ptLB2, self.ptRB2, self.colorLolight)
+
+        # Draw the fill.
+        cv2.rectangle(image, self.ptLT3, self.ptRB3, self.colorFill, cv.CV_FILLED)
+        
+        # Draw the checkbox.
+        if (self.type=='checkbox'):
+            cv2.rectangle(image, self.ptCheckLT, self.ptCheckRB, self.colorCheck, 1)
+            if (self.state): # 'down'
+                cv2.line(image, self.ptCheckLT, self.ptCheckRB, self.colorCheck)
+                cv2.line(image, self.ptCheckRT, self.ptCheckLB, self.colorCheck)
+
+        # Draw the text.
+        cv2.putText(image, self.text, self.ptText0, cv2.FONT_HERSHEY_SIMPLEX, 0.4*self.scale, self.colorText)
         
 # end class Button                
     
@@ -1935,10 +1978,10 @@ class Fly(object):
     def __init__(self, params={}):
         self.nodename = rospy.get_name()
         
-        self.head    = BodySegment(name='head',    params=params, color='cyan',    bEqualizeHist=True) 
-        self.abdomen = BodySegment(name='abdomen', params=params, color='magenta', bEqualizeHist=True) 
-        self.right   = Wing(name='right',          params=params, color='red',     bEqualizeHist=False)
-        self.left    = Wing(name='left',           params=params, color='green',   bEqualizeHist=False)
+        self.head    = AreaTracker(name='head',    params=params, color='cyan',    bEqualizeHist=True) 
+        self.abdomen = AreaTracker(name='abdomen', params=params, color='magenta', bEqualizeHist=True) 
+        self.right   = EdgeTracker(name='right',   params=params, color='red',     bEqualizeHist=False)
+        self.left    = EdgeTracker(name='left',    params=params, color='green',   bEqualizeHist=False)
         self.aux     = Aux(name='aux',             params=params, color='yellow',  bEqualizeHist=False)
 
         self.windowInvertColorArea      = ImageWindow(False, 'InvertColorArea')
@@ -2091,39 +2134,29 @@ class Fly(object):
         flystate              = MsgFlystate()
         flystate.header       = Header(seq=self.iCount, stamp=self.stamp, frame_id='Fly')
         if (self.params['left']['track']):
-            flystate.left     = MsgWing(intensity=self.left.state.intensity, 
-                                        angles=self.left.state.angles, 
-                                        gradients=self.left.state.gradients)
+            flystate.left     = self.left.state
         else:
-            flystate.left     = MsgWing(intensity=0.0, angles=[], gradients=[])
+            flystate.left     = MsgState()
             
         if (self.params['right']['track']):
-            flystate.right    = MsgWing(intensity=self.right.state.intensity, 
-                                        angles=self.right.state.angles, 
-                                        gradients=self.right.state.gradients)
+            flystate.right    = self.right.state
         else:
-            flystate.right    = MsgWing(intensity=0.0, angles=[], gradients=[])
+            flystate.right    = MsgState()
             
         if (self.params['head']['track']):
-            flystate.head     = MsgBodypart(intensity=self.head.state.intensity,    
-                                            radius=self.head.state.radius,    
-                                            angle=self.head.state.angle)
+            flystate.head     = self.head.state
         else:
-            flystate.head     = MsgBodypart(intensity=0.0, angle=0.0, radius=0.0)
+            flystate.head     = MsgState()
 
         if (self.params['abdomen']['track']):
-            flystate.abdomen  = MsgBodypart(intensity=self.abdomen.state.intensity, 
-                                            radius=self.abdomen.state.radius, 
-                                            angle=self.abdomen.state.angle)
+            flystate.abdomen  = self.abdomen.state
         else:
-            flystate.abdomen  = MsgBodypart(intensity=0.0, angle=0.0, radius=0.0)
+            flystate.abdomen  = MsgState()
 
         if (self.params['aux']['track']):
-            flystate.aux  = MsgAux(intensity=self.aux.state.intensity,
-                                   freq=self.aux.state.freq)
+            flystate.aux      = self.aux.state
         else:
-            flystate.aux  = MsgAux(intensity=0.0,
-                                   freq=0.0)
+            flystate.aux      = MsgState()
 
 
         self.iCount += 1
@@ -2142,7 +2175,7 @@ class Aux(IntensityTrackedBodypart):
     def __init__(self, name=None, params={}, color='white', bEqualizeHist=False):
         IntensityTrackedBodypart.__init__(self, name, params, color, bEqualizeHist)
         
-        self.state = Struct()
+        self.state = MsgState()
         self.state.intensity = 0.0
         self.state.freq = 0.0
         
@@ -2200,17 +2233,21 @@ class Aux(IntensityTrackedBodypart):
 
 ###############################################################################
 ###############################################################################
-# Head or Abdomen.
-class BodySegment(PolarTrackedBodypart):
+# AreaTracker()
+# Track a bodypart using the image correlation technique.  i.e. track the
+# motion based on the movement of the pixels in the area of the image.
+# Usually used for Head or Abdomen.
+#
+class AreaTracker(PolarTrackedBodypart):
     def __init__(self, name=None, params={}, color='white', bEqualizeHist=False):
         PolarTrackedBodypart.__init__(self, name, params, color, bEqualizeHist)
         
         self.phasecorr         = PhaseCorrelation()
-        self.state             = Struct()
-        self.stateOrigin       = Struct()
-        self.stateOriginOffset = Struct()
-        self.stateLo           = Struct()
-        self.stateHi           = Struct()
+        self.state             = MsgState()
+        self.stateOrigin       = MsgState()
+        self.stateOriginOffset = MsgState()
+        self.stateLo           = MsgState()
+        self.stateHi           = MsgState()
         
         self.windowStabilized = ImageWindow(False, self.name+'Stable')
         self.windowTest       = ImageWindow(False, self.name+'Test')
@@ -2230,22 +2267,22 @@ class BodySegment(PolarTrackedBodypart):
         self.iCount = 0
 
         self.stateOrigin.intensity = 0.0
-        self.stateOrigin.angle = self.angleOutward_b + (self.params[self.name]['angle_hi']+self.params[self.name]['angle_lo'])/2.0
-        self.stateOrigin.radius = (self.params[self.name]['radius_outer']+self.params[self.name]['radius_inner'])/2.0
+        self.stateOrigin.angles    = [self.angleOutward_b + (self.params[self.name]['angle_hi']+self.params[self.name]['angle_lo'])/2.0]
+        self.stateOrigin.angles[0] = ((self.stateOrigin.angles[0] + np.pi) % (2*np.pi)) - np.pi
+        self.stateOrigin.radii     = [(self.params[self.name]['radius_outer']+self.params[self.name]['radius_inner'])/2.0]
 
-        self.stateOrigin.angle = ((self.stateOrigin.angle + np.pi) % (2*np.pi)) - np.pi
         
         self.state.intensity = 0.0
-        self.state.angle = 0.0
-        self.state.radius = 0.0
+        self.state.angles    = [0.0]
+        self.state.radii     = [0.0]
 
         self.stateLo.intensity = np.inf
-        self.stateLo.angle = 4.0*np.pi
-        self.stateLo.radius = np.inf
+        self.stateLo.angles    = [4.0*np.pi]
+        self.stateLo.radii     = [np.inf]
 
         self.stateHi.intensity = -np.inf
-        self.stateHi.angle = -4.0*np.pi
-        self.stateHi.radius = -np.inf
+        self.stateHi.angles    = [-4.0*np.pi]
+        self.stateHi.radii     = [-np.inf]
         
         self.windowStabilized.set_enable(self.params['windows'] and self.params[self.name]['track'] and self.params[self.name]['stabilize'])
 
@@ -2264,16 +2301,16 @@ class BodySegment(PolarTrackedBodypart):
             # Convert polar pixel shifts to radians rotation & pixel expansion.
             angleOffset = aShift * (self.params[self.name]['angle_hi']-self.params[self.name]['angle_lo']) / float(imgNow.shape[1])
             radiusOffset = rShift
-            self.state.angle  = self.stateOrigin.angle  + angleOffset
-            self.state.radius = self.stateOrigin.radius + radiusOffset
+            self.state.angles  = [self.stateOrigin.angles[0]  + angleOffset]
+            self.state.angles  = [((self.state.angles[0] + np.pi) % (2*np.pi)) - np.pi]
+            self.state.radii   = [self.stateOrigin.radii[0] + radiusOffset]
 
-            self.state.angle = ((self.state.angle + np.pi) % (2*np.pi)) - np.pi
             
             # Get min,max's
-            self.stateLo.angle  = min(self.stateLo.angle, self.state.angle)
-            self.stateHi.angle  = max(self.stateHi.angle, self.state.angle)
-            self.stateLo.radius = min(self.stateLo.radius, self.state.radius)
-            self.stateHi.radius = max(self.stateHi.radius, self.state.radius)
+            self.stateLo.angles  = [min(self.stateLo.angles[0], self.state.angles[0])]
+            self.stateHi.angles  = [max(self.stateHi.angles[0], self.state.angles[0])]
+            self.stateLo.radii   = [min(self.stateLo.radii[0], self.state.radii[0])]
+            self.stateHi.radii   = [max(self.stateHi.radii[0], self.state.radii[0])]
             
             # Control the (angle,radius) offset to be at the midpoint of loangle, hiangle
             # Whenever an image appears that is closer to the midpoint, then
@@ -2281,16 +2318,16 @@ class BodySegment(PolarTrackedBodypart):
             # toward the midpoint image over time.
             if (self.params[self.name]['autozero']) and (self.iCount>100):
                 # If angle is closer than the mean of (hi,lo), then take a new initial image, and shift the (hi,lo)
-                refAngle = (self.stateHi.angle + self.stateLo.angle)/2.0
+                angleRef = (self.stateHi.angles[0] + self.stateLo.angles[0])/2.0
 
-                if (refAngle < self.state.angle < self.stateOrigin.angle) or (self.stateOrigin.angle < self.state.angle < refAngle):
+                if (angleRef < self.state.angles[0] < self.stateOrigin.angles[0]) or (self.stateOrigin.angles[0] < self.state.angles[0] < angleRef):
                     self.imgComparison = imgNow
                     self.windowTest.set_image(self.imgComparison)
 
                     # Converge the origin to zero.
-                    self.stateLo.angle -= angleOffset #-= (self.state.angle - self.stateOrigin.angle)
-                    self.stateHi.angle -= angleOffset #-= (self.state.angle - self.stateOrigin.angle)
-                    self.state.angle = self.stateOrigin.angle
+                    self.stateLo.angles[0] -= angleOffset #-= (self.state.angles[0] - self.stateOrigin.angles[0])
+                    self.stateHi.angles[0] -= angleOffset #-= (self.state.angles[0] - self.stateOrigin.angles[0])
+                    self.state.angles[0] = self.stateOrigin.angles[0]
                     
 
             # Stabilized image.
@@ -2307,7 +2344,7 @@ class BodySegment(PolarTrackedBodypart):
                 size = (self.image.shape[1], self.image.shape[0])
                 
                 # Stabilize the rotation. 
-                T = cv2.getRotationMatrix2D(center, np.rad2deg(self.state.angle), 1.0)
+                T = cv2.getRotationMatrix2D(center, np.rad2deg(self.state.angles[0]), 1.0)
                 
                 # Stabilize the expansion.
                 T[0,2] -= rShift * self.cosAngleBody_i
@@ -2345,8 +2382,8 @@ class BodySegment(PolarTrackedBodypart):
 
         if (self.params[self.name]['track']):
             # Draw the bodypart state position.
-            pt = self.R.dot([self.state.radius*np.cos(self.state.angle), 
-                             self.state.radius*np.sin(self.state.angle)]) 
+            pt = self.R.dot([self.state.radii[0]*np.cos(self.state.angles[0]), 
+                             self.state.radii[0]*np.sin(self.state.angles[0])]) 
             ptState_i = clip_pt((int(pt[0]+self.params[self.name]['hinge']['x']), 
                                  int(pt[1]+self.params[self.name]['hinge']['y'])), image.shape) 
             
@@ -2361,14 +2398,14 @@ class BodySegment(PolarTrackedBodypart):
             
             # Set a pixel at the min/max state positions.
             try:
-                pt = self.R.dot([self.state.radius*np.cos(self.stateLo.angle), 
-                                 self.state.radius*np.sin(self.stateLo.angle)]) 
+                pt = self.R.dot([self.state.radii[0]*np.cos(self.stateLo.angles[0]), 
+                                 self.state.radii[0]*np.sin(self.stateLo.angles[0])]) 
                 ptStateLo_i = clip_pt((int(pt[0]+self.params[self.name]['hinge']['x']), 
                                        int(pt[1]+self.params[self.name]['hinge']['y'])), image.shape) 
                 
                 
-                pt = self.R.dot([self.state.radius*np.cos(self.stateHi.angle), 
-                                 self.state.radius*np.sin(self.stateHi.angle)]) 
+                pt = self.R.dot([self.state.radii[0]*np.cos(self.stateHi.angles[0]), 
+                                 self.state.radii[0]*np.sin(self.stateHi.angles[0])]) 
                 ptStateHi_i = clip_pt((int(pt[0]+self.params[self.name]['hinge']['x']), 
                                        int(pt[1]+self.params[self.name]['hinge']['y'])), image.shape) 
                 
@@ -2387,20 +2424,24 @@ class BodySegment(PolarTrackedBodypart):
             self.windowStabilized.show()
             self.windowTest.show()
         
-# end class BodySegment
+# end class AreaTracker
 
     
 
 ###############################################################################
 ###############################################################################
-# Track a Wing.
-class Wing(PolarTrackedBodypart):
+# EdgeTracker()
+# Track radial bodypart edges using the gradient of the image intensity.  
+# i.e. Compute how the intensity changes with angle, and find the locations
+# of the greatest change.  Usually used for Wings.
+#
+class EdgeTracker(PolarTrackedBodypart):
     def __init__(self, name=None, params={}, color='white', bEqualizeHist=False):
         PolarTrackedBodypart.__init__(self, name, params, color, bEqualizeHist)
         
         self.name           = name
         self.edgedetector   = EdgeDetector()
-        self.state          = Struct()
+        self.state          = MsgState()
         self.windowTest     = ImageWindow(False, self.name+'Edge')
         self.set_params(params)
 
@@ -2512,7 +2553,7 @@ class Wing(PolarTrackedBodypart):
         return SrvWingdataResponse(abscissa, self.edgedetector.intensities, self.edgedetector.diff, angles, gradients)
         
         
-# end class Wing
+# end class EdgeTracker
 
     
 ###############################################################################
@@ -2692,31 +2733,61 @@ class MainWindow:
             
             x = btn.right+1
             y = btn.top+1
-            btn = Button(pt=[x,y], scale=self.scale, type='checkbox', name='head', text='head', state=self.params['head']['track'])
+            btn = Button(pt=[x,y], scale=self.scale, type='static', name='track', text='track:', sides=SIDE_LEFT|SIDE_TOP|SIDE_BOTTOM)
             self.wrap_button(btn, shape)
             self.buttons.append(btn)
             
             x = btn.right+1
             y = btn.top+1
-            btn = Button(pt=[x,y], scale=self.scale, type='checkbox', name='abdomen', text='abdomen', state=self.params['abdomen']['track'])
+            btn = Button(pt=[x,y], scale=self.scale, type='checkbox', name='head', text='H', state=self.params['head']['track'], sides=SIDE_TOP|SIDE_BOTTOM)
             self.wrap_button(btn, shape)
             self.buttons.append(btn)
             
             x = btn.right+1
             y = btn.top+1
-            btn = Button(pt=[x,y], scale=self.scale, type='checkbox', name='wings', text='wings', state=self.params['right']['track'])
+            btn = Button(pt=[x,y], scale=self.scale, type='checkbox', name='abdomen', text='A', state=self.params['abdomen']['track'], sides=SIDE_TOP|SIDE_BOTTOM)
             self.wrap_button(btn, shape)
             self.buttons.append(btn)
             
             x = btn.right+1
             y = btn.top+1
-            btn = Button(pt=[x,y], scale=self.scale, type='checkbox', name='aux', text='aux', state=self.params['aux']['track'])
+            btn = Button(pt=[x,y], scale=self.scale, type='checkbox', name='wings', text='LR', state=self.params['right']['track'], sides=SIDE_TOP|SIDE_BOTTOM)
             self.wrap_button(btn, shape)
             self.buttons.append(btn)
             
             x = btn.right+1
             y = btn.top+1
-            btn = Button(pt=[x,y], scale=self.scale, type='checkbox', name='subtract_bg', text='subtractBG', state=self.params['right']['subtract_bg'])
+            btn = Button(pt=[x,y], scale=self.scale, type='checkbox', name='aux', text='X', state=self.params['aux']['track'], sides=SIDE_TOP|SIDE_BOTTOM|SIDE_RIGHT)
+            self.wrap_button(btn, shape)
+            self.buttons.append(btn)
+            
+            x = btn.right+1
+            y = btn.top+1
+            btn = Button(pt=[x,y], scale=self.scale, type='static', name='subtract', text='subtract:', sides=SIDE_LEFT|SIDE_TOP|SIDE_BOTTOM)
+            self.wrap_button(btn, shape)
+            self.buttons.append(btn)
+            
+            x = btn.right+1
+            y = btn.top+1
+            btn = Button(pt=[x,y], scale=self.scale, type='checkbox', name='subtract_head', text='H', state=self.params['head']['subtract_bg'], sides=SIDE_TOP|SIDE_BOTTOM)
+            self.wrap_button(btn, shape)
+            self.buttons.append(btn)
+            
+            x = btn.right+1
+            y = btn.top+1
+            btn = Button(pt=[x,y], scale=self.scale, type='checkbox', name='subtract_abdomen', text='A', state=self.params['abdomen']['subtract_bg'], sides=SIDE_TOP|SIDE_BOTTOM)
+            self.wrap_button(btn, shape)
+            self.buttons.append(btn)
+            
+            x = btn.right+1
+            y = btn.top+1
+            btn = Button(pt=[x,y], scale=self.scale, type='checkbox', name='subtract_lr', text='LR', state=self.params['right']['subtract_bg'], sides=SIDE_TOP|SIDE_BOTTOM)
+            self.wrap_button(btn, shape)
+            self.buttons.append(btn)
+            
+            x = btn.right+1
+            y = btn.top+1
+            btn = Button(pt=[x,y], scale=self.scale, type='checkbox', name='subtract_aux', text='X', state=self.params['aux']['subtract_bg'], sides=SIDE_TOP|SIDE_BOTTOM|SIDE_RIGHT)
             self.wrap_button(btn, shape)
             self.buttons.append(btn)
             
@@ -3014,7 +3085,7 @@ class MainWindow:
     
                     # Output the abdomen state.
                     if (self.params['abdomen']['track']):
-                        s = 'ABDOMEN:% 7.4f' % (self.fly.abdomen.state.angle)
+                        s = 'ABDOMEN:% 7.4f' % (self.fly.abdomen.state.angles[0])
                         cv2.putText(imgOutput, s, (x, y), self.fontface, self.scaleText, self.fly.abdomen.bgra)
                         h_text = int(h * self.scale)
                         y -= h_text+self.h_gap
@@ -3022,7 +3093,7 @@ class MainWindow:
     
                     # Output the head state.
                     if (self.params['head']['track']):
-                        s = 'HEAD:% 7.4f' % (self.fly.head.state.angle)
+                        s = 'HEAD:% 7.4f' % (self.fly.head.state.angles[0])
                         cv2.putText(imgOutput, s, (x, y), self.fontface, self.scaleText, self.fly.head.bgra)
                         h_text = int(h * self.scale)
                         y -= h_text+self.h_gap
@@ -3366,14 +3437,34 @@ class MainWindow:
                 if (self.nameSelected == self.nameSelectedNow == 'symmetry'):
                     self.params['symmetric'] = self.buttons[self.iButtonSelected].state
                     
-                elif (self.nameSelected == self.nameSelectedNow == 'subtract_bg'):
+                elif (self.nameSelected == self.nameSelectedNow == 'subtract_lr'):
                     if (not self.bHaveBackground):
                         self.buttons[iButtonSelected].state = False
-                        rospy.logwarn('No background image.  Cannot use background subtraction.')
+                        rospy.logwarn('No background image.  Cannot use background subtraction for left/right.')
 
                     self.params['left']['subtract_bg']  = self.buttons[iButtonSelected].state
                     self.params['right']['subtract_bg'] = self.buttons[iButtonSelected].state
+                    
+                elif (self.nameSelected == self.nameSelectedNow == 'subtract_aux'):
+                    if (not self.bHaveBackground):
+                        self.buttons[iButtonSelected].state = False
+                        rospy.logwarn('No background image.  Cannot use background subtraction for aux.')
+
                     self.params['aux']['subtract_bg']  = self.buttons[iButtonSelected].state
+                    
+                elif (self.nameSelected == self.nameSelectedNow == 'subtract_head'):
+                    if (not self.bHaveBackground):
+                        self.buttons[iButtonSelected].state = False
+                        rospy.logwarn('No background image.  Cannot use background subtraction for head.')
+
+                    self.params['head']['subtract_bg']  = self.buttons[iButtonSelected].state
+                    
+                elif (self.nameSelected == self.nameSelectedNow == 'subtract_abdomen'):
+                    if (not self.bHaveBackground):
+                        self.buttons[iButtonSelected].state = False
+                        rospy.logwarn('No background image.  Cannot use background subtraction for abdomen.')
+
+                    self.params['abdomen']['subtract_bg']  = self.buttons[iButtonSelected].state
                     
                 elif (self.nameSelected == self.nameSelectedNow == 'head'):
                     self.params['head']['track'] = self.buttons[iButtonSelected].state

@@ -175,15 +175,20 @@ class Kinefly2Ledpanels:
         rightMajor = flystate.right.angles[0] if (0<len(flystate.right.angles)) else 0.0
         rightMinor = flystate.right.angles[1] if (1<len(flystate.right.angles)) else 0.0
 
+        angleHead     = flystate.head.angles[0] if (0 < len(flystate.head.angles)) else 0.0
+        radiusHead    = flystate.head.radii[0] if (0 < len(flystate.head.radii)) else 0.0
+        angleAbdomen  = flystate.abdomen.angles[0] if (0 < len(flystate.abdomen.angles)) else 0.0
+        radiusAbdomen = flystate.abdomen.radii[0] if (0 < len(flystate.abdomen.radii)) else 0.0
+                                                      
         state = np.array([1.0,
                           leftMajor,
                           leftMinor,
                           rightMajor,
                           rightMinor,
-                          flystate.head.angle,
-                          flystate.head.radius,
-                          flystate.abdomen.angle,
-                          flystate.abdomen.radius,
+                          angleHead,
+                          radiusHead,
+                          angleAbdomen,
+                          radiusAbdomen,
                           flystate.aux.intensity
                           ], dtype=np.float32)
         
@@ -213,15 +218,20 @@ class Kinefly2Ledpanels:
         rightMajor = flystate.right.angles[0] if (0<len(flystate.right.angles)) else 0.0
         rightMinor = flystate.right.angles[1] if (1<len(flystate.right.angles)) else 0.0
 
+        angleHead     = flystate.head.angles[0] if (0 < len(flystate.head.angles)) else 0.0
+        radiusHead    = flystate.head.radii[0] if (0 < len(flystate.head.radii)) else 0.0
+        angleAbdomen  = flystate.abdomen.angles[0] if (0 < len(flystate.abdomen.angles)) else 0.0
+        radiusAbdomen = flystate.abdomen.radii[0] if (0 < len(flystate.abdomen.radii)) else 0.0
+                                                      
         state = np.array([1.0,
                           leftMajor,
                           leftMinor,
                           rightMajor,
                           rightMinor,
-                          flystate.head.angle,
-                          flystate.head.radius,
-                          flystate.abdomen.angle,
-                          flystate.abdomen.radius,
+                          angleHead,
+                          radiusHead,
+                          angleAbdomen,
+                          radiusAbdomen,
                           flystate.aux.intensity
                           ], dtype=np.float32)
         
