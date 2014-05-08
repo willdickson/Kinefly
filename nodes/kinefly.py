@@ -2804,14 +2804,14 @@ class MainWindow:
         cv2.namedWindow(self.window_name,1)
         self.cvbridge = CvBridge()
         
-        # Load the parameters yaml file.
+        # Load the GUI parameters yaml file.
         self.yamlfile = os.path.expanduser(rospy.get_param(self.nodename.rstrip('/')+'/yamlfile', '~/%s.yaml' % self.nodename.strip('/')))
         with self.lockParams:
+            self.params = {}
             try:
-                self.params = rosparam.load_file(self.yamlfile)[0][0]
+                self.params['gui'] = rosparam.load_file(self.yamlfile)[0][0]
             except (rosparam.RosParamException, IndexError), e:
                 rospy.logwarn('%s.  Using default values.' % e)
-                self.params = {}
             
         defaults = {'filenameBackground':'~/%s.png' % self.nodename.strip('/'),
                     'image_topic':'/camera/image_raw',
