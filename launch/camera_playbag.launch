@@ -5,6 +5,12 @@
     <!-- ========================================================== -->
     <param name="use_sim_time" type="bool" value="false"/>
     <node name="image_proc"       pkg="image_proc"  type="image_proc" ns="camera" />
-    <node name="playbag" pkg="rosbag" type="play" args="--clock --delay=1 --rate=1 --loop /home/ssafarik/flyhead.bag" required="true" /> <!-- kinefly_2photon2 flyhead mosquito -->
+    
+        <node name="playbag" pkg="rosbag" type="play" args="--clock --delay=1 --rate=1.0 --loop /home/ssafarik/bags/flyhead.bag" required="true" /> 
+        <!-- /home/ssafarik/bags/kinefly_2photon2 --> 
+        <!-- /home/ssafarik/bags/flyhead -->
+        <!-- /home/ssafarik/bags/mosquito --> 
+        <!-- /home/ssafarik/bags/kinefly/flight_stage_side2 -->
+    
   
 </launch>

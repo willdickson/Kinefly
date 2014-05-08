@@ -1,0 +1,8 @@
+bool query
+---
+string color
+float32[] abscissa
+float32[] intensities
+float32[] diffs
+float32 detectionH
+float32 detectionV

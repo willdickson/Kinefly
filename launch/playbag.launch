@@ -9,5 +9,6 @@
 
     <node name="kinefly"                 pkg="Kinefly"  type="kinefly.py" required="true"      />
     <node name="kinefly2phidgetsanalog"  pkg="Kinefly"  type="kinefly2phidgetsanalog.py"  />
+    <node name="kinefly2ledpanels"       pkg="Kinefly"  type="kinefly2ledpanels.py"  />
     
 </launch>

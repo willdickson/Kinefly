@@ -76,6 +76,9 @@ rosmake ledpanels
 git clone https://github.com/ssafarik/Kinefly
 sudo cp ~/src.git/Kinefly/udev/99-phidgets.rules /etc/udev/rules.d
 rosmake Kinefly
+
+
+# Before the initial run of Kinefly, you must also create a blank ~/kinefly.yaml file.  
 touch ~/kinefly.yaml
 
 

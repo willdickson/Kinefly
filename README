@@ -2,7 +2,9 @@ Kinefly
 ----------------
 Kinefly extracts kinematics variables from the camera image of a tethered winged insect.
 
-The reported variables are wing edge angles, head and abdomen angles & radii, and the pixel intensity of an arbitrary elliptical region of the image (intended to capture leg motion, etc). 
+You may track the movement of each bodypart:  head, abdomen, leftwing, rightwing.  Several tracking techniques are available to choose from (texture tracking, edge finding, tip tracking).
+             
+An auxillary elliptical region may also be monitored (intended to capture leg motion or wingbeat frequency). 
 
 The software runs on ROS, the Robot Operating System, and can use any camera or other source that provides a ROS image stream, e.g. /camera/image_raw.
 
@@ -25,7 +27,9 @@ Then in another terminal window use the roslaunch command to launch Kinefly:
 $ roslaunch Kinefly main.launch
 
 There is an additional tool that is helpful for setting wing edge detection thresholds, etc, and this can be run via:
-$ rosrun Kinefly plot_wingdata.py 
+$ rosrun Kinefly plot_wingdata.py
+or 
+$ rosrun Kinefly plot_tipdata.py 
 
 
 Main Window
@@ -34,12 +38,18 @@ The main window provides an interface to most, but not all, of the functionality
   <Exit>        Terminate the program.  Use this instead of the 
                 titlebar's [x].
   <SaveBG>      Save the instant camera image to disk as ~/kinefly.png
-  []Head        Turn on/off head tracking.
-  []Abdomen     Turn on/off abdomen tracking.
-  []Wings       Turn on/off left & right wing tracking.
-  []Aux         Turn on/off the 'aux' area intensity & wingbeat frequency
+  Track:
+  []H           Turn on/off head tracking.
+  []A           Turn on/off abdomen tracking.
+  []L           Turn on/off left wing tracking.
+  []R           Turn on/off right wing tracking.
+  []X           Turn on/off the 'aux' area intensity & wingbeat frequency
                 calculations.
-  []SubtractBG  Turn on/off background subtraction on wings & aux.
+  Subtract:
+  []H           Turn on/off background subtraction on head
+  []A           Turn on/off background subtraction on abdomen
+  []LR          Turn on/off background subtraction on left & right wings
+  []X           Turn on/off background subtraction on aux
   []Stabilize   Turn on/off image stabilization for head & abdomen.  The  
                 quality of stabilization is very dependent upon the region 
                 selected with the handles. (default: false) 
@@ -62,33 +72,46 @@ Output Variables
 ---------------------------
 The output is published on the ROS topic '/kinefly/flystate', and can be retrieved either by running the command 'rostopic echo kinefly/flystate' or by writing your own ROS node and subscribing to that topic.
 
+The fields shown in [brackets] are lists of values, and there may be zero, one, or more than one entry (e.g. when finding multiple wing edges).  Which fields contain valid values are dependent upon which bodypart tracker has been set, and its settings.  
+
 An example of the flystate output is shown here:
 ---
 header: 
-  seq: 991
+  seq: 1033
   stamp: 
-    secs: 1393885520
-    nsecs: 413213015
+    secs: 1393885525
+    nsecs: 419325113
   frame_id: Fly
 head: 
-  radius: 64.9430624431
-  angle: 0.250776147731
-  intensity: 0.275137867647
-abdomen: 
-  radius: 110.002246519
-  angle: -0.476379218582
-  intensity: 0.569197468259
-left: 
-  angles: [0.8632710420690213, 0.5690290470545278]
-  gradients: [-0.007189512252807617, 0.00013071298599243164]
-  intensity: 0.799198674904
-right: 
-  angles: [0.6320809031290628, 1.1680216797626044]
-  gradients: [0.011241793632507324, -0.004967331886291504]
-  intensity: 0.585692989525
-aux: 
-  intensity: 0.672299563885
+  angles: [-0.05834060178390743]
+  gradients: []
+  radii: [54.635968488535795]
   freq: 0.0
+  intensity: 0.45413453997
+abdomen: 
+  angles: [-0.37292074013475407]
+  gradients: []
+  radii: [116.38383782940254]
+  freq: 0.0
+  intensity: 0.591699666712
+left: 
+  angles: [0.8233633148061248]
+  gradients: [-0.00784313678741455]
+  radii: []
+  freq: 0.0
+  intensity: 0.802197675672
+right: 
+  angles: [0.6048098145857046]
+  gradients: [0.011551618576049805]
+  radii: []
+  freq: 0.0
+  intensity: 0.593512067496
+aux: 
+  angles: []
+  gradients: []
+  radii: []
+  freq: 0.0
+  intensity: 0.673986792564
  
 
 Units
@@ -96,14 +119,47 @@ Units
 Angle units are radians.  
 Radius units are pixels.  
 Intensity is on the range [0,1], where 0.0 equals all pixels black, and 1.0 equals all pixels white.  The main window shows intensity units in parentheses, ().
-Gradient is a pixel intensity change per unit angle, and is used for edge classification.  The units are essentially arbitrary.
+Gradient is the intensity change per unit, and is used for edge and tip finding.  Edge-tracking gradient is change per angle, and tip-tracking gradient is change per radial distance.
 
 Each bodypart (head, abdomen, and wings) has its own angle origin, which in general terms is outward from the body center.  The zero angle for the head is directly opposite from the abdomen, and the zero of the abdomen angle is directly opposite from the head.  The zero for each wing is directly opposite from the other wing hinge.  In other words, imagine a line connecting the head and abdomen hinges, and a line connecting each wing hinge.  The zero angles are outward along those lines, and the range of each angle is on the range [-pi,+pi].
 
 
+Bodypart Trackers:
+---------------------------
+The trackers available are as follows, and are specified via the 'tracker' parameter in the params_kinefly.launch file.  Any bodypart (except aux) can use any tracker.
+'texture'   Uses image registration techniques, and reports the rotation and
+            radial movement of the area as a whole.
+'edge'      Finds radial edges, ordered by decreasing edge strength.
+'tip'       Finds the point where the bodypart is farthest from
+            the rotation center.  
+
+
+Texture Tracking:
+---------------------------
+This is the default for the head & abdomen.  We measure rotation and radial expansion of the bodypart via an image registration technique in polar coordinates on the region of interest.  This state measurement is autozero'ed such that the origin tends to be near the midpoint of the range of motion.  
+
+
+Edge Tracking:
+---------------------------
+This is the default for left & right wings.  We find multiple edge angles per wing (you can use this feature to track legs etc too, if desired), the number of edges being specified via parameter 'n_edges_max'.  The edge angles are in one list, and their corresponding intensity gradients are in another.  The edges are found by looking at the intensity gradient across the wingstroke, and each list is sorted in descending order of absolute gradient.
+
+The parameter 'threshold' can be used to reduce false detections when no edge is present, and will typically be a low value such as 0.01.  It is set independently for each wing.  You may run the program in plot_wingdata.py for help finding a good value to use, for example:
+$ rosrun Kinefly plot_wingdata.py     
+
+
+Tip Tracking:
+---------------------------
+When the 'tip' tracker is set for a bodypart, We locate the bodypart point farthest from the point of rotation.  The parameter 'threshold' is compared to the radial gradient to find the bodypart, and should be set to approx 0.01. 
+
+
+Wingbeat Frequency:
+---------------------------
+We make an attempt to measure the wingbeat frequency using the frequency spectrum of the aux intensity.  For this to work, several criteria must be met.  First, you must set the valid range of wingbeat frequencies in the params_kinefly.launch file.  Upon the next launch, Kinefly will print out the compatible camera framerate needed (the lowest typically being slightly higher than twice the wingbeat passband width).  Next, set the camera to that framerate.  If the camera framerate can be maintained within the valid range, then Kinefly will compute the wingbeat frequency.  Since the framerate is typically much less than the Nyquist frequency needed to cover the highest wingbeat frequency, we use an undersampling technique to sample just the passband, and look at a baseband alias of the passband frequencies.  Proper camera framerate is critical to the functioning of this feature, and the computer must be fast enough to process the frames in the allowed time, with no camera framerate variation outside of the allowed range.  If you have trouble maintaining the framerate, consider using the parameter 'scale_image'.      
+
+  
 Frame Rate
 ---------------------------
-The frame rate is dependent upon virtually every setting.  Turn off tracking of unneeded bodyparts, use the smallest usable regions of interest (i.e. handle positions), and turn off unneeded windows to speed the frame rate.  The largest improvement is likely to come from lowering the value of 'scale_image' in the .yaml file.
+The frame rate is dependent upon virtually every setting.  Turn off tracking of unneeded bodyparts, use the smallest usable regions of interest (i.e. handle positions), and turn off unneeded windows to speed the frame rate.  The largest improvement is likely to come from lowering the value of 'scale_image' in the params_kinefly.launch file.
 
   
 White On Black
@@ -113,31 +169,18 @@ Kinefly works best internally if the image is white-on-black.  The camera image 
 
 Background Subtraction
 ---------------------------
-Background subtraction is performed only for the wings and aux region, not for the head and abdomen.  The background is initialized with the kinefly.png image on disk, and updates as a moving average with the time constant (in seconds) parameter rc_background. 
+Background subtraction can be turned on/off for each bodypart individually.  The background is initialized with the kinefly.png image on disk, and updates as a moving average with the time constant (in seconds) parameter rc_background. 
 
 
-Wing Edges:
+Parameters.
 ---------------------------
-We find multiple edge angles per wing (so you can track legs etc too, if desired), the number being specified via parameter 'n_edges_max'.  The edge angles are in one list, and their corresponding intensity gradients are in another.  The edges are found by looking at the intensity gradient across the wingstroke, and each list is sorted in descending order of absolute gradient.
+Parameters are stored in the file 'Kinefly/launch/params_kinefly.launch'.  
 
-The parameter 'threshold' can be used to reduce false detections when no edge is present, and will typically be a low value such as 0.02.  It is set independently for each wing.  You may run the program in plot_wingdata.py for help finding a good value to use, for example:
-$ rosrun Kinefly plot_wingdata.py     
+Handle positions and checkbox states are automatically written to the kinefly.yaml file, but roslaunch needs the file needs to exist.
 
+There are some global parameters, plus sections for each of head/abdomen/left/right.  
 
-Wingbeat Frequency:
----------------------------
-We make an attempt to measure the wingbeat frequency using the frequency spectrum of the aux intensity.  For this to work, several criteria must be met.  First, you must set the valid range of wingbeat frequencies in the kinefly.yaml file.  Upon the next launch, Kinefly will print out the compatible camera framerate needed (the lowest typically being slightly higher than twice the wingbeat passband width).  Next, set the camera to that framerate.  If the camera framerate can be maintained within the valid range, then Kinefly will compute the wingbeat frequency.  Since the framerate is typically much less than the Nyquist frequency needed to cover the wingbeat range, we use an undersampling technique and look at a baseband alias of the wingbeat frequencies.  Proper camera framerate is critical to the functioning of this feature, and the computer must be fast enough to process the frames in the allowed time, with no camera framerate variation outside of the allowed range.  Seriously consider using the parameter scale_image.      
-
-  
-Parameters, YAML file.
----------------------------
-All parameters are stored in the file ~/kinefly.yaml, and default values will be written to the file upon the first successful run.  Please only edit the kinefly.yaml file when Kinefly is not running.  
-
-Before the initial run of Kinefly, you must create a blank ~/kinefly.yaml file.  Parameters used by Kinefly are automatically written to the file, hence any edits you make while Kinefly is running will be overwritten.
-
-Most parameters are set by manipulating the main window interface, but a few are not and are described here.  There are some global parameters, plus sections for each of head/abdomen/left/right.  
-
-Parameters that apply to all bodyparts:
+General Parameters:
     filenameBackground:         Location to store the background image.  
                                 (default: ~/kinefly.png)
     image_topic:                ROS topic for the image stream.  Running
@@ -147,41 +190,57 @@ Parameters that apply to all bodyparts:
                                 bayer encoded images.
                                 (default: /camera/image_raw)
     n_edges_max:                Max number of wing edges to find. (default: 1)
-    parameterfile:              Location of the YAML file. 
-                                (default: ~/kinefly.yaml)
     rc_background:              Time constant of the moving average background
                                 image. (default: 1000.0)
     scale_image:                Scale all images by this amount.  Smaller 
                                 values give better framerate. (default: 1.0)
     use_gui:                    Turn on/off the graphical user interface to
                                 speed the framerate. (default: true)
+    yamlfile:                   Location of the YAML file for keeping track
+                                of GUI handle positions & checkboxes. 
+                                (default: ~/kinefly.yaml)
   
-Parameters that apply only to head & abdomen:
+Head/Abdomen/Left/Right Parameters:
+    tracker:                    Which feature to track.  Options are 'texture',
+                                'edge', and 'tip'. 
+                                (default: texture/texture/edge/edge)
+
+Parameters that apply to Texture tracking:
     autozero:                   Automatically (true) determine the zero 
                                 angle based on center of motion, or (false)
                                 use the first valid frame as the zero angle.
                                 (default: true)
 
-Parameters that apply only to wings:
+Parameters that apply to Edge/Tip tracking:
     threshold:                  This is the threshold for the intensity
-                                gradient to detect a wing edge.  You may
-                                run the program in plot_wingdata.py for help 
-                                setting these thresholds, for example:
+                                gradient to detect a bodypart edge or tip.  
+                                You may run the program in plot_wingdata.py or
+                                plot_tipdata.py for help setting these 
+                                thresholds, for example:
                                 rosrun Kinefly plot_wingdata.py
+                                rosrun Kinefly plot_tipdata.py
+                                (default: 0.0)
+
+Parameters that apply to Tip tracking:
+    threshold:                  This is the threshold for the intensity
+                                gradient to find the bodypart tip.  You may
+                                run the program in plot_tipdata.py for help 
+                                setting this threshold, for example:
+                                rosrun Kinefly plot_tipdata.py
                                 (default: 0.0)
 
 Parameters that apply only to aux:
     wingbeat_min:               The lower frequency (hz) of wingbeats from 
-                                your insect.
+                                your insect.  (default: 180.0)
     wingbeat_max:               The upper frequency (hz) of wingbeats from 
-                                your insect.
+                                your insect.  (default: 220.0)
 
                              
 Voltage Output
 ---------------------------
 Kinefly can output voltages using a PhidgetsAnalog device using the ROS node kinefly2phidgetsanalog (which should be launched under the ROS namespace of kinefly, i.e. <node name="kinefly2phidgetsanalog" ... ns="kinefly" />).  The default values set the four voltage channels to (L, R, L-R, L+R), with the voltage value equal to the angle in radians.
 
-PhidgetsAnalog parameters are located in the kinefly.yaml file under the kinefly2phidgetsanalog key.  The parameters determine how the four voltage output channels set their voltages.  Each of the four channels is determined by a set of v#__ coefficients, where # is one of 0|1|2|3, for example, v0l1 is the leftangle1 component for voltage channel 0.
+PhidgetsAnalog parameters are specified in the 'params_kinefly.launch' file.  The parameters determine how the four voltage output channels set their voltages.  Each of the four channels is determined by a set of v#__ coefficients, where # is one of 0|1|2|3, for example, v0l1 is the leftangle1 component for voltage channel 0.
 
     v#enable:   Enable/disable each channel separately. (true|false)
     autorange:  Automatically set the four channels to L, R, L-R, L+R such
@@ -190,14 +249,14 @@ PhidgetsAnalog parameters are located in the kinefly.yaml file under the kinefly
 
 
 Each voltage channel # calculates a voltage by a linear combination of terms of the form:
- v#out =  v#l1 * left.anglesMajor[0]
-        + v#l2 * left.anglesMinor[0]
-        + v#r1 * right.anglesMajor[0]
-        + v#r2 * right.anglesMinor[0]
-        + v#ha * head.angle
-        + v#hr * head.radius
-        + v#aa * abdomen.angle
-        + v#ar * abdomen.radius
+ v#out =  v#l1 * left.angles[0]
+        + v#l2 * left.angles[1]
+        + v#r1 * right.angles[0]
+        + v#r2 * right.angles[1]
+        + v#ha * head.angles[0]
+        + v#hr * head.radii[0]
+        + v#aa * abdomen.angles[0]
+        + v#ar * abdomen.radii[0]
         + v#xi * aux.intensity
        
 Thus for example, a voltage output such as L-R can be generated on v2 by setting the v2l1=+1 and v2r1=-1.
@@ -211,7 +270,7 @@ Kinefly can control the MReiser LED Panels (see bitbucket.org/mreiser/panels, an
 
 In either case the ROS node from github.com/ssafarik/ledpanels must be running in order to send serial commands to the panels.  If you want to control the panels via USB, then you'll also need to run the ROS node kinefly2ledpanels (which should be launched under the ROS namespace of kinefly, i.e. <node name="kinefly2ledpanels ... ns="kinefly" />).
  
-LEDPanels parameters are located in the kinefly.yaml file under the kinefly2ledpanels key.  The parameters determine how the four voltage ADC input channels interpret the voltages into position and velocity commands. xpos, xvel, ypos, and yvel are determined by a set of adc# coefficients, where # is one of 0|1|2|3.
+LEDPanels parameters are specified in the 'params_kinefly.launch'.  The parameters determine how the four voltage ADC input channels interpret the voltages into position and velocity commands. xpos, xvel, ypos, and yvel are determined by a set of adc# coefficients, where # is one of 0|1|2|3.
 
 Each x or y channel calculates a position or velocity by a linear combination of terms of the form:
     Q = adc0*bnc0 

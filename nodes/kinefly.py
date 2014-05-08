@@ -20,7 +20,7 @@ from setdict import SetDict
 from cv_bridge import CvBridge, CvBridgeError
 from sensor_msgs.msg import Image
 from std_msgs.msg import Float32, Header, String
-from Kinefly.srv import SrvWingdata, SrvWingdataResponse
+from Kinefly.srv import SrvWingdata, SrvWingdataResponse, SrvTipdata, SrvTipdataResponse
 from Kinefly.msg import MsgFlystate, MsgState, MsgCommand
 from Kinefly.cfg import kineflyConfig
 
@@ -663,7 +663,7 @@ class PolarTransforms(object):
 ###############################################################################
 class PhaseCorrelation(object):
     # get_shift()
-    # Calculate the coordinate shift between the two images.
+    # Calculate the coordinate shift between two images.
     #
     def get_shift(self, imgA, imgB):
         rv = np.array([0.0, 0.0])
@@ -716,231 +716,6 @@ class PhaseCorrelation(object):
         return rv
         
         
-###############################################################################
-###############################################################################
-# Find the two largest gradients in the horizontal intensity profile of an image.
-#
-class EdgeDetector(object):
-    def __init__(self, threshold=0.0, n_edges_max=1000, sense=1):
-        self.intensities = []
-        self.diff = []
-        self.diffF = []
-        self.set_threshold(threshold, n_edges_max, sense)
-
-
-    def set_threshold(self, threshold, n_edges_max, sense):
-        self.threshold = threshold
-        self.n_edges_max = n_edges_max
-        self.sense = sense
-
-
-    # get_edges()
-    # Get the horizontal pixel position of the vertical edges that exceed a magnitude threshold.
-    #
-    def get_edges(self, image):
-        intensitiesRaw = np.sum(image, 0).astype(np.int64)
-        self.intensities = filter_median(intensitiesRaw, q=1)
-        
-        # Compute the intensity gradient.
-        n = 5 
-        diff = self.intensities[n:] - self.intensities[:-n]
-        diffF = diff#filter_median(diff, q=1)
-        diffF -= np.mean(diffF)
-        self.diff = np.append(diffF, np.zeros(n))
-
-        iMax = np.argmax(diffF)
-        iMin = np.argmin(diffF)
-        absMax = np.abs(diffF[iMax])
-        absMin = np.abs(diffF[iMin])
-        
-        if (absMax > absMin):
-            (iMajor,iMinor) = (iMax,iMin)
-            (absMajor, absMinor) = (absMax, absMin)   
-        else:
-            (iMajor,iMinor) = (iMin,iMax)
-            (absMajor, absMinor) = (absMin, absMax)   
-        
-        #return ((iMajor,absMajor), (iMinor,absMinor))
-        if (self.threshold <= absMajor):
-            iMajor_list = [iMajor]
-        else:
-            iMajor_list = []
-        if (self.threshold <= absMinor):
-            iMinor_list = [iMinor]
-        else:
-            iMinor_list = []
-            
-        return (iMajor_list, iMinor_list)
-    
-    
-    # get_edges2()
-    # Get the horizontal pixel position of all the vertical edge pairs that exceed a magnitude threshold.
-    #
-    def get_edges2(self, image):
-        intensitiesRaw = np.sum(image, 0).astype(np.float32)
-        intensitiesRaw /= (255.0*image.shape[0]) # Put into range [0,1]
-        self.intensities = intensitiesRaw#filter_median(intensitiesRaw, q=1)
-        
-        # Compute the intensity gradient. 
-        n = 5
-        diffRaw = self.intensities[n:] - self.intensities[:-n]
-        diffF = diffRaw#filter_median(diffRaw, q=1)
-        #diffF -= np.mean(diffF)
-        self.diff = np.append(diffF, np.zeros(n))
-        
-        # Make copies for positive-going and negative-going edges.
-        diffP = copy.copy( self.sense*diffF)
-        diffN = copy.copy(-self.sense*diffF)
-
-        # Threshold the positive and negative diffs.
-        iZero = np.where(diffP < self.threshold)[0] # 4*np.std(diffP))[0] #
-        diffP[iZero] = 0.0
-        
-        iZero = np.where(diffN < self.threshold)[0] # 4*np.std(diffN))[0] #
-        diffN[iZero] = 0.0
-
-        # Find positive-going edges, and negative-going edges, alternately P & N.
-        edgesP = [] # Positive-going edges.
-        edgesN = [] # Negative-going edges.
-        absP = []
-        absN = []
-        nCount = self.n_edges_max + (self.n_edges_max % 2) # Round up to the next multiple of 2 so that we look at both P and N diffs.
-        q = 0 # Alternate between P & N:  0=P, 1=N
-        diff_list = [diffP, diffN]
-        edges_list = [edgesP, edgesN] 
-        abs_list = [absP, absN] 
-        iCount = 0
-        
-        # While there are edges to find, put them in lists in order of decending strength.
-        while ((0.0 < np.max(diffP)) or (0.0 < np.max(diffN))) and (iCount < nCount):
-
-            # If there's an edge in this diff.
-            if (0.0 < np.max(diff_list[q])):
-                # Append the strongest edge to the list of edges.
-                iMax = np.argmax(diff_list[q])
-                edges_list[q].append(iMax)
-                abs_list[q].append(diff_list[q][iMax])
-                iCount += 1
-                
-                # Zero all the values associated with this edge.
-                for i in range(iMax-1, -1, -1):
-                    if (0.0 < diff_list[q][i]):
-                        diff_list[q][i] = 0.0
-                    else:
-                        break
-                for i in range(iMax, len(diff_list[q])):
-                    if (0.0 < diff_list[q][i]):
-                        diff_list[q][i] = 0.0
-                    else:
-                        break
-
-            q = (q+1) % 2 # Go to the other list.
-
-
-        #(edgesMajor, edgesMinor) = self.SortEdgesPairwise(edgesP, absP, edgesN, absN)
-        (edgesMajor, edgesMinor) = self.SortEdgesOneEdge(edgesP, absP, edgesN, absN)
-
-        # Combine & sort the two lists by decreasing absolute gradient.
-        edges = copy.copy(edgesMajor)
-        edges.extend(edgesMinor)
-        if (len(edges)>0):
-            nedges = np.array(edges)
-            gradients = self.diff[nedges]
-            s = np.argsort(np.abs(gradients))
-            edges_sorted = nedges[s[::-1]]
-            gradients_sorted = gradients[s[::-1]]
-        else:
-            edges_sorted = []
-            gradients_sorted = []
-    
-        return (edges_sorted, gradients_sorted)
-        
-           
-    
-    # SortEdgesOneEdge()
-    # Make sure that if there's just one edge, that it's in the major list.
-    #
-    def SortEdgesOneEdge(self, edgesP, absP, edgesN, absN):
-        # If we have too many edges, then remove the weakest one.
-        lP = len(edgesP)
-        lN = len(edgesN)
-        if (self.n_edges_max < lP+lN):
-            if (0<lP) and (0<lN):
-                if (absP[-1] < absN[-1]):
-                    edgesP.pop()
-                    absP.pop()
-                else:
-                    edgesN.pop()
-                    absN.pop()
-            elif (0<lP):
-                edgesP.pop()
-                absP.pop()
-            elif (0<lN):
-                edgesN.pop()
-                absN.pop()
-
-
-        # Sort the edges.            
-        if (len(edgesP)==0) and (len(edgesN)>0):
-            edgesMajor = edgesN
-            edgesMinor = edgesP
-        else:#if (len(edgesN)==0) and (len(edgesP)>0):
-            edgesMajor = edgesP
-            edgesMinor = edgesN
-        #else:
-        #    edgesMajor = edgesP
-        #    edgesMinor = edgesN
-
-            
-        return (edgesMajor, edgesMinor)
-            
-        
-    # SortEdgesPairwise()
-    # For each pair of (p,n) edges, the stronger edge of the pair is the major one.  
-    #
-    def SortEdgesPairwise(self, edgesP, absP, edgesN, absN):
-        edgesMajor = []
-        edgesMinor = []
-        edges_list = [edgesMajor, edgesMinor]
-        abs_list = [absP, absN]
-        iCount = 0 
-
-        m = max(len(edgesP), len(edgesN))
-        for i in range(m):
-            (absP1,edgeP1) = (absP[i],edgesP[i]) if (i<len(edgesP)) else (0.0, 0)
-            (absN1,edgeN1) = (absN[i],edgesN[i]) if (i<len(edgesN)) else (0.0, 0)
-            
-            if (absP1 < absN1) and (iCount < self.n_edges_max):
-                edgesMajor.append(edgeN1)
-                iCount += 1
-                if (0.0 < absP1) and (iCount < self.n_edges_max):
-                    edgesMinor.append(edgeP1)
-                    iCount += 1
-                    
-            elif (iCount < self.n_edges_max):
-                edgesMajor.append(edgeP1)
-                iCount += 1
-                if (0.0 < absN1) and (iCount < self.n_edges_max):
-                    edgesMinor.append(edgeN1)
-                    iCount += 1
-
-        return (edgesMajor, edgesMinor)
-
-
-    def SortEdgesMax(self, edgesP, absP, edgesN, absN):
-        # The P or N list with the 'stronger' edge is considered to be the "major" one.
-        if (np.max(absN) < np.max(absP)):
-            edgesMajor = edgesP 
-            edgesMinor = edgesN
-        else:  
-            edgesMajor = edgesN 
-            edgesMinor = edgesP 
-            
-        return (edgesMajor, edgesMinor)
-    
-# End class EdgeDetector
-    
-    
 ###############################################################################
 ###############################################################################
 class WindowFunctions(object):
@@ -1046,14 +821,14 @@ class IntensityTrackedBodypart(object):
         self.params = params
 
         self.rc_background = self.params['rc_background']
-        self.ptCenter_i = np.array([self.params[self.name]['center']['x'], self.params[self.name]['center']['y']])
+        self.ptCenter_i = np.array([self.params['gui'][self.name]['center']['x'], self.params['gui'][self.name]['center']['y']])
         
-        self.cosAngle = np.cos(self.params[self.name]['angle'])
-        self.sinAngle = np.sin(self.params[self.name]['angle'])
+        self.cosAngle = np.cos(self.params['gui'][self.name]['angle'])
+        self.sinAngle = np.sin(self.params['gui'][self.name]['angle'])
 
         # Turn on/off the extra windows.
-        self.windowBG.set_enable(self.params['windows'] and self.params[self.name]['track'] and self.params[self.name]['subtract_bg'])
-        self.windowFG.set_enable(self.params['windows'] and self.params[self.name]['track'])
+        self.windowBG.set_enable(self.params['gui']['windows'] and self.params['gui'][self.name]['track'] and self.params['gui'][self.name]['subtract_bg'])
+        self.windowFG.set_enable(self.params['gui']['windows'] and self.params['gui'][self.name]['track'])
 
         # Refresh the handle points.
         self.update_handle_points()
@@ -1064,11 +839,11 @@ class IntensityTrackedBodypart(object):
     # Create elliptical wedge masks, and window functions.
     #
     def create_mask(self, shape):
-        x     = int(self.params[self.name]['center']['x'])
-        y     = int(self.params[self.name]['center']['y'])
-        r1    = int(self.params[self.name]['radius1'])
-        r2    = int(self.params[self.name]['radius2'])
-        angle = self.params[self.name]['angle']
+        x     = int(self.params['gui'][self.name]['center']['x'])
+        y     = int(self.params['gui'][self.name]['center']['y'])
+        r1    = int(self.params['gui'][self.name]['radius1'])
+        r2    = int(self.params['gui'][self.name]['radius2'])
+        angle = self.params['gui'][self.name]['angle']
         bgra  = bgra_dict['white']
         
         # Create the mask.
@@ -1153,7 +928,7 @@ class IntensityTrackedBodypart(object):
             else:
                 self.imgRoiFg = self.imgRoi
 
-            if (self.params[self.name]['subtract_bg']):
+            if (self.params['gui'][self.name]['subtract_bg']):
                 if (self.imgRoiBackground is not None):
                     if (self.imgRoiBackground.shape==self.imgRoiFg.shape):
                         if (bInvertColor):
@@ -1184,11 +959,11 @@ class IntensityTrackedBodypart(object):
     # Compute the various handle points.
     #
     def update_handle_points (self):
-        x = self.params[self.name]['center']['x']
-        y = self.params[self.name]['center']['y']
-        radius1 = self.params[self.name]['radius1']
-        radius2 = self.params[self.name]['radius2']
-        angle = self.params[self.name]['angle']
+        x = self.params['gui'][self.name]['center']['x']
+        y = self.params['gui'][self.name]['center']['y']
+        radius1 = self.params['gui'][self.name]['radius1']
+        radius2 = self.params['gui'][self.name]['radius2']
+        angle = self.params['gui'][self.name]['angle']
         
         
         self.handles['center'].pt  = np.array([x, y])
@@ -1204,7 +979,7 @@ class IntensityTrackedBodypart(object):
         
         self.dt = dt
         
-        if (self.params[self.name]['track']):
+        if (self.params['gui'][self.name]['track']):
             if (not self.bInitializedMasks):
                 self.create_mask(image.shape)
                 
@@ -1218,7 +993,7 @@ class IntensityTrackedBodypart(object):
         tag = None
         
         # Check for handle hits.
-        if (self.params[self.name]['track']):
+        if (self.params['gui'][self.name]['track']):
             for tagHandle,handle in self.handles.iteritems():
                 if (handle.hit_test(ptMouse)):
                     tag = tagHandle
@@ -1229,7 +1004,7 @@ class IntensityTrackedBodypart(object):
 
     def draw_handles(self, image):
         # Draw all handle points, or only just the hinge handle.
-        if (self.params[self.name]['track']):
+        if (self.params['gui'][self.name]['track']):
             for tagHandle,handle in self.handles.iteritems():
                 handle.draw(image)
 
@@ -1240,17 +1015,17 @@ class IntensityTrackedBodypart(object):
     def draw(self, image):
         self.draw_handles(image)
 
-        if (self.params[self.name]['track']):
-            x = int(self.params[self.name]['center']['x'])
-            y = int(self.params[self.name]['center']['y'])
-            radius1 = int(self.params[self.name]['radius1'])
-            radius2 = int(self.params[self.name]['radius2'])
+        if (self.params['gui'][self.name]['track']):
+            x = int(self.params['gui'][self.name]['center']['x'])
+            y = int(self.params['gui'][self.name]['center']['y'])
+            radius1 = int(self.params['gui'][self.name]['radius1'])
+            radius2 = int(self.params['gui'][self.name]['radius2'])
 
             # Draw the outer arc.
             cv2.ellipse(image,
                         (x, y),
                         (radius1, radius2),
-                        np.rad2deg(self.params[self.name]['angle']),
+                        np.rad2deg(self.params['gui'][self.name]['angle']),
                         0,
                         360,
                         self.bgra, 
@@ -1275,6 +1050,7 @@ class PolarTrackedBodypart(object):
 
         self.bInitializedMasks = False
 
+        self.color          = color
         self.bgra           = bgra_dict[color]
         self.bgra_dim       = tuple(0.5*np.array(bgra_dict[color]))
         self.bgra_state     = bgra_dict[color]#bgra_dict['red']
@@ -1331,12 +1107,12 @@ class PolarTrackedBodypart(object):
         self.cosAngleBody_i = np.cos(self.angleBody_i)
         self.sinAngleBody_i = np.sin(self.angleBody_i)
 
-        self.ptHinge_i = np.array([self.params[self.name]['hinge']['x'], self.params[self.name]['hinge']['y']])
+        self.ptHinge_i = np.array([self.params['gui'][self.name]['hinge']['x'], self.params['gui'][self.name]['hinge']['y']])
         
         # Compute the body-outward-facing angle, which is the angle from the body center to the bodypart hinge.
 #         pt1 = [params['head']['hinge']['x'], params['head']['hinge']['y']]
 #         pt2 = [params['abdomen']['hinge']['x'], params['abdomen']['hinge']['y']]
-#         pt3 = [params['left']['hinge']['x'], params['left']['hinge']['y']]
+#         pt3 = [params['gui']['left']['hinge']['x'], params['gui']['left']['hinge']['y']]
 #         pt4 = [params['right']['hinge']['x'], params['right']['hinge']['y']]
 #         ptBodyCenter_i = get_intersection(pt1,pt2,pt3,pt4)
 #         self.angleOutward_i = float(np.arctan2(self.ptHinge_i[1]-ptBodyCenter_i[1], self.ptHinge_i[0]-ptBodyCenter_i[0]))
@@ -1346,8 +1122,8 @@ class PolarTrackedBodypart(object):
                         'abdomen':'head', 
                         'left':'right', 
                         'right':'left'}
-        self.angleOutward_i = float(np.arctan2(self.params[self.name]['hinge']['y']-self.params[nameRelative[self.name]]['hinge']['y'], 
-                                               self.params[self.name]['hinge']['x']-self.params[nameRelative[self.name]]['hinge']['x']))
+        self.angleOutward_i = float(np.arctan2(self.params['gui'][self.name]['hinge']['y']-self.params['gui'][nameRelative[self.name]]['hinge']['y'], 
+                                               self.params['gui'][self.name]['hinge']['x']-self.params['gui'][nameRelative[self.name]]['hinge']['x']))
         self.angleOutward_b = self.angleOutward_i - self.angleBody_i
 
         
@@ -1357,16 +1133,31 @@ class PolarTrackedBodypart(object):
                            [sinAngleOutward_i, cosAngleOutward_i]])
 
         # Turn on/off the extra windows.
-        self.windowPolar.set_enable(self.params['windows'] and self.params[self.name]['track'])
-        self.windowBG.set_enable(self.params['windows'] and self.params[self.name]['track'] and self.params[self.name]['subtract_bg'])
-        self.windowFG.set_enable(self.params['windows'] and self.params[self.name]['track'])
+        self.windowPolar.set_enable(self.params['gui']['windows'] and self.params['gui'][self.name]['track'])
+        self.windowBG.set_enable(self.params['gui']['windows'] and self.params['gui'][self.name]['track'] and self.params['gui'][self.name]['subtract_bg'])
+        self.windowFG.set_enable(self.params['gui']['windows'] and self.params['gui'][self.name]['track'])
 
-        self.angle_hi_i = self.transform_angle_i_from_b(self.params[self.name]['angle_hi'])
-        self.angle_lo_i = self.transform_angle_i_from_b(self.params[self.name]['angle_lo'])
+        self.angle_hi_i = self.transform_angle_i_from_b(self.params['gui'][self.name]['angle_hi'])
+        self.angle_lo_i = self.transform_angle_i_from_b(self.params['gui'][self.name]['angle_lo'])
         
         # Refresh the handle points.
         self.update_handle_points()
 
+
+    # transform_angle_b_from_p()
+    # Transform an angle from the bodypart frame to the fly body frame.
+    #
+    def transform_angle_b_from_p(self, angle_p):
+        angle_b =  self.sense * angle_p + self.angleOutward_b
+        return angle_b
+
+
+    # transform_angle_p_from_b()
+    # Transform an angle from the fly body frame to the bodypart frame.
+    #
+    def transform_angle_p_from_b(self, angle_b):
+        angle_p =  self.sense * (angle_b - self.angleOutward_b)
+        return angle_p
 
 
     # transform_angle_i_from_b()
@@ -1374,8 +1165,6 @@ class PolarTrackedBodypart(object):
     #
     def transform_angle_i_from_b(self, angle_b):
         angle_i = angle_b + self.angleBody_i 
-             
-#         angle_i = (angle_i+np.pi) % (2.0*np.pi) - np.pi
         return angle_i
         
 
@@ -1390,8 +1179,8 @@ class PolarTrackedBodypart(object):
          
 
     def get_bodyangle_i(self):
-        angle_i = get_angle_from_points_i(np.array([self.params['abdomen']['hinge']['x'], self.params['abdomen']['hinge']['y']]), 
-                                          np.array([self.params['head']['hinge']['x'], self.params['head']['hinge']['y']]))
+        angle_i = get_angle_from_points_i(np.array([self.params['gui']['abdomen']['hinge']['x'], self.params['gui']['abdomen']['hinge']['y']]), 
+                                          np.array([self.params['gui']['head']['hinge']['x'], self.params['gui']['head']['hinge']['y']]))
         #angleBody_i  = (angle_i + np.pi) % (2.0*np.pi) - np.pi
         angleBody_i  = float(angle_i)
         return angleBody_i 
@@ -1405,10 +1194,10 @@ class PolarTrackedBodypart(object):
         mask = np.zeros(shape, dtype=np.uint8)
         
         # Args for the two ellipse calls.
-        x = int(self.params[self.name]['hinge']['x'])
-        y = int(self.params[self.name]['hinge']['y'])
-        r_outer = int(np.ceil(self.params[self.name]['radius_outer']))
-        r_inner = int(np.floor(self.params[self.name]['radius_inner']))-1
+        x = int(self.params['gui'][self.name]['hinge']['x'])
+        y = int(self.params['gui'][self.name]['hinge']['y'])
+        r_outer = int(np.ceil(self.params['gui'][self.name]['radius_outer']))
+        r_inner = int(np.floor(self.params['gui'][self.name]['radius_inner']))-1
 
         hi = int(np.ceil(np.rad2deg(self.angle_hi_i)))
         lo = int(np.floor(np.rad2deg(self.angle_lo_i)))
@@ -1444,8 +1233,8 @@ class PolarTrackedBodypart(object):
             self.sumMask = np.sum(self.maskRoi).astype(np.float32)
 
     
-            self.i_0 = self.params[self.name]['hinge']['y'] - self.roi[1]
-            self.j_0 = self.params[self.name]['hinge']['x'] - self.roi[0]
+            self.i_0 = self.params['gui'][self.name]['hinge']['y'] - self.roi[1]
+            self.j_0 = self.params['gui'][self.name]['hinge']['x'] - self.roi[0]
             
             self.wfnRoi = None
             self.wfnRoiMaskedPolarCropped = None
@@ -1539,7 +1328,7 @@ class PolarTrackedBodypart(object):
             else:
                 self.imgRoiFg = self.imgRoi
 
-            if (self.params[self.name]['subtract_bg']):
+            if (self.params['gui'][self.name]['subtract_bg']):
                 if (self.imgRoiBackground is not None):
                     if (self.imgRoiBackground.shape==self.imgRoiFg.shape):
                         if (bInvertColor):
@@ -1572,8 +1361,8 @@ class PolarTrackedBodypart(object):
             theta_0a = self.angle_lo_i - self.angleOutward_i
             theta_1a = self.angle_hi_i - self.angleOutward_i
             
-            radius_mid = (self.params[self.name]['radius_outer']+self.params[self.name]['radius_inner'])/2.0
-            dr = (self.params[self.name]['radius_outer']-self.params[self.name]['radius_inner'])/2.0
+            radius_mid = (self.params['gui'][self.name]['radius_outer'] + self.params['gui'][self.name]['radius_inner'])/2.0
+            dr         = (self.params['gui'][self.name]['radius_outer'] - self.params['gui'][self.name]['radius_inner'])/2.0
 
             self.imgRoiFgMaskedPolar  = self.polartransforms.transform_polar_elliptical(self.imgRoiFgMasked, 
                                                      self.i_0, 
@@ -1620,10 +1409,10 @@ class PolarTrackedBodypart(object):
     # Compute the various handle points.
     #
     def update_handle_points (self):
-        x = self.params[self.name]['hinge']['x']
-        y = self.params[self.name]['hinge']['y']
-        radius_outer = self.params[self.name]['radius_outer']
-        radius_inner = self.params[self.name]['radius_inner']
+        x = self.params['gui'][self.name]['hinge']['x']
+        y = self.params['gui'][self.name]['hinge']['y']
+        radius_outer = self.params['gui'][self.name]['radius_outer']
+        radius_inner = self.params['gui'][self.name]['radius_inner']
         angle = (self.angle_hi_i+self.angle_lo_i)/2.0
         
         
@@ -1645,7 +1434,7 @@ class PolarTrackedBodypart(object):
         
         self.dt = dt
         
-        if (self.params[self.name]['track']):
+        if (self.params['gui'][self.name]['track']):
             if (not self.bInitializedMasks):
                 self.create_mask(image.shape)
                 
@@ -1660,7 +1449,7 @@ class PolarTrackedBodypart(object):
         tag = None
         
         # Check for handle hits.
-        if (self.params[self.name]['track']):
+        if (self.params['gui'][self.name]['track']):
             for tagHandle,handle in self.handles.iteritems():
                 if (handle.hit_test(ptMouse)):
                     tag = tagHandle
@@ -1676,7 +1465,7 @@ class PolarTrackedBodypart(object):
 
     def draw_handles(self, image):
         # Draw all handle points, or only just the hinge handle.
-        if (self.params[self.name]['track']):
+        if (self.params['gui'][self.name]['track']):
             for tagHandle,handle in self.handles.iteritems():
                 handle.draw(image)
         else:
@@ -1690,12 +1479,12 @@ class PolarTrackedBodypart(object):
     def draw(self, image):
         self.draw_handles(image)
 
-        if (self.params[self.name]['track']):
-            x = int(self.params[self.name]['hinge']['x'])
-            y = int(self.params[self.name]['hinge']['y'])
-            radius_outer = int(self.params[self.name]['radius_outer'])
-            radius_inner = int(self.params[self.name]['radius_inner'])
-            radius_mid = int((self.params[self.name]['radius_outer']+self.params[self.name]['radius_inner'])/2.0)
+        if (self.params['gui'][self.name]['track']):
+            x = int(self.params['gui'][self.name]['hinge']['x'])
+            y = int(self.params['gui'][self.name]['hinge']['y'])
+            radius_outer = int(self.params['gui'][self.name]['radius_outer'])
+            radius_inner = int(self.params['gui'][self.name]['radius_inner'])
+            radius_mid = int((self.params['gui'][self.name]['radius_outer']+self.params['gui'][self.name]['radius_inner'])/2.0)
 
 #             if ()
 #             angle1 = self.angle_lo_i
@@ -1977,12 +1766,58 @@ class WingbeatDetector(object):
 class Fly(object):
     def __init__(self, params={}):
         self.nodename = rospy.get_name()
-        
-        self.head    = AreaTracker(name='head',    params=params, color='cyan',    bEqualizeHist=True) 
-        self.abdomen = AreaTracker(name='abdomen', params=params, color='magenta', bEqualizeHist=True) 
-        self.right   = EdgeTracker(name='right',   params=params, color='red',     bEqualizeHist=False)
-        self.left    = EdgeTracker(name='left',    params=params, color='green',   bEqualizeHist=False)
-        self.aux     = Aux(name='aux',             params=params, color='yellow',  bEqualizeHist=False)
+
+        # Create the head tracker.        
+        if (params['head']['tracker']=='texture'):
+            self.head    = AreaTracker(name='head',      params=params, color='cyan',    bEqualizeHist=True)
+        elif (params['head']['tracker']=='edge'):
+            self.head    = EdgeTracker(name='head',      params=params, color='cyan',    bEqualizeHist=False)
+        elif (params['head']['tracker']=='tip'):
+            self.head    = TipTracker(name='head',       params=params, color='cyan',    bEqualizeHist=False)
+        elif (params['head']['tracker']=='intensity'):
+            self.head    = IntensityTracker(name='head', params=params, color='cyan',    bEqualizeHist=False)
+        else:
+            rospy.logwarn('Head tracker parameter must be one of [''texture'', ''edge'', ''tip'', ''intensity'']')
+             
+        # Create the abdomen tracker.        
+        if (params['abdomen']['tracker']=='texture'):
+            self.abdomen    = AreaTracker(name='abdomen',      params=params, color='magenta',    bEqualizeHist=True)
+        elif (params['abdomen']['tracker']=='edge'):
+            self.abdomen    = EdgeTracker(name='abdomen',      params=params, color='magenta',    bEqualizeHist=False)
+        elif (params['abdomen']['tracker']=='tip'):
+            self.abdomen    = TipTracker(name='abdomen',       params=params, color='magenta',    bEqualizeHist=False)
+        elif (params['abdomen']['tracker']=='intensity'):
+            self.abdomen    = IntensityTracker(name='abdomen', params=params, color='magenta',    bEqualizeHist=False)
+        else:
+            rospy.logwarn('Abdomen tracker parameter must be one of [''texture'', ''edge'', ''tip'', ''intensity'']')
+             
+        # Create the right wing tracker.        
+        if (params['right']['tracker']=='texture'):
+            self.right    = AreaTracker(name='right',      params=params, color='red',    bEqualizeHist=True)
+        elif (params['right']['tracker']=='edge'):
+            self.right    = EdgeTracker(name='right',      params=params, color='red',    bEqualizeHist=False)
+        elif (params['right']['tracker']=='tip'):
+            self.right    = TipTracker(name='right',       params=params, color='red',    bEqualizeHist=False)
+        elif (params['right']['tracker']=='intensity'):
+            self.right    = IntensityTracker(name='right', params=params, color='red',    bEqualizeHist=False)
+        else:
+            rospy.logwarn('Right wing tracker parameter must be one of [''texture'', ''edge'', ''tip'', ''intensity'']')
+             
+        # Create the left wing tracker.        
+        if (params['left']['tracker']=='texture'):
+            self.left    = AreaTracker(name='left',      params=params, color='green',    bEqualizeHist=True)
+        elif (params['left']['tracker']=='edge'):
+            self.left    = EdgeTracker(name='left',      params=params, color='green',    bEqualizeHist=False)
+        elif (params['left']['tracker']=='tip'):
+            self.left    = TipTracker(name='left',       params=params, color='green',    bEqualizeHist=False)
+        elif (params['left']['tracker']=='intensity'):
+            self.left    = IntensityTracker(name='left', params=params, color='green',    bEqualizeHist=False)
+        else:
+            rospy.logwarn('Left wing tracker parameter must be one of [''texture'', ''edge'', ''tip'', ''intensity'']')
+             
+        # Create the aux tracker.        
+        self.aux    = IntensityTracker(name='aux',    params=params, color='yellow',    bEqualizeHist=False)
+             
 
         self.windowInvertColorArea      = ImageWindow(False, 'InvertColorArea')
         
@@ -2008,19 +1843,19 @@ class Fly(object):
         self.right.set_params(params)
         self.aux.set_params(params)
 
-        pt1 = [params['head']['hinge']['x'], params['head']['hinge']['y']]
-        pt2 = [params['abdomen']['hinge']['x'], params['abdomen']['hinge']['y']]
-        pt3 = [params['left']['hinge']['x'], params['left']['hinge']['y']]
-        pt4 = [params['right']['hinge']['x'], params['right']['hinge']['y']]
+        pt1 = [params['gui']['head']['hinge']['x'], params['gui']['head']['hinge']['y']]
+        pt2 = [params['gui']['abdomen']['hinge']['x'], params['gui']['abdomen']['hinge']['y']]
+        pt3 = [params['gui']['left']['hinge']['x'], params['gui']['left']['hinge']['y']]
+        pt4 = [params['gui']['right']['hinge']['x'], params['gui']['right']['hinge']['y']]
         self.ptBodyCenter_i = get_intersection(pt1,pt2,pt3,pt4)
 
-        r = max(params['left']['radius_outer'], params['right']['radius_outer'])
+        r = max(params['gui']['left']['radius_outer'], params['gui']['right']['radius_outer'])
         self.angleBody_i = self.get_bodyangle_i()
         self.ptBodyIndicator1 = tuple((self.ptBodyCenter_i + r * np.array([np.cos(self.angleBody_i), np.sin(self.angleBody_i)])).astype(int))
         self.ptBodyIndicator2 = tuple((self.ptBodyCenter_i - r * np.array([np.cos(self.angleBody_i), np.sin(self.angleBody_i)])).astype(int))
         
         # Radius of an area approximately where the thorax would be.
-        self.rInvertColorArea = np.linalg.norm(np.array([params['head']['hinge']['x'], params['head']['hinge']['y']]) - np.array([params['abdomen']['hinge']['x'], params['abdomen']['hinge']['y']]))/2.0
+        self.rInvertColorArea = np.linalg.norm(np.array([params['gui']['head']['hinge']['x'], params['gui']['head']['hinge']['y']]) - np.array([params['gui']['abdomen']['hinge']['x'], params['gui']['abdomen']['hinge']['y']]))/2.0
         self.bInvertColorValid = False
         
     
@@ -2133,27 +1968,28 @@ class Fly(object):
     def publish(self):
         flystate              = MsgFlystate()
         flystate.header       = Header(seq=self.iCount, stamp=self.stamp, frame_id='Fly')
-        if (self.params['left']['track']):
-            flystate.left     = self.left.state
-        else:
-            flystate.left     = MsgState()
-            
-        if (self.params['right']['track']):
-            flystate.right    = self.right.state
-        else:
-            flystate.right    = MsgState()
-            
-        if (self.params['head']['track']):
+
+        if (self.params['gui']['head']['track']):
             flystate.head     = self.head.state
         else:
             flystate.head     = MsgState()
 
-        if (self.params['abdomen']['track']):
+        if (self.params['gui']['abdomen']['track']):
             flystate.abdomen  = self.abdomen.state
         else:
             flystate.abdomen  = MsgState()
 
-        if (self.params['aux']['track']):
+        if (self.params['gui']['left']['track']):
+            flystate.left     = self.left.state
+        else:
+            flystate.left     = MsgState()
+            
+        if (self.params['gui']['right']['track']):
+            flystate.right    = self.right.state
+        else:
+            flystate.right    = MsgState()
+            
+        if (self.params['gui']['aux']['track']):
             flystate.aux      = self.aux.state
         else:
             flystate.aux      = MsgState()
@@ -2171,7 +2007,7 @@ class Fly(object):
 ###############################################################################
 ###############################################################################
 # The 'aux' area to track intensity.
-class Aux(IntensityTrackedBodypart):
+class IntensityTracker(IntensityTrackedBodypart):
     def __init__(self, name=None, params={}, color='white', bEqualizeHist=False):
         IntensityTrackedBodypart.__init__(self, name, params, color, bEqualizeHist)
         
@@ -2215,7 +2051,7 @@ class Aux(IntensityTrackedBodypart):
     def update(self, dt, image, bInvertColor):
         IntensityTrackedBodypart.update(self, dt, image, bInvertColor)
 
-        if (self.params[self.name]['track']):
+        if (self.params['gui'][self.name]['track']):
             self.update_state()
     
             
@@ -2227,7 +2063,7 @@ class Aux(IntensityTrackedBodypart):
     def draw(self, image):
         IntensityTrackedBodypart.draw(self, image)
 
-# end class Aux
+# end class IntensityTracker
 
     
 
@@ -2243,14 +2079,13 @@ class AreaTracker(PolarTrackedBodypart):
         PolarTrackedBodypart.__init__(self, name, params, color, bEqualizeHist)
         
         self.phasecorr         = PhaseCorrelation()
-        self.state             = MsgState()
-        self.stateOrigin       = MsgState()
-        self.stateOriginOffset = MsgState()
-        self.stateLo           = MsgState()
-        self.stateHi           = MsgState()
+        self.state             = MsgState() # In the bodypart frame.
+        self.stateOrigin_p     = MsgState() # In the bodypart frame.
+        self.stateLo_p         = MsgState() # In the bodypart frame.
+        self.stateHi_p         = MsgState() # In the bodypart frame.
         
         self.windowStabilized = ImageWindow(False, self.name+'Stable')
-        self.windowTest       = ImageWindow(False, self.name+'Test')
+        self.windowTest       = ImageWindow(True, self.name+'Test')
         self.set_params(params)
 
     
@@ -2266,25 +2101,38 @@ class AreaTracker(PolarTrackedBodypart):
         
         self.iCount = 0
 
-        self.stateOrigin.intensity = 0.0
-        self.stateOrigin.angles    = [self.angleOutward_b + (self.params[self.name]['angle_hi']+self.params[self.name]['angle_lo'])/2.0]
-        self.stateOrigin.angles[0] = ((self.stateOrigin.angles[0] + np.pi) % (2*np.pi)) - np.pi
-        self.stateOrigin.radii     = [(self.params[self.name]['radius_outer']+self.params[self.name]['radius_inner'])/2.0]
+        # Compute the 'handedness' of the head/abdomen and wing/wing axes.  self.sense specifies the direction of positive angles.
+        matAxes = np.array([[self.params['gui']['head']['hinge']['x']-self.params['gui']['abdomen']['hinge']['x'], self.params['gui']['head']['hinge']['y']-self.params['gui']['abdomen']['hinge']['y']],
+                            [self.params['gui']['right']['hinge']['x']-self.params['gui']['left']['hinge']['x'], self.params['gui']['right']['hinge']['y']-self.params['gui']['left']['hinge']['y']]])
+        if (self.name in ['left','right']):
+            self.senseAxes = np.sign(np.linalg.det(matAxes))
+            a = -1 if (self.name=='right') else 1
+            self.sense = a*self.senseAxes
+        else:
+            self.sense = 1  
 
+
+        self.stateOrigin_p.intensity = 0.0
+        self.stateOrigin_p.angles    = [self.transform_angle_p_from_b((self.params['gui'][self.name]['angle_hi']+self.params['gui'][self.name]['angle_lo'])/2.0)] # In the bodypart frame.
+        self.stateOrigin_p.angles[0] = ((self.stateOrigin_p.angles[0] + np.pi) % (2*np.pi)) - np.pi
+
+        self.stateOrigin_p.radii     = [(self.params['gui'][self.name]['radius_outer']+self.params['gui'][self.name]['radius_inner'])/2.0]
         
         self.state.intensity = 0.0
         self.state.angles    = [0.0]
         self.state.radii     = [0.0]
 
-        self.stateLo.intensity = np.inf
-        self.stateLo.angles    = [4.0*np.pi]
-        self.stateLo.radii     = [np.inf]
+        self.stateLo_p.intensity = np.inf
+        self.stateLo_p.angles    = [4.0*np.pi]
+        self.stateLo_p.radii     = [np.inf]
 
-        self.stateHi.intensity = -np.inf
-        self.stateHi.angles    = [-4.0*np.pi]
-        self.stateHi.radii     = [-np.inf]
+        self.stateHi_p.intensity = -np.inf
+        self.stateHi_p.angles    = [-4.0*np.pi]
+        self.stateHi_p.radii     = [-np.inf]
         
-        self.windowStabilized.set_enable(self.params['windows'] and self.params[self.name]['track'] and self.params[self.name]['stabilize'])
+        
+        self.windowStabilized.set_enable(self.params['gui']['windows'] and self.params['gui'][self.name]['track'] and self.params['gui'][self.name]['stabilize'])
+        self.windowTest.set_enable(self.params['gui']['windows'] and self.params['gui'][self.name]['track'])
 
 
         
@@ -2293,45 +2141,46 @@ class AreaTracker(PolarTrackedBodypart):
     #
     def update_state(self):
         imgNow = self.imgRoiFgMaskedPolarCroppedWindowed
+
         
         if (imgNow is not None) and (self.imgComparison is not None):
             # Get the rotation & expansion between images.
             (rShift, aShift) = self.phasecorr.get_shift(imgNow, self.imgComparison)
             
             # Convert polar pixel shifts to radians rotation & pixel expansion.
-            angleOffset = aShift * (self.params[self.name]['angle_hi']-self.params[self.name]['angle_lo']) / float(imgNow.shape[1])
+            angleOffset = self.sense * aShift * (self.params['gui'][self.name]['angle_hi']-self.params['gui'][self.name]['angle_lo']) / float(imgNow.shape[1])
             radiusOffset = rShift
-            self.state.angles  = [self.stateOrigin.angles[0]  + angleOffset]
+            self.state.angles  = [(self.stateOrigin_p.angles[0] + angleOffset)]
             self.state.angles  = [((self.state.angles[0] + np.pi) % (2*np.pi)) - np.pi]
-            self.state.radii   = [self.stateOrigin.radii[0] + radiusOffset]
+            self.state.radii   = [self.stateOrigin_p.radii[0] + radiusOffset]
 
             
             # Get min,max's
-            self.stateLo.angles  = [min(self.stateLo.angles[0], self.state.angles[0])]
-            self.stateHi.angles  = [max(self.stateHi.angles[0], self.state.angles[0])]
-            self.stateLo.radii   = [min(self.stateLo.radii[0], self.state.radii[0])]
-            self.stateHi.radii   = [max(self.stateHi.radii[0], self.state.radii[0])]
+            self.stateLo_p.angles  = [min(self.stateLo_p.angles[0], self.state.angles[0])]
+            self.stateHi_p.angles  = [max(self.stateHi_p.angles[0], self.state.angles[0])]
+            self.stateLo_p.radii   = [min(self.stateLo_p.radii[0], self.state.radii[0])]
+            self.stateHi_p.radii   = [max(self.stateHi_p.radii[0], self.state.radii[0])]
             
-            # Control the (angle,radius) offset to be at the midpoint of loangle, hiangle
+            # Control the (angle,radius) origin to be at the midpoint of loangle, hiangle
             # Whenever an image appears that is closer to the midpoint, then
-            # take that image as the new comparison image.  Thus driving the comparison image 
+            # take that image as the new origin image.  Thus driving the origin image 
             # toward the midpoint image over time.
             if (self.params[self.name]['autozero']) and (self.iCount>100):
                 # If angle is closer than the mean of (hi,lo), then take a new initial image, and shift the (hi,lo)
-                angleRef = (self.stateHi.angles[0] + self.stateLo.angles[0])/2.0
+                angleRef_p = (self.stateHi_p.angles[0] + self.stateLo_p.angles[0])/2.0
 
-                if (angleRef < self.state.angles[0] < self.stateOrigin.angles[0]) or (self.stateOrigin.angles[0] < self.state.angles[0] < angleRef):
+                if (angleRef_p < self.state.angles[0] < self.stateOrigin_p.angles[0]) or (self.stateOrigin_p.angles[0] < self.state.angles[0] < angleRef_p):
                     self.imgComparison = imgNow
                     self.windowTest.set_image(self.imgComparison)
 
                     # Converge the origin to zero.
-                    self.stateLo.angles[0] -= angleOffset #-= (self.state.angles[0] - self.stateOrigin.angles[0])
-                    self.stateHi.angles[0] -= angleOffset #-= (self.state.angles[0] - self.stateOrigin.angles[0])
-                    self.state.angles[0] = self.stateOrigin.angles[0]
+                    self.stateLo_p.angles[0] -= angleOffset
+                    self.stateHi_p.angles[0] -= angleOffset
+                    self.state.angles[0] = self.stateOrigin_p.angles[0]
                     
 
             # Stabilized image.
-            if (self.params[self.name]['stabilize']):
+            if (self.params['gui'][self.name]['stabilize']):
                 # Stabilize the polar image.
                 #size = (self.imgRoiFgMaskedPolar.shape[1],
                 #        self.imgRoiFgMaskedPolar.shape[0])
@@ -2340,7 +2189,7 @@ class AreaTracker(PolarTrackedBodypart):
                 #self.imgStabilized = cv2.getRectSubPix(self.imgRoiFgMaskedPolar, size, center)
                 
                 # Stabilize the bodypart in the entire camera image.
-                center = (self.params[self.name]['hinge']['x'], self.params[self.name]['hinge']['y'])
+                center = (self.params['gui'][self.name]['hinge']['x'], self.params['gui'][self.name]['hinge']['y'])
                 size = (self.image.shape[1], self.image.shape[0])
                 
                 # Stabilize the rotation. 
@@ -2370,7 +2219,7 @@ class AreaTracker(PolarTrackedBodypart):
             self.imgComparison = self.imgRoiFgMaskedPolarCroppedWindowed
             self.windowTest.set_image(self.imgComparison)
         
-        if (self.params[self.name]['track']):
+        if (self.params['gui'][self.name]['track']):
             self.update_state()
             
     
@@ -2380,12 +2229,13 @@ class AreaTracker(PolarTrackedBodypart):
     def draw(self, image):
         PolarTrackedBodypart.draw(self, image)
 
-        if (self.params[self.name]['track']):
+        if (self.params['gui'][self.name]['track']):
             # Draw the bodypart state position.
-            pt = self.R.dot([self.state.radii[0]*np.cos(self.state.angles[0]), 
-                             self.state.radii[0]*np.sin(self.state.angles[0])]) 
-            ptState_i = clip_pt((int(pt[0]+self.params[self.name]['hinge']['x']), 
-                                 int(pt[1]+self.params[self.name]['hinge']['y'])), image.shape) 
+            angle = self.state.angles[0] * self.sense
+            pt = self.R.dot([self.state.radii[0]*np.cos(angle), 
+                             self.state.radii[0]*np.sin(angle)]) 
+            ptState_i = clip_pt((int(pt[0]+self.params['gui'][self.name]['hinge']['x']), 
+                                 int(pt[1]+self.params['gui'][self.name]['hinge']['y'])), image.shape) 
             
             cv2.ellipse(image,
                         ptState_i,
@@ -2398,16 +2248,18 @@ class AreaTracker(PolarTrackedBodypart):
             
             # Set a pixel at the min/max state positions.
             try:
-                pt = self.R.dot([self.state.radii[0]*np.cos(self.stateLo.angles[0]), 
-                                 self.state.radii[0]*np.sin(self.stateLo.angles[0])]) 
-                ptStateLo_i = clip_pt((int(pt[0]+self.params[self.name]['hinge']['x']), 
-                                       int(pt[1]+self.params[self.name]['hinge']['y'])), image.shape) 
+                angle = self.stateLo_p.angles[0] * self.sense
+                pt = self.R.dot([self.state.radii[0]*np.cos(angle), 
+                                 self.state.radii[0]*np.sin(angle)]) 
+                ptStateLo_i = clip_pt((int(pt[0]+self.params['gui'][self.name]['hinge']['x']), 
+                                       int(pt[1]+self.params['gui'][self.name]['hinge']['y'])), image.shape) 
                 
                 
-                pt = self.R.dot([self.state.radii[0]*np.cos(self.stateHi.angles[0]), 
-                                 self.state.radii[0]*np.sin(self.stateHi.angles[0])]) 
-                ptStateHi_i = clip_pt((int(pt[0]+self.params[self.name]['hinge']['x']), 
-                                       int(pt[1]+self.params[self.name]['hinge']['y'])), image.shape) 
+                angle = self.stateHi_p.angles[0] * self.sense
+                pt = self.R.dot([self.state.radii[0]*np.cos(angle), 
+                                 self.state.radii[0]*np.sin(angle)]) 
+                ptStateHi_i = clip_pt((int(pt[0]+self.params['gui'][self.name]['hinge']['x']), 
+                                       int(pt[1]+self.params['gui'][self.name]['hinge']['y'])), image.shape) 
                 
                 # Set the pixels.
                 image[ptStateLo_i[1]][ptStateLo_i[0]] = np.array([255,255,255]) - image[ptStateLo_i[1]][ptStateLo_i[0]]
@@ -2430,6 +2282,193 @@ class AreaTracker(PolarTrackedBodypart):
 
 ###############################################################################
 ###############################################################################
+# Find the two largest gradients in the horizontal intensity profile of an image.
+#
+class EdgeDetector(object):
+    def __init__(self, threshold=0.0, n_edges_max=1000, sense=1):
+        self.intensities = []
+        self.diff = []
+        self.diffF = []
+        self.set_threshold(threshold, n_edges_max, sense)
+
+
+    def set_threshold(self, threshold, n_edges_max, sense):
+        self.threshold = threshold
+        self.n_edges_max = n_edges_max
+        self.sense = sense
+
+
+    # find()
+    # Get the horizontal pixel position of all the vertical edge pairs that exceed a magnitude threshold.
+    #
+    def find(self, image):
+        axis = 0
+        intensitiesRaw = np.sum(image, axis).astype(np.float32)
+        intensitiesRaw /= (255.0*image.shape[axis]) # Put into range [0,1]
+        self.intensities = intensitiesRaw#filter_median(intensitiesRaw, q=1)
+        
+        # Compute the intensity gradient. 
+        n = 5
+        diffRaw = self.intensities[n:] - self.intensities[:-n]
+        diffF = diffRaw#filter_median(diffRaw, q=1)
+        #diffF -= np.mean(diffF)
+        self.diff = np.append(diffF, np.zeros(n))
+        
+        # Make copies for positive-going and negative-going edges.
+        diffP = copy.copy( self.sense*diffF)
+        diffN = copy.copy(-self.sense*diffF)
+
+        # Threshold the positive and negative diffs.
+        iZero = np.where(diffP < self.threshold)[0] # 4*np.std(diffP))[0] #
+        diffP[iZero] = 0.0
+        
+        iZero = np.where(diffN < self.threshold)[0] # 4*np.std(diffN))[0] #
+        diffN[iZero] = 0.0
+
+        # Find positive-going edges, and negative-going edges, alternately P & N.
+        edgesP = [] # Positive-going edges.
+        edgesN = [] # Negative-going edges.
+        absP = []
+        absN = []
+        nCount = self.n_edges_max + (self.n_edges_max % 2) # Round up to the next multiple of 2 so that we look at both P and N diffs.
+        q = 0 # Alternate between P & N:  0=P, 1=N
+        diff_list = [diffP, diffN]
+        edges_list = [edgesP, edgesN] 
+        abs_list = [absP, absN] 
+        iCount = 0
+        
+        # While there are edges to find, put them in lists in order of decending strength.
+        while ((0.0 < np.max(diffP)) or (0.0 < np.max(diffN))) and (iCount < nCount):
+
+            # If there's an edge in this diff.
+            if (0.0 < np.max(diff_list[q])):
+                # Append the strongest edge to the list of edges.
+                iMax = np.argmax(diff_list[q])
+                edges_list[q].append(iMax)
+                abs_list[q].append(diff_list[q][iMax])
+                iCount += 1
+                
+                # Zero all the values associated with this edge.
+                for i in range(iMax-1, -1, -1):
+                    if (0.0 < diff_list[q][i]):
+                        diff_list[q][i] = 0.0
+                    else:
+                        break
+                for i in range(iMax, len(diff_list[q])):
+                    if (0.0 < diff_list[q][i]):
+                        diff_list[q][i] = 0.0
+                    else:
+                        break
+
+            q = 1-q # Go to the other list.
+
+
+        #(edgesMajor, edgesMinor) = self.SortEdgesPairwise(edgesP, absP, edgesN, absN)
+        (edgesMajor, edgesMinor) = self.SortEdgesOneEdge(edgesP, absP, edgesN, absN)
+
+        # Combine & sort the two lists by decreasing absolute gradient.
+        edges = copy.copy(edgesMajor)
+        edges.extend(edgesMinor)
+        if (len(edges)>0):
+            nedges = np.array(edges)
+            gradients = self.diff[nedges]
+            s = np.argsort(np.abs(gradients))
+            edges_sorted = nedges[s[::-1]]
+            gradients_sorted = gradients[s[::-1]]
+        else:
+            edges_sorted = []
+            gradients_sorted = []
+    
+        return (edges_sorted, gradients_sorted)
+        
+           
+    
+    # SortEdgesOneEdge()
+    # Make sure that if there's just one edge, that it's in the major list.
+    #
+    def SortEdgesOneEdge(self, edgesP, absP, edgesN, absN):
+        # If we have too many edges, then remove the weakest one.
+        lP = len(edgesP)
+        lN = len(edgesN)
+        if (self.n_edges_max < lP+lN):
+            if (0<lP) and (0<lN):
+                if (absP[-1] < absN[-1]):
+                    edgesP.pop()
+                    absP.pop()
+                else:
+                    edgesN.pop()
+                    absN.pop()
+            elif (0<lP):
+                edgesP.pop()
+                absP.pop()
+            elif (0<lN):
+                edgesN.pop()
+                absN.pop()
+
+
+        # Sort the edges.            
+        if (len(edgesP)==0) and (len(edgesN)>0):
+            edgesMajor = edgesN
+            edgesMinor = edgesP
+        else:#if (len(edgesN)==0) and (len(edgesP)>0):
+            edgesMajor = edgesP
+            edgesMinor = edgesN
+        #else:
+        #    edgesMajor = edgesP
+        #    edgesMinor = edgesN
+
+            
+        return (edgesMajor, edgesMinor)
+            
+        
+    # SortEdgesPairwise()
+    # For each pair of (p,n) edges, the stronger edge of the pair is the major one.  
+    #
+    def SortEdgesPairwise(self, edgesP, absP, edgesN, absN):
+        edgesMajor = []
+        edgesMinor = []
+        edges_list = [edgesMajor, edgesMinor]
+        abs_list = [absP, absN]
+        iCount = 0 
+
+        m = max(len(edgesP), len(edgesN))
+        for i in range(m):
+            (absP1,edgeP1) = (absP[i],edgesP[i]) if (i<len(edgesP)) else (0.0, 0)
+            (absN1,edgeN1) = (absN[i],edgesN[i]) if (i<len(edgesN)) else (0.0, 0)
+            
+            if (absP1 < absN1) and (iCount < self.n_edges_max):
+                edgesMajor.append(edgeN1)
+                iCount += 1
+                if (0.0 < absP1) and (iCount < self.n_edges_max):
+                    edgesMinor.append(edgeP1)
+                    iCount += 1
+                    
+            elif (iCount < self.n_edges_max):
+                edgesMajor.append(edgeP1)
+                iCount += 1
+                if (0.0 < absN1) and (iCount < self.n_edges_max):
+                    edgesMinor.append(edgeN1)
+                    iCount += 1
+
+        return (edgesMajor, edgesMinor)
+
+
+    def SortEdgesMax(self, edgesP, absP, edgesN, absN):
+        # The P or N list with the 'stronger' edge is considered to be the "major" one.
+        if (np.max(absN) < np.max(absP)):
+            edgesMajor = edgesP 
+            edgesMinor = edgesN
+        else:  
+            edgesMajor = edgesN 
+            edgesMinor = edgesP 
+            
+        return (edgesMajor, edgesMinor)
+    
+# End class EdgeDetector
+    
+    
+###############################################################################
+###############################################################################
 # EdgeTracker()
 # Track radial bodypart edges using the gradient of the image intensity.  
 # i.e. Compute how the intensity changes with angle, and find the locations
@@ -2439,10 +2478,10 @@ class EdgeTracker(PolarTrackedBodypart):
     def __init__(self, name=None, params={}, color='white', bEqualizeHist=False):
         PolarTrackedBodypart.__init__(self, name, params, color, bEqualizeHist)
         
-        self.name           = name
-        self.edgedetector   = EdgeDetector()
-        self.state          = MsgState()
-        self.windowTest     = ImageWindow(False, self.name+'Edge')
+        self.name       = name
+        self.detector   = EdgeDetector()
+        self.state      = MsgState()
+        self.windowTest = ImageWindow(False, self.name+'Edge')
         self.set_params(params)
 
         # Services, for live intensities plots via live_wing_histograms.py
@@ -2461,18 +2500,20 @@ class EdgeTracker(PolarTrackedBodypart):
         self.state.angles = []
         self.state.gradients = []
 
-        # Compute the 'handedness' of the head/abdomen and wing/wing axes.
-        matAxes = np.array([[self.params['head']['hinge']['x']-self.params['abdomen']['hinge']['x'], self.params['head']['hinge']['y']-self.params['abdomen']['hinge']['y']],
-                            [self.params['right']['hinge']['x']-self.params['left']['hinge']['x'], self.params['right']['hinge']['y']-self.params['left']['hinge']['y']]])
-        self.senseAxes = np.sign(np.linalg.det(matAxes))
-        a = 1 if (self.name=='left') else -1
-        self.sense = a*self.senseAxes  
+        # Compute the 'handedness' of the head/abdomen and wing/wing axes.  self.sense specifies the direction of positive angles.
+        matAxes = np.array([[self.params['gui']['head']['hinge']['x']-self.params['gui']['abdomen']['hinge']['x'], self.params['gui']['head']['hinge']['y']-self.params['gui']['abdomen']['hinge']['y']],
+                            [self.params['gui']['right']['hinge']['x']-self.params['gui']['left']['hinge']['x'], self.params['gui']['right']['hinge']['y']-self.params['gui']['left']['hinge']['y']]])
+        if (self.name in ['left','right']):
+            self.senseAxes = np.sign(np.linalg.det(matAxes))
+            a = -1 if (self.name=='right') else 1
+            self.sense = a*self.senseAxes
+        else:
+            self.sense = 1  
 
-        self.edgedetector.set_threshold(params[self.name]['threshold'], params['n_edges_max'], self.sense)
+        self.detector.set_threshold(params[self.name]['threshold'], params['n_edges_max'], self.sense)
     
         
     # update_state()
-    # Compute wing angles.
     #
     def update_state(self):
         imgNow = self.imgRoiFgMaskedPolarCropped
@@ -2481,9 +2522,9 @@ class EdgeTracker(PolarTrackedBodypart):
         # Get the rotation & expansion between images.
         if (imgNow is not None):
             # Pixel position and strength of the edges.
-            (edges, gradients) = self.edgedetector.get_edges2(imgNow)
+            (edges, gradients) = self.detector.find(imgNow)
 
-            anglePerPixel = (self.params[self.name]['angle_hi']-self.params[self.name]['angle_lo']) / float(imgNow.shape[1])
+            anglePerPixel = (self.params['gui'][self.name]['angle_hi']-self.params['gui'][self.name]['angle_lo']) / float(imgNow.shape[1])
 
             # Convert pixel to angle units, and put angle into the wing frame.
             self.state.angles = []
@@ -2491,9 +2532,9 @@ class EdgeTracker(PolarTrackedBodypart):
             for i in range(len(edges)):
                 edge = edges[i]
                 gradient = gradients[i]
-                angle_imageframe = self.params[self.name]['angle_lo'] + edge * anglePerPixel
-                angle_wingframe = ((angle_imageframe - (self.angleOutward_i-self.angleBody_i) + np.pi) % (2*np.pi) - np.pi) * self.sense 
-                self.state.angles.append(angle_wingframe)
+                angle_b = self.params['gui'][self.name]['angle_lo'] + edge * anglePerPixel
+                angle_p = (self.transform_angle_p_from_b(angle_b) + np.pi) % (2*np.pi) - np.pi
+                self.state.angles.append(angle_p)
                 self.state.gradients.append(gradient)
                 
 
@@ -2506,7 +2547,7 @@ class EdgeTracker(PolarTrackedBodypart):
     def update(self, dt, image, bInvertColor):
         PolarTrackedBodypart.update(self, dt, image, bInvertColor)
 
-        if (self.params[self.name]['track']):
+        if (self.params['gui'][self.name]['track']):
             self.update_state()
             
             
@@ -2518,19 +2559,17 @@ class EdgeTracker(PolarTrackedBodypart):
     def draw(self, image):
         PolarTrackedBodypart.draw(self, image)
         
-        if (self.params[self.name]['track']):
+        if (self.params['gui'][self.name]['track']):
             # Draw the major and minor edges alternately, until the max number has been reached.
             bgra = self.bgra
             for i in range(len(self.state.angles)):
-                angle = self.state.angles[i]
-                
-                angle1 =  self.sense*angle + (self.angleOutward_i-self.angleBody_i)
-                angle1_i = self.transform_angle_i_from_b(angle1)
+                angle_b = self.transform_angle_b_from_p(self.state.angles[i])
+                angle_i = self.transform_angle_i_from_b(angle_b)
 
-                x0 = self.ptHinge_i[0] + self.params[self.name]['radius_inner'] * np.cos(angle1_i)
-                y0 = self.ptHinge_i[1] + self.params[self.name]['radius_inner'] * np.sin(angle1_i)
-                x1 = self.ptHinge_i[0] + self.params[self.name]['radius_outer'] * np.cos(angle1_i)
-                y1 = self.ptHinge_i[1] + self.params[self.name]['radius_outer'] * np.sin(angle1_i)
+                x0 = self.ptHinge_i[0] + self.params['gui'][self.name]['radius_inner'] * np.cos(angle_i)
+                y0 = self.ptHinge_i[1] + self.params['gui'][self.name]['radius_inner'] * np.sin(angle_i)
+                x1 = self.ptHinge_i[0] + self.params['gui'][self.name]['radius_outer'] * np.cos(angle_i)
+                y1 = self.ptHinge_i[1] + self.params['gui'][self.name]['radius_outer'] * np.sin(angle_i)
                 cv2.line(image, (int(x0),int(y0)), (int(x1),int(y1)), bgra, 1)
                 bgra = tuple(0.5*np.array(bgra))
                 
@@ -2538,7 +2577,7 @@ class EdgeTracker(PolarTrackedBodypart):
         
         
     def serve_wingdata_callback(self, request):
-        abscissa = np.linspace(self.params[self.name]['angle_lo'], self.params[self.name]['angle_hi'], len(self.edgedetector.intensities))
+        abscissa = np.linspace(self.params['gui'][self.name]['angle_lo'], self.params['gui'][self.name]['angle_hi'], len(self.detector.intensities))
         
             
         angles = []
@@ -2546,14 +2585,200 @@ class EdgeTracker(PolarTrackedBodypart):
         for i in range(len(self.state.angles)):
             angle = self.state.angles[i]
             gradient = self.state.gradients[i]
-            angle_bodyframe = (((self.angleOutward_i - self.angleBody_i + self.sense*angle) + np.pi) % (2*np.pi)) - np.pi
-            angles.append(angle_bodyframe)
+            angle_b = ((self.transform_angle_b_from_p(angle) + np.pi) % (2*np.pi)) - np.pi
+            angles.append(angle_b)
             gradients.append(gradient)
 
-        return SrvWingdataResponse(abscissa, self.edgedetector.intensities, self.edgedetector.diff, angles, gradients)
+        return SrvWingdataResponse(abscissa, self.detector.intensities, self.detector.diff, angles, gradients)
         
         
 # end class EdgeTracker
+
+    
+###############################################################################
+###############################################################################
+# Find the lowest image point where image intensity exceeds a threshold.
+#
+class TipDetector(object):
+    def __init__(self, threshold=0.0, sense=1):
+        self.intensities = []
+        self.diff = []
+        self.diffF = []
+        self.set_threshold(threshold, sense)
+        self.imgThreshold = None
+
+
+    def set_threshold(self, threshold, sense):
+        self.threshold = threshold
+        self.sense = sense
+
+
+    # find()
+    # Get the pixel position in the given image of the bottommost thresholded value.
+    #
+    def find(self, image):
+        #(threshold, img) = cv2.threshold(image, int(self.threshold*255), 255, cv2.THRESH_TOZERO) # BINARY)#
+        (threshold, img) = (0, image)
+        
+        axis = 1
+        self.intensities = np.sum(img, axis).astype(np.float32)
+        self.intensities /= (255.0 * img.shape[axis]) # Put into range [0,1]
+
+        # Compute the intensity gradient. 
+        n = 5
+        diffRaw = self.intensities[n:] - self.intensities[:-n]
+        diffF = np.abs(diffRaw)
+        self.diff = np.append(diffF, np.zeros(n))
+        
+        
+        
+        i = np.where(self.diff > self.threshold)[0]
+        if (len(i)>0):
+            yTip = i[-1]
+        else:
+            yTip = None
+        
+        if (yTip is not None):
+            line = img[yTip,:]
+            xTip = line.argmax()
+        else:
+            xTip = None
+        
+        return (xTip, yTip)
+        
+           
+    
+# End class TipDetector
+    
+    
+###############################################################################
+###############################################################################
+# TipTracker()
+# Track the position of the tip of a bodypart, e.g. a wingtip.  
+# Finds the point at the greatest distance from the hinge.  Usually used for Wings.
+#
+class TipTracker(PolarTrackedBodypart):
+    def __init__(self, name=None, params={}, color='white', bEqualizeHist=False):
+        PolarTrackedBodypart.__init__(self, name, params, color, bEqualizeHist)
+        
+        self.name     = name
+        self.detector = TipDetector()
+        self.state    = MsgState()
+        self.set_params(params)
+        self.windowTest = ImageWindow(False, self.name+'Tip')
+        self.iAngle = 0
+        self.iRadius = 0
+
+        # Services, for live intensities plots via live_wing_histograms.py
+        self.service_tipdata    = rospy.Service('tipdata_'+self.name, SrvTipdata, self.serve_tipdata_callback)
+
+    
+    # set_params()
+    # Set the given params dict into this object.
+    #
+    def set_params(self, params):
+        PolarTrackedBodypart.set_params(self, params)
+        
+        self.imgRoiBackground = None
+        self.iCount = 0
+        self.state.intensity = 0.0
+        self.state.angles = []
+        self.state.gradients = []
+
+        # Compute the 'handedness' of the head/abdomen and wing/wing axes.  self.sense specifies the direction of positive angles.
+        matAxes = np.array([[self.params['head']['hinge']['x']-self.params['abdomen']['hinge']['x'], self.params['head']['hinge']['y']-self.params['abdomen']['hinge']['y']],
+                            [self.params['right']['hinge']['x']-self.params['left']['hinge']['x'], self.params['right']['hinge']['y']-self.params['left']['hinge']['y']]])
+        if (self.name in ['left','right']):
+            self.senseAxes = np.sign(np.linalg.det(matAxes))
+            a = -1 if (self.name=='right') else 1
+            self.sense = a*self.senseAxes
+        else:
+            self.sense = 1  
+
+        self.detector.set_threshold(params[self.name]['threshold'], self.sense)
+    
+        
+    # update_state()
+    #
+    def update_state(self):
+        imgNow = self.imgRoiFgMaskedPolarCropped
+        
+        # Get the rotation & expansion between images.
+        if (imgNow is not None):
+            # Pixel position and strength of the edges.
+            (self.iAngle, self.iRadius) = self.detector.find(imgNow)
+
+            if (self.iAngle is not None) and (self.iRadius is not None):
+                # Convert pixel to angle units, and put angle into the wing frame.
+                anglePerPixel = (self.params['gui'][self.name]['angle_hi']-self.params['gui'][self.name]['angle_lo']) / float(imgNow.shape[1])
+                angle_b = self.params['gui'][self.name]['angle_lo'] + self.iAngle * anglePerPixel
+                angle_p = (self.transform_angle_p_from_b(angle_b) + np.pi) % (2*np.pi) - np.pi
+                self.state.angles = [angle_p]
+                self.state.gradients = self.detector.diff
+                
+                radius = self.params['gui'][self.name]['radius_inner'] + self.iRadius
+                self.state.radii = [radius]
+                self.state.intensity = np.mean(imgNow)/255.0
+
+        
+    # update()
+    # Update all the internals given a foreground camera image.
+    #
+    def update(self, dt, image, bInvertColor):
+        PolarTrackedBodypart.update(self, dt, image, bInvertColor)
+
+        if (self.params['gui'][self.name]['track']):
+            self.update_state()
+            self.windowTest.set_image(self.detector.imgThreshold)
+            
+            
+    
+    
+    # draw()
+    # Draw the state.
+    #
+    def draw(self, image):
+        PolarTrackedBodypart.draw(self, image)
+
+        if (self.params['gui'][self.name]['track']) and (len(self.state.angles)>0):
+            # Draw the bodypart state position.
+            angle = self.state.angles[0] * self.sense
+            pt = self.R.dot([self.state.radii[0]*np.cos(angle), 
+                             self.state.radii[0]*np.sin(angle)]) 
+            ptState_i = clip_pt((int(pt[0]+self.params['gui'][self.name]['hinge']['x']), 
+                                 int(pt[1]+self.params['gui'][self.name]['hinge']['y'])), image.shape) 
+            
+            cv2.ellipse(image,
+                        ptState_i,
+                        (2,2),
+                        0,
+                        0,
+                        360,
+                        self.bgra_state, 
+                        1)
+            
+            # Draw line from hinge to state point.        
+            ptHinge_i = clip_pt((int(self.ptHinge_i[0]), int(self.ptHinge_i[1])), image.shape) 
+            cv2.line(image, ptHinge_i, ptState_i, self.bgra_state, 1)
+            self.windowTest.show()
+        
+        
+    def serve_tipdata_callback(self, request):
+        intensities = self.detector.intensities
+        diffs = self.detector.diff
+        abscissa = range(len(intensities))
+        if (self.iRadius is not None):
+            detectionH = self.iRadius
+        else:
+            detectionH = 0
+            
+        detectionV = self.params[self.name]['threshold']
+        
+            
+        return SrvTipdataResponse(self.color, abscissa, intensities, diffs, detectionH, detectionV)
+        
+        
+# end class TipTracker
 
     
 ###############################################################################
@@ -2580,10 +2805,10 @@ class MainWindow:
         self.cvbridge = CvBridge()
         
         # Load the parameters yaml file.
-        self.parameterfile = os.path.expanduser(rospy.get_param(self.nodename.rstrip('/')+'/parameterfile', '~/%s.yaml' % self.nodename.strip('/')))
+        self.yamlfile = os.path.expanduser(rospy.get_param(self.nodename.rstrip('/')+'/yamlfile', '~/%s.yaml' % self.nodename.strip('/')))
         with self.lockParams:
             try:
-                self.params = rosparam.load_file(self.parameterfile)[0][0]
+                self.params = rosparam.load_file(self.yamlfile)[0][0]
             except (rosparam.RosParamException, IndexError), e:
                 rospy.logwarn('%s.  Using default values.' % e)
                 self.params = {}
@@ -2591,67 +2816,76 @@ class MainWindow:
         defaults = {'filenameBackground':'~/%s.png' % self.nodename.strip('/'),
                     'image_topic':'/camera/image_raw',
                     'use_gui':True,                     # You can turn off the GUI to speed the framerate.
-                    'windows':True,                     # Show the helpful extra windows.
-                    'symmetric':True,                   # Forces the UI to remain symmetric.
                     'scale_image':1.0,                  # Reducing the image scale will speed the framerate.
                     'n_edges_max':1,                    # Max number of edges per wing to find, subject to threshold.
                     'rc_background':1000.0,             # Time constant of the moving average background.
                     'wingbeat_min':180,                 # Bounds for wingbeat frequency measurement.
                     'wingbeat_max':220,
-                    'head':   {'track':True,            # To track, or not to track.
+                    'head':   {'tracker':'texture',
                                'autozero':True,         # Automatically figure out where is the center of motion.
-                               'subtract_bg':False,     # Use background subtraction?
-                               'stabilize':False,       # Image stabilization of the bodypart.
-                               'hinge':{'x':300,        # Hinge position in image coordinates.
-                                        'y':150},
-                               'radius_outer':80,      # Outer radius in pixel units.
-                               'radius_inner':50,       # Inner radius in pixel units.
-                               'angle_hi':0.7854,       # Angle limit in radians.
-                               'angle_lo':-0.7854},     # Angle limit in radians.
-                    'abdomen':{'track':True,
+                               'threshold':0.0},        
+                    'abdomen':{'tracker':'texture',
                                'autozero':True,
-                               'subtract_bg':False,
-                               'stabilize':False,
-                               'hinge':{'x':300,
-                                        'y':250},
-                               'radius_outer':120,
-                               'radius_inner':100,
-                               'angle_hi':3.927, 
-                               'angle_lo':2.3562},
-                    'left':   {'track':True,
-                               'subtract_bg':True,
-                               'stabilize':False,
-                               'threshold':0.0,
-                               'hinge':{'x':250,
-                                        'y':200},
-                               'radius_outer':80,
-                               'radius_inner':50,
-                               'angle_hi':-0.7854, 
-                               'angle_lo':-2.3562},
-                    'right':  {'track':True,
-                               'subtract_bg':True,
-                               'stabilize':False,
-                               'threshold':0.0,
-                               'hinge':{'x':350,
-                                        'y':200},
-                               'radius_outer':80,
-                               'radius_inner':50,
-                               'angle_hi':2.3562, 
-                               'angle_lo':0.7854},
-                    'aux':    {'track':True,
-                               'subtract_bg':False,
-                               'center':{'x':350,
-                                         'y':150},
-                               'radius1':30,
-                               'radius2':20,
-                               'angle':0.0},
-
+                               'threshold':0.0},
+                    'left':   {'tracker':'edge',
+                               'autozero':True,
+                               'threshold':0.0},
+                    'right':  {'tracker':'edge',
+                               'autozero':True,
+                               'threshold':0.0},
+                    'aux':    {'tracker':'intensity'},
+                    'gui': {'windows':True,                     # Show the helpful extra windows.
+                            'symmetric':True,                   # Forces the UI to remain symmetric.
+                            'head':   {'track':True,            # To track, or not to track.
+                                       'subtract_bg':False,     # Use background subtraction?
+                                       'stabilize':False,       # Image stabilization of the bodypart.
+                                       'hinge':{'x':300,        # Hinge position in image coordinates.
+                                                'y':150},
+                                       'radius_outer':80,       # Outer radius in pixel units.
+                                       'radius_inner':50,       # Inner radius in pixel units.
+                                       'angle_hi':0.7854,       # Angle limit in radians.
+                                       'angle_lo':-0.7854},     # Angle limit in radians.
+                            'abdomen':{'track':True,
+                                       'subtract_bg':False,
+                                       'stabilize':False,
+                                       'hinge':{'x':300,
+                                                'y':250},
+                                       'radius_outer':120,
+                                       'radius_inner':100,
+                                       'angle_hi':3.927, 
+                                       'angle_lo':2.3562},
+                            'left':   {'track':True,
+                                       'subtract_bg':True,
+                                       'stabilize':False,
+                                       'hinge':{'x':250,
+                                                'y':200},
+                                       'radius_outer':80,
+                                       'radius_inner':50,
+                                       'angle_hi':-0.7854, 
+                                       'angle_lo':-2.3562},
+                            'right':  {'track':True,
+                                       'subtract_bg':True,
+                                       'stabilize':False,
+                                       'hinge':{'x':350,
+                                                'y':200},
+                                       'radius_outer':80,
+                                       'radius_inner':50,
+                                       'angle_hi':2.3562, 
+                                       'angle_lo':0.7854},
+                            'aux':    {'track':True,
+                                       'subtract_bg':False,
+                                       'center':{'x':350,
+                                                 'y':150},
+                                       'radius1':30,
+                                       'radius2':20,
+                                       'angle':0.0},
+                            }
                     }
 
         SetDict().set_dict_with_preserve(self.params, defaults)
         SetDict().set_dict_with_preserve(self.params, rospy.get_param(self.nodename, {}))
         self.params = self.legalizeParams(self.params)
-        rospy.set_param(self.nodename, self.params)
+        rospy.set_param(self.nodename.rstrip('/')+'/gui', self.params['gui'])
         
         self.scale = self.params['scale_image']
         self.bMousing = False
@@ -2739,25 +2973,31 @@ class MainWindow:
             
             x = btn.right+1
             y = btn.top+1
-            btn = Button(pt=[x,y], scale=self.scale, type='checkbox', name='head', text='H', state=self.params['head']['track'], sides=SIDE_TOP|SIDE_BOTTOM)
+            btn = Button(pt=[x,y], scale=self.scale, type='checkbox', name='head', text='H', state=self.params['gui']['head']['track'], sides=SIDE_TOP|SIDE_BOTTOM)
             self.wrap_button(btn, shape)
             self.buttons.append(btn)
             
             x = btn.right+1
             y = btn.top+1
-            btn = Button(pt=[x,y], scale=self.scale, type='checkbox', name='abdomen', text='A', state=self.params['abdomen']['track'], sides=SIDE_TOP|SIDE_BOTTOM)
+            btn = Button(pt=[x,y], scale=self.scale, type='checkbox', name='abdomen', text='A', state=self.params['gui']['abdomen']['track'], sides=SIDE_TOP|SIDE_BOTTOM)
             self.wrap_button(btn, shape)
             self.buttons.append(btn)
             
             x = btn.right+1
             y = btn.top+1
-            btn = Button(pt=[x,y], scale=self.scale, type='checkbox', name='wings', text='LR', state=self.params['right']['track'], sides=SIDE_TOP|SIDE_BOTTOM)
+            btn = Button(pt=[x,y], scale=self.scale, type='checkbox', name='left', text='L', state=self.params['gui']['left']['track'], sides=SIDE_TOP|SIDE_BOTTOM)
             self.wrap_button(btn, shape)
             self.buttons.append(btn)
             
             x = btn.right+1
             y = btn.top+1
-            btn = Button(pt=[x,y], scale=self.scale, type='checkbox', name='aux', text='X', state=self.params['aux']['track'], sides=SIDE_TOP|SIDE_BOTTOM|SIDE_RIGHT)
+            btn = Button(pt=[x,y], scale=self.scale, type='checkbox', name='right', text='R', state=self.params['gui']['right']['track'], sides=SIDE_TOP|SIDE_BOTTOM)
+            self.wrap_button(btn, shape)
+            self.buttons.append(btn)
+            
+            x = btn.right+1
+            y = btn.top+1
+            btn = Button(pt=[x,y], scale=self.scale, type='checkbox', name='aux', text='X', state=self.params['gui']['aux']['track'], sides=SIDE_TOP|SIDE_BOTTOM|SIDE_RIGHT)
             self.wrap_button(btn, shape)
             self.buttons.append(btn)
             
@@ -2769,43 +3009,43 @@ class MainWindow:
             
             x = btn.right+1
             y = btn.top+1
-            btn = Button(pt=[x,y], scale=self.scale, type='checkbox', name='subtract_head', text='H', state=self.params['head']['subtract_bg'], sides=SIDE_TOP|SIDE_BOTTOM)
+            btn = Button(pt=[x,y], scale=self.scale, type='checkbox', name='subtract_head', text='H', state=self.params['gui']['head']['subtract_bg'], sides=SIDE_TOP|SIDE_BOTTOM)
             self.wrap_button(btn, shape)
             self.buttons.append(btn)
             
             x = btn.right+1
             y = btn.top+1
-            btn = Button(pt=[x,y], scale=self.scale, type='checkbox', name='subtract_abdomen', text='A', state=self.params['abdomen']['subtract_bg'], sides=SIDE_TOP|SIDE_BOTTOM)
+            btn = Button(pt=[x,y], scale=self.scale, type='checkbox', name='subtract_abdomen', text='A', state=self.params['gui']['abdomen']['subtract_bg'], sides=SIDE_TOP|SIDE_BOTTOM)
             self.wrap_button(btn, shape)
             self.buttons.append(btn)
             
             x = btn.right+1
             y = btn.top+1
-            btn = Button(pt=[x,y], scale=self.scale, type='checkbox', name='subtract_lr', text='LR', state=self.params['right']['subtract_bg'], sides=SIDE_TOP|SIDE_BOTTOM)
+            btn = Button(pt=[x,y], scale=self.scale, type='checkbox', name='subtract_lr', text='LR', state=self.params['gui']['right']['subtract_bg'], sides=SIDE_TOP|SIDE_BOTTOM)
             self.wrap_button(btn, shape)
             self.buttons.append(btn)
             
             x = btn.right+1
             y = btn.top+1
-            btn = Button(pt=[x,y], scale=self.scale, type='checkbox', name='subtract_aux', text='X', state=self.params['aux']['subtract_bg'], sides=SIDE_TOP|SIDE_BOTTOM|SIDE_RIGHT)
+            btn = Button(pt=[x,y], scale=self.scale, type='checkbox', name='subtract_aux', text='X', state=self.params['gui']['aux']['subtract_bg'], sides=SIDE_TOP|SIDE_BOTTOM|SIDE_RIGHT)
             self.wrap_button(btn, shape)
             self.buttons.append(btn)
             
             x = btn.right+1
             y = btn.top+1
-            btn = Button(pt=[x,y], scale=self.scale, type='checkbox', name='stabilize', text='stabilize', state=self.params['head']['stabilize'])
+            btn = Button(pt=[x,y], scale=self.scale, type='checkbox', name='stabilize', text='stabilize', state=self.params['gui']['head']['stabilize'])
             self.wrap_button(btn, shape)
             self.buttons.append(btn)
             
             x = btn.right+1
             y = btn.top+1
-            btn = Button(pt=[x,y], scale=self.scale, type='checkbox', name='symmetry', text='symmetric', state=self.params['symmetric'])
+            btn = Button(pt=[x,y], scale=self.scale, type='checkbox', name='symmetry', text='symmetric', state=self.params['gui']['symmetric'])
             self.wrap_button(btn, shape)
             self.buttons.append(btn)
             
             x = btn.right+1
             y = btn.top+1
-            btn = Button(pt=[x,y], scale=self.scale, type='checkbox', name='windows', text='windows', state=self.params['windows'])
+            btn = Button(pt=[x,y], scale=self.scale, type='checkbox', name='windows', text='windows', state=self.params['gui']['windows'])
             self.wrap_button(btn, shape)
             self.buttons.append(btn)
             
@@ -2819,18 +3059,18 @@ class MainWindow:
         paramsOut = copy.copy(params)
         for partname in ['head','abdomen','left','right']:
             if (partname in paramsOut):
-                if ('hinge' in paramsOut[partname]):
-                    if ('x' in paramsOut[partname]['hinge']):
-                        paramsOut[partname]['hinge']['x'] = max(0, paramsOut[partname]['hinge']['x'])
+                if ('hinge' in paramsOut['gui'][partname]):
+                    if ('x' in paramsOut['gui'][partname]['hinge']):
+                        paramsOut['gui'][partname]['hinge']['x'] = max(0, paramsOut['gui'][partname]['hinge']['x'])
         
-                    if ('y' in paramsOut[partname]['hinge']):
-                        paramsOut[partname]['hinge']['y'] = max(0, paramsOut[partname]['hinge']['y'])
+                    if ('y' in paramsOut['gui'][partname]['hinge']):
+                        paramsOut['gui'][partname]['hinge']['y'] = max(0, paramsOut['gui'][partname]['hinge']['y'])
     
-                if ('radius_inner' in paramsOut[partname]):
-                    paramsOut[partname]['radius_inner'] = max(5*paramsOut['scale_image'], paramsOut[partname]['radius_inner'])
+                if ('radius_inner' in paramsOut['gui'][partname]):
+                    paramsOut['gui'][partname]['radius_inner'] = max(5*paramsOut['scale_image'], paramsOut['gui'][partname]['radius_inner'])
     
-                if ('radius_outer' in paramsOut[partname]) and ('radius_inner' in paramsOut[partname]):
-                    paramsOut[partname]['radius_outer'] = max(paramsOut[partname]['radius_outer'], paramsOut[partname]['radius_inner']+5*paramsOut['scale_image'])
+                if ('radius_outer' in paramsOut['gui'][partname]) and ('radius_inner' in paramsOut['gui'][partname]):
+                    paramsOut['gui'][partname]['radius_outer'] = max(paramsOut['gui'][partname]['radius_outer'], paramsOut['gui'][partname]['radius_inner']+5*paramsOut['scale_image'])
 
         return paramsOut
         
@@ -2848,7 +3088,7 @@ class MainWindow:
         # Set it into the wings.
         self.fly.set_params(self.scale_params(self.params, self.scale))
         with self.lockParams:
-            rosparam.dump_params(self.parameterfile, self.nodename)
+            rosparam.dump_params(self.yamlfile, self.nodename.rstrip('/')+'/gui')
         
         return config
 
@@ -2862,9 +3102,9 @@ class MainWindow:
         if (self.command == 'exit'):
             # Save the params.
             SetDict().set_dict_with_preserve(self.params, rospy.get_param(self.nodename, {}))
-            rospy.set_param(self.nodename, self.params)
+            rospy.set_param(self.nodename.rstrip('/')+'/gui', self.params['gui'])
             with self.lockParams:
-                rosparam.dump_params(self.parameterfile, self.nodename)
+                rosparam.dump_params(self.yamlfile, self.nodename.rstrip('/')+'/gui')
 
             rospy.signal_shutdown('User requested exit.')
         
@@ -2898,16 +3138,16 @@ class MainWindow:
         paramsScaled = copy.deepcopy(paramsIn)
 
         for partname in ['head', 'abdomen', 'left', 'right']:
-            paramsScaled[partname]['hinge']['x'] = (paramsIn[partname]['hinge']['x']*scale)  
-            paramsScaled[partname]['hinge']['y'] = (paramsIn[partname]['hinge']['y']*scale)  
-            paramsScaled[partname]['radius_outer'] = (paramsIn[partname]['radius_outer']*scale)  
-            paramsScaled[partname]['radius_inner'] = (paramsIn[partname]['radius_inner']*scale)  
+            paramsScaled['gui'][partname]['hinge']['x'] = (paramsIn['gui'][partname]['hinge']['x']*scale)  
+            paramsScaled['gui'][partname]['hinge']['y'] = (paramsIn['gui'][partname]['hinge']['y']*scale)  
+            paramsScaled['gui'][partname]['radius_outer'] = (paramsIn['gui'][partname]['radius_outer']*scale)  
+            paramsScaled['gui'][partname]['radius_inner'] = (paramsIn['gui'][partname]['radius_inner']*scale)  
             
         for partname in ['aux']:
-            paramsScaled[partname]['center']['x'] = (paramsIn[partname]['center']['x']*scale)  
-            paramsScaled[partname]['center']['y'] = (paramsIn[partname]['center']['y']*scale)  
-            paramsScaled[partname]['radius1'] = (paramsIn[partname]['radius1']*scale)  
-            paramsScaled[partname]['radius2'] = (paramsIn[partname]['radius2']*scale)  
+            paramsScaled['gui'][partname]['center']['x'] = (paramsIn['gui'][partname]['center']['x']*scale)  
+            paramsScaled['gui'][partname]['center']['y'] = (paramsIn['gui'][partname]['center']['y']*scale)  
+            paramsScaled['gui'][partname]['radius1'] = (paramsIn['gui'][partname]['radius1']*scale)  
+            paramsScaled['gui'][partname]['radius2'] = (paramsIn['gui'][partname]['radius2']*scale)  
             
         return paramsScaled  
     
@@ -3024,7 +3264,7 @@ class MainWindow:
                 
     
                     # Output the aux state.
-                    if (self.params['aux']['track']):
+                    if (self.params['gui']['aux']['track']):
                         s = 'AUX: (%0.3f)' % (self.fly.aux.state.intensity)
                         cv2.putText(imgOutput, s, (x, y), self.fontface, self.scaleText, self.fly.aux.bgra)
                         h_text = int(h * self.scale)
@@ -3039,7 +3279,7 @@ class MainWindow:
                     
     
                     # Output the wings state.
-                    if (self.params['right']['track']):
+                    if (self.params['gui']['left']['track']) and (self.params['gui']['right']['track']):
                         # L+R
                         s = 'L+R:'
                         if (len(self.fly.left.state.angles)>0) and (len(self.fly.right.state.angles)>0):
@@ -3059,6 +3299,7 @@ class MainWindow:
                         h_text = int(h * self.scale)
                         y -= h_text+self.h_gap
         
+                    if (self.params['gui']['right']['track']):
                         # Right
                         s = 'R:'
                         if (len(self.fly.right.state.angles)>0):
@@ -3069,6 +3310,7 @@ class MainWindow:
                         h_text = int(h * self.scale)
                         y -= h_text+self.h_gap
             
+                    if (self.params['gui']['left']['track']):
                         # Left
                         s = 'L:'
                         if (len(self.fly.left.state.angles)>0):
@@ -3080,11 +3322,10 @@ class MainWindow:
                         y -= h_text+self.h_gap
                         
                             
-                    # end if (self.params['right']['track'])
     
     
                     # Output the abdomen state.
-                    if (self.params['abdomen']['track']):
+                    if (self.params['gui']['abdomen']['track']):
                         s = 'ABDOMEN:% 7.4f' % (self.fly.abdomen.state.angles[0])
                         cv2.putText(imgOutput, s, (x, y), self.fontface, self.scaleText, self.fly.abdomen.bgra)
                         h_text = int(h * self.scale)
@@ -3092,7 +3333,7 @@ class MainWindow:
                     
     
                     # Output the head state.
-                    if (self.params['head']['track']):
+                    if (self.params['gui']['head']['track']):
                         s = 'HEAD:% 7.4f' % (self.fly.head.state.angles[0])
                         cv2.putText(imgOutput, s, (x, y), self.fontface, self.scaleText, self.fly.head.bgra)
                         h_text = int(h * self.scale)
@@ -3110,7 +3351,6 @@ class MainWindow:
         self.iImgWorking = (self.iImgWorking+1) % 2
 
                 
-
     # save_background()
     # Save the current camera image as the background.
     #
@@ -3224,14 +3464,14 @@ class MainWindow:
             if (partnameSelected=='head') or (partnameSelected=='abdomen'):
 
                 # Get the hinge points pre-move.
-                if (paramsScaled['symmetric']):
-                    ptHead = np.array([paramsScaled['head']['hinge']['x'], paramsScaled['head']['hinge']['y']])
-                    ptAbdomen = np.array([paramsScaled['abdomen']['hinge']['x'], paramsScaled['abdomen']['hinge']['y']])
+                if (paramsScaled['gui']['symmetric']):
+                    ptHead = np.array([paramsScaled['gui']['head']['hinge']['x'], paramsScaled['gui']['head']['hinge']['y']])
+                    ptAbdomen = np.array([paramsScaled['gui']['abdomen']['hinge']['x'], paramsScaled['gui']['abdomen']['hinge']['y']])
                     ptCenterPre = (ptHead + ptAbdomen) / 2
                     ptBodyPre = ptHead - ptAbdomen
                     angleBodyPre = np.arctan2(ptBodyPre[1], ptBodyPre[0])
-                    ptLeft = np.array([paramsScaled['left']['hinge']['x'], paramsScaled['left']['hinge']['y']])
-                    ptRight = np.array([paramsScaled['right']['hinge']['x'], paramsScaled['right']['hinge']['y']])
+                    ptLeft = np.array([paramsScaled['gui']['left']['hinge']['x'], paramsScaled['gui']['left']['hinge']['y']])
+                    ptRight = np.array([paramsScaled['gui']['right']['hinge']['x'], paramsScaled['gui']['right']['hinge']['y']])
                     ptLC = ptLeft-ptCenterPre
                     ptRC = ptRight-ptCenterPre
                     rL = np.linalg.norm(ptLC)
@@ -3241,32 +3481,32 @@ class MainWindow:
 
                 # Move the selected hinge point.
                 pt = ptMouse
-                paramsScaled[partnameSelected]['hinge']['x'] = float(pt[0])
-                paramsScaled[partnameSelected]['hinge']['y'] = float(pt[1])
+                paramsScaled['gui'][partnameSelected]['hinge']['x'] = float(pt[0])
+                paramsScaled['gui'][partnameSelected]['hinge']['y'] = float(pt[1])
                 
                 # Now move the hinge points relative to the new body axis.
-                if (paramsScaled['symmetric']):
-                    ptHead = np.array([paramsScaled['head']['hinge']['x'], paramsScaled['head']['hinge']['y']])
-                    ptAbdomen = np.array([paramsScaled['abdomen']['hinge']['x'], paramsScaled['abdomen']['hinge']['y']])
+                if (paramsScaled['gui']['symmetric']):
+                    ptHead = np.array([paramsScaled['gui']['head']['hinge']['x'], paramsScaled['gui']['head']['hinge']['y']])
+                    ptAbdomen = np.array([paramsScaled['gui']['abdomen']['hinge']['x'], paramsScaled['gui']['abdomen']['hinge']['y']])
                     ptCenterPost = (ptHead + ptAbdomen) / 2
                     ptBodyPost = ptHead - ptAbdomen
                     angleBodyPost = np.arctan2(ptBodyPost[1], ptBodyPost[0])
                     ptLeft = ptCenterPost + rL * np.array([np.cos(aL+angleBodyPost), np.sin(aL+angleBodyPost)])
                     ptRight = ptCenterPost + rR * np.array([np.cos(aR+angleBodyPost), np.sin(aR+angleBodyPost)])
-                    paramsScaled['left']['hinge']['x'] = float(ptLeft[0])
-                    paramsScaled['left']['hinge']['y'] = float(ptLeft[1])
-                    paramsScaled['right']['hinge']['x'] = float(ptRight[0])
-                    paramsScaled['right']['hinge']['y'] = float(ptRight[1])
+                    paramsScaled['gui']['left']['hinge']['x'] = float(ptLeft[0])
+                    paramsScaled['gui']['left']['hinge']['y'] = float(ptLeft[1])
+                    paramsScaled['gui']['right']['hinge']['x'] = float(ptRight[0])
+                    paramsScaled['gui']['right']['hinge']['y'] = float(ptRight[1])
 
                     
             elif (partnameSelected=='left') or (partnameSelected=='right'):
-                paramsScaled[partnameSelected]['hinge']['x'] = float(ptMouse[0])
-                paramsScaled[partnameSelected]['hinge']['y'] = float(ptMouse[1])
+                paramsScaled['gui'][partnameSelected]['hinge']['x'] = float(ptMouse[0])
+                paramsScaled['gui'][partnameSelected]['hinge']['y'] = float(ptMouse[1])
 
-                if (paramsScaled['symmetric']):
+                if (paramsScaled['gui']['symmetric']):
                     ptSlave = self.get_reflection_across_bodyaxis(ptMouse)
-                    paramsScaled[partnameSlave]['hinge']['x'] = float(ptSlave[0])
-                    paramsScaled[partnameSlave]['hinge']['y'] = float(ptSlave[1])
+                    paramsScaled['gui'][partnameSlave]['hinge']['x'] = float(ptSlave[0])
+                    paramsScaled['gui'][partnameSlave]['hinge']['y'] = float(ptSlave[1])
 
 
 
@@ -3275,26 +3515,26 @@ class MainWindow:
             if (tagSelected=='angle_lo'): 
                 angle_lo_b = float(bodypartSelected.transform_angle_b_from_i(np.arctan2(pt[1], pt[0])))
 
-                if (partnameSelected in ['head','abdomen']) and (paramsScaled['symmetric']):
+                if (partnameSelected in ['head','abdomen']) and (paramsScaled['gui']['symmetric']):
                     angle_hi_b = -angle_lo_b
                 else:
-                    angle_hi_b = paramsScaled[partnameSelected][tagOther]
+                    angle_hi_b = paramsScaled['gui'][partnameSelected][tagOther]
 
             elif (tagSelected=='angle_hi'):
                 angle_hi_b = float(bodypartSelected.transform_angle_b_from_i(np.arctan2(pt[1], pt[0])))
                 
-                if (partnameSelected in ['head','abdomen']) and (paramsScaled['symmetric']):
+                if (partnameSelected in ['head','abdomen']) and (paramsScaled['gui']['symmetric']):
                     angle_lo_b = -angle_hi_b
                 else:
-                    angle_lo_b = paramsScaled[partnameSelected][tagOther]
+                    angle_lo_b = paramsScaled['gui'][partnameSelected][tagOther]
             
-            paramsScaled[partnameSelected]['radius_outer'] = float(max(bodypartSelected.params[partnameSelected]['radius_inner']+2*self.scale, 
+            paramsScaled['gui'][partnameSelected]['radius_outer'] = float(max(bodypartSelected.params['gui'][partnameSelected]['radius_inner']+2*self.scale, 
                                                                       np.linalg.norm(bodypartSelected.ptHinge_i - ptMouse)))
                 
             # Make angles relative to bodypart origin.
-            angle_lo_b -= (bodypartSelected.angleOutward_i - bodypartSelected.angleBody_i)
+            angle_lo_b -= bodypartSelected.angleOutward_b
             angle_lo_b = (angle_lo_b+np.pi) % (2.0*np.pi) - np.pi
-            angle_hi_b -= (bodypartSelected.angleOutward_i - bodypartSelected.angleBody_i)
+            angle_hi_b -= bodypartSelected.angleOutward_b
             angle_hi_b = (angle_hi_b+np.pi) % (2.0*np.pi) - np.pi
             
             # Switch to the other handle.
@@ -3302,35 +3542,35 @@ class MainWindow:
                 self.tagSelected = tagOther
                 
             # Set the order of the two angles
-            paramsScaled[partnameSelected]['angle_lo'] = min(angle_lo_b, angle_hi_b)
-            paramsScaled[partnameSelected]['angle_hi'] = max(angle_lo_b, angle_hi_b)
+            paramsScaled['gui'][partnameSelected]['angle_lo'] = min(angle_lo_b, angle_hi_b)
+            paramsScaled['gui'][partnameSelected]['angle_hi'] = max(angle_lo_b, angle_hi_b)
             
             # Make angles relative to fly origin. 
-            paramsScaled[partnameSelected]['angle_lo'] += (bodypartSelected.angleOutward_i - bodypartSelected.angleBody_i)
-            paramsScaled[partnameSelected]['angle_hi'] += (bodypartSelected.angleOutward_i - bodypartSelected.angleBody_i)
-            paramsScaled[partnameSelected]['angle_lo'] = (paramsScaled[partnameSelected]['angle_lo']+np.pi) % (2.0*np.pi) - np.pi
-            paramsScaled[partnameSelected]['angle_hi'] = (paramsScaled[partnameSelected]['angle_hi']+np.pi) % (2.0*np.pi) - np.pi
+            paramsScaled['gui'][partnameSelected]['angle_lo'] += bodypartSelected.angleOutward_b
+            paramsScaled['gui'][partnameSelected]['angle_hi'] += bodypartSelected.angleOutward_b
+            paramsScaled['gui'][partnameSelected]['angle_lo'] = (paramsScaled['gui'][partnameSelected]['angle_lo']+np.pi) % (2.0*np.pi) - np.pi
+            paramsScaled['gui'][partnameSelected]['angle_hi'] = (paramsScaled['gui'][partnameSelected]['angle_hi']+np.pi) % (2.0*np.pi) - np.pi
             
             
-            if (paramsScaled[partnameSelected]['angle_hi'] < paramsScaled[partnameSelected]['angle_lo']):
-                paramsScaled[partnameSelected]['angle_hi'] += 2*np.pi
+            if (paramsScaled['gui'][partnameSelected]['angle_hi'] < paramsScaled['gui'][partnameSelected]['angle_lo']):
+                paramsScaled['gui'][partnameSelected]['angle_hi'] += 2*np.pi
             
             if (partnameSelected in ['left','right']):
-                if (paramsScaled['symmetric']):
-                    paramsScaled[partnameSlave][tagSlave]     = -paramsScaled[partnameSelected][tagSelected]
-                    paramsScaled[partnameSlave][tagSelected]  = -paramsScaled[partnameSelected][tagSlave]
-                    paramsScaled[partnameSlave]['radius_outer'] = paramsScaled[partnameSelected]['radius_outer']
+                if (paramsScaled['gui']['symmetric']):
+                    paramsScaled['gui'][partnameSlave][tagSlave]     = -paramsScaled['gui'][partnameSelected][tagSelected]
+                    paramsScaled['gui'][partnameSlave][tagSelected]  = -paramsScaled['gui'][partnameSelected][tagSlave]
+                    paramsScaled['gui'][partnameSlave]['radius_outer'] = paramsScaled['gui'][partnameSelected]['radius_outer']
                     
-#                 if (paramsScaled[partnameSlave]['angle_hi'] < 0 < paramsScaled[partnameSlave]['angle_lo']):
-#                     paramsScaled[partnameSlave]['angle_hi'] += 2*np.pi
+#                 if (paramsScaled['gui'][partnameSlave]['angle_hi'] < 0 < paramsScaled['gui'][partnameSlave]['angle_lo']):
+#                     paramsScaled['gui'][partnameSlave]['angle_hi'] += 2*np.pi
  
               
         # Inner radius.
         elif (tagSelected=='radius_inner'): 
-            paramsScaled[partnameSelected]['radius_inner'] = float(min(np.linalg.norm(bodypartSelected.ptHinge_i - ptMouse), 
-                                                                                      bodypartSelected.params[partnameSelected]['radius_outer']-2*self.scale))
-            if (partnameSelected in ['left','right']) and (paramsScaled['symmetric']):
-                paramsScaled[partnameSlave]['radius_inner'] = paramsScaled[partnameSelected]['radius_inner']
+            paramsScaled['gui'][partnameSelected]['radius_inner'] = float(min(np.linalg.norm(bodypartSelected.ptHinge_i - ptMouse), 
+                                                                                      bodypartSelected.params['gui'][partnameSelected]['radius_outer']-2*self.scale))
+            if (partnameSelected in ['left','right']) and (paramsScaled['gui']['symmetric']):
+                paramsScaled['gui'][partnameSlave]['radius_inner'] = paramsScaled['gui'][partnameSelected]['radius_inner']
                 
         # Center.
         elif (tagSelected=='center'): 
@@ -3338,18 +3578,18 @@ class MainWindow:
 
                 # Move the center point.
                 pt = ptMouse
-                paramsScaled[partnameSelected]['center']['x'] = float(pt[0])
-                paramsScaled[partnameSelected]['center']['y'] = float(pt[1])
+                paramsScaled['gui'][partnameSelected]['center']['x'] = float(pt[0])
+                paramsScaled['gui'][partnameSelected]['center']['y'] = float(pt[1])
                 
         # Radius.
         elif (tagSelected=='radius1'): 
             pt = ptMouse - bodypartSelected.ptCenter_i
-            paramsScaled[partnameSelected]['radius1'] = float(np.linalg.norm(pt))
-            paramsScaled[partnameSelected]['angle'] = float(np.arctan2(pt[1], pt[0]))        
+            paramsScaled['gui'][partnameSelected]['radius1'] = float(np.linalg.norm(pt))
+            paramsScaled['gui'][partnameSelected]['angle'] = float(np.arctan2(pt[1], pt[0]))        
         elif (tagSelected=='radius2'): 
             pt = bodypartSelected.ptCenter_i - ptMouse
-            paramsScaled[partnameSelected]['radius2'] = float(np.linalg.norm(pt))
-            paramsScaled[partnameSelected]['angle'] = float(np.arctan2(pt[1], pt[0])-np.pi/2.0)        
+            paramsScaled['gui'][partnameSelected]['radius2'] = float(np.linalg.norm(pt))
+            paramsScaled['gui'][partnameSelected]['angle'] = float(np.arctan2(pt[1], pt[0])-np.pi/2.0)        
                 
 
         self.params = self.scale_params(paramsScaled, 1/self.scale) 
@@ -3435,59 +3675,63 @@ class MainWindow:
 
 
                 if (self.nameSelected == self.nameSelectedNow == 'symmetry'):
-                    self.params['symmetric'] = self.buttons[self.iButtonSelected].state
+                    self.params['gui']['symmetric'] = self.buttons[self.iButtonSelected].state
                     
                 elif (self.nameSelected == self.nameSelectedNow == 'subtract_lr'):
                     if (not self.bHaveBackground):
                         self.buttons[iButtonSelected].state = False
                         rospy.logwarn('No background image.  Cannot use background subtraction for left/right.')
 
-                    self.params['left']['subtract_bg']  = self.buttons[iButtonSelected].state
-                    self.params['right']['subtract_bg'] = self.buttons[iButtonSelected].state
+                    self.params['gui']['left']['subtract_bg']  = self.buttons[iButtonSelected].state
+                    self.params['gui']['right']['subtract_bg'] = self.buttons[iButtonSelected].state
                     
                 elif (self.nameSelected == self.nameSelectedNow == 'subtract_aux'):
                     if (not self.bHaveBackground):
                         self.buttons[iButtonSelected].state = False
                         rospy.logwarn('No background image.  Cannot use background subtraction for aux.')
 
-                    self.params['aux']['subtract_bg']  = self.buttons[iButtonSelected].state
+                    self.params['gui']['aux']['subtract_bg']  = self.buttons[iButtonSelected].state
                     
                 elif (self.nameSelected == self.nameSelectedNow == 'subtract_head'):
                     if (not self.bHaveBackground):
                         self.buttons[iButtonSelected].state = False
                         rospy.logwarn('No background image.  Cannot use background subtraction for head.')
 
-                    self.params['head']['subtract_bg']  = self.buttons[iButtonSelected].state
+                    self.params['gui']['head']['subtract_bg']  = self.buttons[iButtonSelected].state
                     
                 elif (self.nameSelected == self.nameSelectedNow == 'subtract_abdomen'):
                     if (not self.bHaveBackground):
                         self.buttons[iButtonSelected].state = False
                         rospy.logwarn('No background image.  Cannot use background subtraction for abdomen.')
 
-                    self.params['abdomen']['subtract_bg']  = self.buttons[iButtonSelected].state
+                    self.params['gui']['abdomen']['subtract_bg']  = self.buttons[iButtonSelected].state
                     
                 elif (self.nameSelected == self.nameSelectedNow == 'head'):
-                    self.params['head']['track'] = self.buttons[iButtonSelected].state
+                    self.params['gui']['head']['track'] = self.buttons[iButtonSelected].state
                     
                 elif (self.nameSelected == self.nameSelectedNow == 'abdomen'):
-                    self.params['abdomen']['track'] = self.buttons[iButtonSelected].state
+                    self.params['gui']['abdomen']['track'] = self.buttons[iButtonSelected].state
 
-                elif (self.nameSelected == self.nameSelectedNow == 'wings'):
-                    self.params['right']['track'] = self.buttons[iButtonSelected].state
-                    self.params['left']['track']  = self.buttons[iButtonSelected].state
+                elif (self.nameSelected == self.nameSelectedNow == 'left'):
+                    self.params['gui']['left']['track']  = self.buttons[iButtonSelected].state
+
+                elif (self.nameSelected == self.nameSelectedNow == 'right'):
+                    self.params['gui']['right']['track'] = self.buttons[iButtonSelected].state
 
                 elif (self.nameSelected == self.nameSelectedNow == 'aux'):
-                    self.params['aux']['track'] = self.buttons[iButtonSelected].state
-                    if (self.params['aux']['track']):
+                    self.params['gui']['aux']['track'] = self.buttons[iButtonSelected].state
+                    if (self.params['gui']['aux']['track']):
                         self.fly.aux.wingbeat.warn()
                     
 
                 elif (self.nameSelected == self.nameSelectedNow == 'stabilize'):
-                    self.params['head']['stabilize'] = self.buttons[iButtonSelected].state
-                    self.params['abdomen']['stabilize'] = self.buttons[iButtonSelected].state
+                    self.params['gui']['head']['stabilize']    = self.buttons[iButtonSelected].state
+                    self.params['gui']['abdomen']['stabilize'] = self.buttons[iButtonSelected].state
+                    self.params['gui']['left']['stabilize']    = self.buttons[iButtonSelected].state
+                    self.params['gui']['right']['stabilize']   = self.buttons[iButtonSelected].state
 
                 elif (self.nameSelected == self.nameSelectedNow == 'windows'):
-                    self.params['windows'] = self.buttons[iButtonSelected].state
+                    self.params['gui']['windows'] = self.buttons[iButtonSelected].state
 
 
             if (self.uiSelected in ['handle','checkbox']):
@@ -3497,9 +3741,9 @@ class MainWindow:
                 # Save the results.
                 SetDict().set_dict_with_preserve(self.params, rospy.get_param(self.nodename, {}))
 
-                rospy.set_param(self.nodename, self.params)
+                rospy.set_param(self.nodename.rstrip('/')+'/gui', self.params['gui'])
                 with self.lockParams:
-                    rosparam.dump_params(self.parameterfile, self.nodename)
+                    rosparam.dump_params(self.yamlfile, self.nodename.rstrip('/')+'/gui')
 
             # Dump the params to the screen, for debugging.
 #             for k,v in self.params.iteritems():
@@ -3520,7 +3764,7 @@ class MainWindow:
             
                 
     def run(self):
-        if (self.params['aux']['track']):
+        if (self.params['gui']['aux']['track']):
             self.fly.aux.wingbeat.warn()
         
         while (not rospy.is_shutdown()):
