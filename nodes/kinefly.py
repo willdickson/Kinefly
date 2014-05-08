@@ -2804,10 +2804,16 @@ class MainWindow:
         cv2.namedWindow(self.window_name,1)
         self.cvbridge = CvBridge()
         
-        # Load the GUI parameters yaml file.
         self.yamlfile = os.path.expanduser(rospy.get_param(self.nodename.rstrip('/')+'/yamlfile', '~/%s.yaml' % self.nodename.strip('/')))
         with self.lockParams:
-            self.params = {}
+            # Load the parameters from server.
+            try:
+                self.params = rospy.get_param(self.nodename.rstrip('/'), {})
+            except (rosparam.RosParamException, IndexError), e:
+                rospy.logwarn('%s.  Using default values.' % e)
+                self.params = {}
+
+            # Load the GUI parameters yaml file.
             try:
                 self.params['gui'] = rosparam.load_file(self.yamlfile)[0][0]
             except (rosparam.RosParamException, IndexError), e:
@@ -2883,7 +2889,7 @@ class MainWindow:
                     }
 
         SetDict().set_dict_with_preserve(self.params, defaults)
-        SetDict().set_dict_with_preserve(self.params, rospy.get_param(self.nodename, {}))
+        #SetDict().set_dict_with_preserve(self.params, rospy.get_param(self.nodename, {}))
         self.params = self.legalizeParams(self.params)
         rospy.set_param(self.nodename.rstrip('/')+'/gui', self.params['gui'])
         
