@@ -18,7 +18,7 @@ class TipPlotter:
         rospy.init_node('tipplotter', anonymous=True)
         
         # Attach to services.
-        service_name = 'tipdata_head'
+        service_name = 'tipdata_left'
         rospy.wait_for_service(service_name)
         self.get_tipdata = rospy.ServiceProxy(service_name, SrvTipdata)
         

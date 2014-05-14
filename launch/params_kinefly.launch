@@ -9,8 +9,8 @@
     <param name="kinefly/parameterfile"      type="string" value="$(env HOME)/kinefly.yaml" />
     <param name="kinefly/filenameBackground" type="string" value="$(env HOME)/kinefly.png" />
     
-    <param name="kinefly/image_topic"        type="string" value="/camera/image_raw" />
-    <param name="kinefly/n_edges_max"        type="int"    value="1" />
+    <param name="kinefly/image_topic"        type="string" value="/camera/image_mono" />
+    <param name="kinefly/n_edges_max"        type="int"    value="4" />
     <param name="kinefly/rc_background"      type="double" value="1000" />
     <param name="kinefly/scale_image"        type="double" value="1.0" />
     <param name="kinefly/use_gui"            type="bool"   value="true" />
@@ -19,19 +19,19 @@
     
     <param name="kinefly/head/autozero"      type="bool"   value="true" />
     <param name="kinefly/head/threshold"     type="double" value="0.0" />
-    <param name="kinefly/head/tracker"       type="string" value="texture" />
+    <param name="kinefly/head/tracker"       type="string" value="texture" />   <!-- texture, edge, or tip -->
     
     <param name="kinefly/abdomen/autozero"   type="bool"   value="true" />
     <param name="kinefly/abdomen/threshold"  type="double" value="0.0" />
-    <param name="kinefly/abdomen/tracker"    type="string" value="texture" />
+    <param name="kinefly/abdomen/tracker"    type="string" value="texture" />   <!-- texture, edge, or tip -->
     
     <param name="kinefly/left/autozero"      type="bool"   value="true" />
-    <param name="kinefly/left/threshold"     type="double" value="0.01" />
-    <param name="kinefly/left/tracker"       type="string" value="edge" />
+    <param name="kinefly/left/threshold"     type="double" value="0.00" />
+    <param name="kinefly/left/tracker"       type="string" value="edge" />      <!-- texture, edge, or tip -->
     
     <param name="kinefly/right/autozero"     type="bool"   value="true" />
-    <param name="kinefly/right/threshold"    type="double" value="0.01" />
-    <param name="kinefly/right/tracker"      type="string" value="edge" />
+    <param name="kinefly/right/threshold"    type="double" value="0.00" />
+    <param name="kinefly/right/tracker"      type="string" value="edge" />      <!-- texture, edge, or tip -->
     
     <param name="kinefly/aux/tracker"       type="string"  value="intensity" />
     

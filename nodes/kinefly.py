@@ -767,6 +767,8 @@ class WindowFunctions(object):
                  
         return wfn
 
+# End class WindowFunctions
+
 
     
 ###############################################################################
@@ -1190,96 +1192,97 @@ class PolarTrackedBodypart(object):
     # Create elliptical wedge masks, and window functions.
     #
     def create_mask(self, shape):
-        # Create the mask (for polar images the line-of-interest is at the midpoint).
-        mask = np.zeros(shape, dtype=np.uint8)
-        
-        # Args for the two ellipse calls.
-        x = int(self.params['gui'][self.name]['hinge']['x'])
-        y = int(self.params['gui'][self.name]['hinge']['y'])
-        r_outer = int(np.ceil(self.params['gui'][self.name]['radius_outer']))
-        r_inner = int(np.floor(self.params['gui'][self.name]['radius_inner']))-1
-
-        hi = int(np.ceil(np.rad2deg(self.angle_hi_i)))
-        lo = int(np.floor(np.rad2deg(self.angle_lo_i)))
-        
-        # Draw the mask.
-        cv2.ellipse(mask, (x, y), (r_outer, r_outer), 0, hi, lo, bgra_dict['white'], cv.CV_FILLED)
-        cv2.ellipse(mask, (x, y), (r_inner, r_inner), 0, 0, 360, bgra_dict['black'], cv.CV_FILLED)
-        mask = cv2.dilate(mask, np.ones([3,3])) # Make the mask one pixel bigger to account for pixel aliasing.
-        self.windowMask.set_image(mask)
-        
-        # Find the ROI of the mask.
-        xSum = np.sum(mask, 0)
-        ySum = np.sum(mask, 1)
-        xMask = np.where(xSum>0)[0]
-        yMask = np.where(ySum>0)[0]
-        
-        if (len(xMask)>0) and (len(yMask)>0): 
-            # Dilate with a border.
-            b=0 # Border
-            xMin0 = np.where(xSum>0)[0][0]  - b
-            xMax0 = np.where(xSum>0)[0][-1] + b+1
-            yMin0 = np.where(ySum>0)[0][0]  - b
-            yMax0 = np.where(ySum>0)[0][-1] + b+1
+        if (self.params['gui'][self.name]['track']):
+            # Create the mask (for polar images the line-of-interest is at the midpoint).
+            mask = np.zeros(shape, dtype=np.uint8)
             
-            # Clip border to image edges.
-            xMin = np.max([0,xMin0])
-            yMin = np.max([0,yMin0])
-            xMax = np.min([xMax0, shape[1]-1])
-            yMax = np.min([yMax0, shape[0]-1])
+            # Args for the two ellipse calls.
+            x = int(self.params['gui'][self.name]['hinge']['x'])
+            y = int(self.params['gui'][self.name]['hinge']['y'])
+            r_outer = int(np.ceil(self.params['gui'][self.name]['radius_outer']))
+            r_inner = int(np.floor(self.params['gui'][self.name]['radius_inner']))-1
+    
+            hi = int(np.ceil(np.rad2deg(self.angle_hi_i)))
+            lo = int(np.floor(np.rad2deg(self.angle_lo_i)))
             
-            self.roi = np.array([xMin, yMin, xMax, yMax])
-            self.maskRoi = mask[yMin:yMax, xMin:xMax]
-            self.sumMask = np.sum(self.maskRoi).astype(np.float32)
-
-    
-            self.i_0 = self.params['gui'][self.name]['hinge']['y'] - self.roi[1]
-            self.j_0 = self.params['gui'][self.name]['hinge']['x'] - self.roi[0]
+            # Draw the mask.
+            cv2.ellipse(mask, (x, y), (r_outer, r_outer), 0, hi, lo, bgra_dict['white'], cv.CV_FILLED)
+            cv2.ellipse(mask, (x, y), (r_inner, r_inner), 0, 0, 360, bgra_dict['black'], cv.CV_FILLED)
+            mask = cv2.dilate(mask, np.ones([3,3])) # Make the mask one pixel bigger to account for pixel aliasing.
+            self.windowMask.set_image(mask)
             
-            self.wfnRoi = None
-            self.wfnRoiMaskedPolarCropped = None
-            self.bInitializedMasks = True
+            # Find the ROI of the mask.
+            xSum = np.sum(mask, 0)
+            ySum = np.sum(mask, 1)
+            xMask = np.where(xSum>0)[0]
+            yMask = np.where(ySum>0)[0]
+            
+            if (len(xMask)>0) and (len(yMask)>0): 
+                # Dilate with a border.
+                b=0 # Border
+                xMin0 = np.where(xSum>0)[0][0]  - b
+                xMax0 = np.where(xSum>0)[0][-1] + b+1
+                yMin0 = np.where(ySum>0)[0][0]  - b
+                yMax0 = np.where(ySum>0)[0][-1] + b+1
+                
+                # Clip border to image edges.
+                xMin = np.max([0,xMin0])
+                yMin = np.max([0,yMin0])
+                xMax = np.min([xMax0, shape[1]-1])
+                yMax = np.min([yMax0, shape[0]-1])
+                
+                self.roi = np.array([xMin, yMin, xMax, yMax])
+                self.maskRoi = mask[yMin:yMax, xMin:xMax]
+                self.sumMask = np.sum(self.maskRoi).astype(np.float32)
     
+        
+                self.i_0 = self.params['gui'][self.name]['hinge']['y'] - self.roi[1]
+                self.j_0 = self.params['gui'][self.name]['hinge']['x'] - self.roi[0]
+                
+                self.wfnRoi = None
+                self.wfnRoiMaskedPolarCropped = None
+                self.bInitializedMasks = True
+        
+        
+                # Find where the mask might be clipped.  First, draw an unclipped ellipse.        
+                delta = 1
+                pts =                cv2.ellipse2Poly((x, y), (r_outer, r_outer), 0, hi, lo, delta)
+                pts = np.append(pts, cv2.ellipse2Poly((x, y), (r_inner, r_inner), 0, hi, lo, delta), 0)
+                #pts = np.append(pts, [list of line1 pixels connecting the two arcs], 0) 
+                #pts = np.append(pts, [list of line2 pixels connecting the two arcs], 0) 
+        
+        
+                # These are the unclipped locations.        
+                min0 = pts.min(0)
+                max0 = pts.max(0)
+                xMin0 = min0[0]
+                yMin0 = min0[1]
+                xMax0 = max0[0]+1
+                yMax0 = max0[1]+1
     
-            # Find where the mask might be clipped.  First, draw an unclipped ellipse.        
-            delta = 1
-            pts =                cv2.ellipse2Poly((x, y), (r_outer, r_outer), 0, hi, lo, delta)
-            pts = np.append(pts, cv2.ellipse2Poly((x, y), (r_inner, r_inner), 0, hi, lo, delta), 0)
-            #pts = np.append(pts, [list of line1 pixels connecting the two arcs], 0) 
-            #pts = np.append(pts, [list of line2 pixels connecting the two arcs], 0) 
-    
-    
-            # These are the unclipped locations.        
-            min0 = pts.min(0)
-            max0 = pts.max(0)
-            xMin0 = min0[0]
-            yMin0 = min0[1]
-            xMax0 = max0[0]+1
-            yMax0 = max0[1]+1
-
-            # Compare unclipped with the as-drawn locations.
-            xClip0 = xMin-xMin0
-            yClip0 = yMin-yMin0
-            xClip1 = xMax0-xMax
-            yClip1 = yMax0-yMax
-            roiClipped = np.array([xClip0, yClip0, xClip1, yClip1])
-    
-            (i_n, j_n) = shape[:2]
-                    
-            # Determine how much of the bottom of the polar image to trim off (i.e. rClip) based on if the ellipse is partially offimage.
-            (rClip0, rClip1, rClip2, rClip3) = (1.0, 1.0, 1.0, 1.0)
-            if (roiClipped[0]>0): # Left
-                rClip0 = 1.0 - (float(roiClipped[0])/float(r_outer-r_inner))#self.j_0))
-            if (roiClipped[1]>0): # Top
-                rClip1 = 1.0 - (float(roiClipped[1])/float(r_outer-r_inner))#self.i_0))
-            if (roiClipped[2]>0): # Right
-                rClip2 = 1.0 - (float(roiClipped[2])/float(r_outer-r_inner))#j_n-self.j_0))
-            if (roiClipped[3]>0): # Bottom
-                rClip3 = 1.0 - (float(roiClipped[3])/float(r_outer-r_inner))#i_n-self.i_0))
-    
-            self.rClip = np.min([rClip0, rClip1, rClip2, rClip3])
-        else:
-            rospy.logwarn('%s: Empty mask.' % self.name)        
+                # Compare unclipped with the as-drawn locations.
+                xClip0 = xMin-xMin0
+                yClip0 = yMin-yMin0
+                xClip1 = xMax0-xMax
+                yClip1 = yMax0-yMax
+                roiClipped = np.array([xClip0, yClip0, xClip1, yClip1])
+        
+                (i_n, j_n) = shape[:2]
+                        
+                # Determine how much of the bottom of the polar image to trim off (i.e. rClip) based on if the ellipse is partially offimage.
+                (rClip0, rClip1, rClip2, rClip3) = (1.0, 1.0, 1.0, 1.0)
+                if (roiClipped[0]>0): # Left
+                    rClip0 = 1.0 - (float(roiClipped[0])/float(r_outer-r_inner))#self.j_0))
+                if (roiClipped[1]>0): # Top
+                    rClip1 = 1.0 - (float(roiClipped[1])/float(r_outer-r_inner))#self.i_0))
+                if (roiClipped[2]>0): # Right
+                    rClip2 = 1.0 - (float(roiClipped[2])/float(r_outer-r_inner))#j_n-self.j_0))
+                if (roiClipped[3]>0): # Bottom
+                    rClip3 = 1.0 - (float(roiClipped[3])/float(r_outer-r_inner))#i_n-self.i_0))
+        
+                self.rClip = np.min([rClip0, rClip1, rClip2, rClip3])
+            else:
+                rospy.logwarn('%s: Empty mask.' % self.name)        
         
     # set_background()
     # Set the given image as the background image.
@@ -2686,8 +2689,8 @@ class TipTracker(PolarTrackedBodypart):
         self.state.gradients = []
 
         # Compute the 'handedness' of the head/abdomen and wing/wing axes.  self.sense specifies the direction of positive angles.
-        matAxes = np.array([[self.params['head']['hinge']['x']-self.params['abdomen']['hinge']['x'], self.params['head']['hinge']['y']-self.params['abdomen']['hinge']['y']],
-                            [self.params['right']['hinge']['x']-self.params['left']['hinge']['x'], self.params['right']['hinge']['y']-self.params['left']['hinge']['y']]])
+        matAxes = np.array([[self.params['gui']['head']['hinge']['x']-self.params['gui']['abdomen']['hinge']['x'], self.params['gui']['head']['hinge']['y']-self.params['gui']['abdomen']['hinge']['y']],
+                            [self.params['gui']['right']['hinge']['x']-self.params['gui']['left']['hinge']['x'], self.params['gui']['right']['hinge']['y']-self.params['gui']['left']['hinge']['y']]])
         if (self.name in ['left','right']):
             self.senseAxes = np.sign(np.linalg.det(matAxes))
             a = -1 if (self.name=='right') else 1
