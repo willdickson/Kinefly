@@ -1,0 +1,15 @@
+<launch>
+	<!-- ========================================================== -->
+	<!-- Launch everything needed for Kinefly.                      -->
+	<!-- ========================================================== -->
+
+
+    <include file="$(find Kinefly)/launch/params_kinefly_2.launch" />
+
+    <param name="use_sim_time" type="bool" value="false"/>
+    <node name="playbag" pkg="rosbag" type="play" args="--clock --delay=1 --rate=1.0 --loop /home/ssafarik/camera2_front_b.bag" required="true" />
+
+    <node name="kinefly2" pkg="Kinefly" type="kinefly.py"  required="true"      />
+    <node name="kinefly2phidgetsanalog"  pkg="Kinefly"   type="kinefly2phidgetsanalog.py" ns="kinefly2" />
+    
+</launch>

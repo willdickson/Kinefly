@@ -1,0 +1,10 @@
+<launch>
+	<!-- ========================================================== -->
+	<!-- Launch everything needed for Kinefly.                      -->
+	<!-- ========================================================== -->
+
+
+    <include file="$(find Kinefly)/launch/main_ethernet_1.launch" />
+    <include file="$(find Kinefly)/launch/main_ethernet_2.launch" />
+    
+</launch>
