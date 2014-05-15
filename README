@@ -176,7 +176,7 @@ Parameters.
 ---------------------------
 Parameters are stored in the file 'Kinefly/launch/params_kinefly.launch'.  
 
-Handle positions and checkbox states are automatically written to the kinefly.yaml file, but roslaunch needs the file needs to exist.
+Handle positions and checkbox states are automatically saved to the kinefly.yaml file.
 
 There are some global parameters, plus sections for each of head/abdomen/left/right.  
 

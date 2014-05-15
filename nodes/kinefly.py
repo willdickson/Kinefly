@@ -31,7 +31,7 @@ SIDE_LEFT = 4
 SIDE_RIGHT = 8
 SIDE_ALL = (SIDE_TOP | SIDE_BOTTOM | SIDE_LEFT | SIDE_RIGHT)
 
-gImageTime = 0.0
+# gImageTime = 0.0
 
 
 # Colors.
@@ -378,12 +378,13 @@ class Handle(object):
         self.scale = 1.0
 
         self.color = color
-        self.radius = 3
+        self.radiusDraw = 3
+        self.radiusHit = 6
 
 
     def hit_test(self, ptMouse):
         d = np.linalg.norm(self.pt - ptMouse)
-        if (d < self.radius+2):
+        if (d < self.radiusHit):
             return True
         else:
             return False
@@ -393,7 +394,7 @@ class Handle(object):
     # Draw a handle.
     # 
     def draw(self, image):
-        cv2.circle(image, tuple(self.pt.astype(int)),  self.radius, self.color, cv.CV_FILLED)
+        cv2.circle(image, tuple(self.pt.astype(int)),  self.radiusDraw, self.color, cv.CV_FILLED)
         
         #ptText = self.pt+np.array([5,5])
         #cv2.putText(image, self.name, tuple(ptText.astype(int)), cv2.FONT_HERSHEY_SIMPLEX, 0.4*self.scale, self.color)
@@ -2795,8 +2796,8 @@ class MainWindow:
         self.bInitialized = False
         self.stampPrev = None
         self.stampPrevAlt = None
-        self.dt = np.inf
         self.lockParams = threading.Lock()
+        self.lockBuffer = threading.Lock()
         
         # initialize
         rospy.init_node('kinefly')
@@ -2922,22 +2923,28 @@ class MainWindow:
         self.uiSelected = None
         self.stateSelected = None
         self.fly.update_handle_points()
-        self.tPrev = rospy.Time.now().to_sec()
-        self.hz = 0.0
-        self.hzSum = 0.0
+        self.stampDiff = rospy.Duration(0)
+        self.stampMax = rospy.Duration(0)
+        self.dtCamera = np.inf
+        self.hzActual       = 0.0
+        self.hzActualSum    = 0.0
+        self.hzAvailable    = 0.0
+        self.hzAvailableSum = 0.0
         self.iCount = 0
+        self.iDroppedFrame = 0
         
-        self.rosimage = [None,None]
-        self.iImgWorking = 0  # Index of the image being processed.  Callback should write to the other image.
+        self.bufferImages = [None]*3 # Circular buffer for incoming images.
+        self.iImgLoading = 0  # Index of the next slot to load.
+        self.iImgWorking = 0  # Index of the slot to process, i.e. the oldest image in the buffer.
         self.imgUnscaled = None
         self.imgScaled = None
         
         # Publishers.
-        self.pubCommand            = rospy.Publisher(self.nodename.rstrip('/')+'/command', MsgCommand)
+        self.pubCommand    = rospy.Publisher(self.nodename.rstrip('/')+'/command', MsgCommand)
 
         # Subscriptions.        
-        self.subImageRaw           = rospy.Subscriber(self.params['image_topic'], Image, self.image_callback, queue_size=1)
-        self.subCommand            = rospy.Subscriber(self.nodename.rstrip('/')+'/command', MsgCommand, self.command_callback, queue_size=1000)
+        self.subImage      = rospy.Subscriber(self.params['image_topic'],           Image,      self.image_callback,  queue_size=1)
+        self.subCommand    = rospy.Subscriber(self.nodename.rstrip('/')+'/command', MsgCommand, self.command_callback, queue_size=1000)
 
         self.h_gap = int(5 * self.scale)
         self.w_gap = int(10 * self.scale)
@@ -3172,46 +3179,69 @@ class MainWindow:
 
 
     def image_callback(self, rosimage):
-        self.header = rosimage.header
-        global gImageTime
-        gImageTime = self.header.stamp.to_sec()
+#         global gImageTime
+#         gImageTime = self.header.stamp.to_sec()
 
-        # Point to the non-working image.
-        iImgLoading = (self.iImgWorking+1) % 2
-        
         # Receive the image:
         if (not self.bQuitting):
-            self.rosimage[iImgLoading] = rosimage
+            with self.lockBuffer:
+                if (self.bufferImages[self.iImgLoading] is None):   # There's an empty slot in the buffer.
+                    iImgLoadingNext = (self.iImgLoading+1) % len(self.bufferImages)
+                    iImgWorkingNext = self.iImgWorking
+                    self.iDroppedFrame = 0
+                else:                                               # The buffer is full; we'll overwrite the oldest entry.
+                    iImgLoadingNext = (self.iImgLoading+1) % len(self.bufferImages)
+                    iImgWorkingNext = (self.iImgWorking+1) % len(self.bufferImages)
+                    self.iDroppedFrame += 1
+    
+                self.bufferImages[self.iImgLoading] = rosimage
+                self.iImgLoading = iImgLoadingNext
+                self.iImgWorking = iImgWorkingNext
+
                 
                 
                 
     def process_image(self):
-        if (self.rosimage[self.iImgWorking] is not None):
-            stampAlt = rospy.Time.now()
-            
-            if (self.stampPrev is not None):
-                self.dt = max(0, (self.header.stamp - self.stampPrev).to_sec())
+        stamp0 = rospy.Time.now()
+        img = None
+        
+        with self.lockBuffer:
+            if (self.bufferImages[self.iImgWorking] is not None):
+                self.header = self.bufferImages[self.iImgWorking].header
                 
-                # If the camera is not giving good timestamps, then use our own clock.
-                if (self.dt == 0.0):
-                    self.dt = max(0,0, (stampAlt - self.stampPrevAlt).to_sec())
+                if (self.stampPrev is not None):
+                    self.dtCamera = max(0, (self.header.stamp - self.stampPrev).to_sec())
                     
-                # If time wrapped, then just assume a value.
-                if (self.dt == 0.0):
-                    self.dt = 1.0
+                    # If the camera is not giving good timestamps, then use our own clock.
+                    if (self.dtCamera == 0.0):
+                        self.dtCamera = max(0, (stamp0 - self.stampPrevAlt).to_sec())
+                        
+                    # If time wrapped, then just assume a value.
+                    if (self.dtCamera == 0.0):
+                        self.dtCamera = 1.0
+                        
+                else:
+                    self.dtCamera = np.inf
                     
-            else:
-                self.dt = np.inf
-            self.stampPrev = self.header.stamp
-            self.stampPrevAlt = stampAlt
-            
-            try:
-                img = np.uint8(cv.GetMat(self.cvbridge.imgmsg_to_cv(self.rosimage[self.iImgWorking], 'passthrough')))
+                self.stampPrev = self.header.stamp
+                self.stampPrevAlt = stamp0
                 
-            except CvBridgeError, e:
-                rospy.logwarn ('Exception converting background image from ROS to opencv:  %s' % e)
-                img = np.zeros((320,240))
-            
+                try:
+                    img = np.uint8(cv.GetMat(self.cvbridge.imgmsg_to_cv(self.bufferImages[self.iImgWorking], 'passthrough')))
+                    
+                except CvBridgeError, e:
+                    rospy.logwarn ('Exception converting background image from ROS to opencv:  %s' % e)
+                    img = np.zeros((320,240))
+    
+                
+                # Mark this buffer entry as available for loading.
+                self.bufferImages[self.iImgWorking] = None
+    
+                # Go to the next image.
+                self.iImgWorking = (self.iImgWorking+1) % len(self.bufferImages)
+
+
+        if (img is not None):            
             # Scale the image.
             self.imgUnscaled = img
             if (self.scale == 1.0):              
@@ -3251,26 +3281,44 @@ class MainWindow:
                 y = y_bottom
                 h = 10
 
-                # Output the framerate.
                 w = 55
                 if (not self.bMousing):
-#                     tNow = rospy.Time.now().to_sec()
-#                     dt = tNow - self.tPrev
-#                     self.tPrev = tNow
-                    hzNow = 1/self.dt
+                    # Output the framerate.
+                    hzNow = 1/self.dtCamera
                     self.iCount += 1
                     if (self.iCount > 100):                     
                         a= 0.04 # Filter the framerate.
-                        self.hz = (1-a)*self.hz + a*hzNow 
+                        self.hzActual = (1-a)*self.hzActual + a*hzNow 
                     else:                                       
                         if (self.iCount>20):             # Get past the transient response.       
-                            self.hzSum += hzNow                 
+                            self.hzActualSum += hzNow                 
                         else:
-                            self.hzSum = hzNow * self.iCount     
+                            self.hzActualSum = hzNow * self.iCount     
                             
-                        self.hz = self.hzSum / self.iCount
+                        self.hzActual = self.hzActualSum / self.iCount
                         
-                    cv2.putText(imgOutput, '%5.1f Hz' % self.hz, (x, y), self.fontface, self.scaleText, bgra_dict['dark_red'] )
+                    dtAvailable = self.stampDiff.to_sec()
+                    if (dtAvailable != 0.0):
+                        hzAvailableNow = 1/dtAvailable
+                        if (self.iCount > 100):                     
+                            a= 0.04 # Filter the framerate.
+                            self.hzAvailable = (1-a)*self.hzAvailable + a*hzAvailableNow 
+                        else:                                       
+                            if (self.iCount>20):             # Get past the transient response.       
+                                self.hzAvailableSum += hzAvailableNow                 
+                            else:
+                                self.hzAvailableSum = hzAvailableNow * self.iCount     
+                                
+                            self.hzAvailable = self.hzAvailableSum / self.iCount
+                        
+                    
+                    
+                    s = '%5.1fHz (%5.1fHz avail)' % (self.hzActual, self.hzAvailable)
+                        
+                    if (self.iDroppedFrame>0):
+                        s += '    Dropped Frames: %d' % self.iDroppedFrame
+
+                    cv2.putText(imgOutput, s, (x, y), self.fontface, self.scaleText, bgra_dict['dark_red'] )
                     
                     h_text = int(h * self.scale)
                     y -= h_text+self.h_gap
@@ -3357,12 +3405,14 @@ class MainWindow:
                 cv2.imshow(self.window_name, imgOutput)
                 cv2.waitKey(1)
 
-            # Mark this image as done.
-            self.rosimage[self.iImgWorking] = None
+            # Compute processing time.
+            stamp1 = rospy.Time.now()
+            self.stampDiff = (stamp1 - stamp0)
+            self.stampMax = max(self.stampMax, self.stampDiff)
+            if (self.iCount % 100)==0:
+                self.stampMax = rospy.Duration(0)
             
-        # Go to the other image.
-        self.iImgWorking = (self.iImgWorking+1) % 2
-
+            
                 
     # save_background()
     # Save the current camera image as the background.

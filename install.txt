@@ -78,10 +78,6 @@ sudo cp ~/src.git/Kinefly/udev/99-phidgets.rules /etc/udev/rules.d
 rosmake Kinefly
 
 
-# Before the initial run of Kinefly, you must also create a blank ~/kinefly.yaml file.  
-touch ~/kinefly.yaml
-
-
 # You're done!
 # Assuming that you got here successfully, then you 
 # should be able to run Kinefly, for example:
