@@ -4,7 +4,7 @@
 	<!-- ========================================================== -->
 
 
-    <rosparam file="$(env HOME)/kinefly2.yaml" ns="kinefly2" />
+    <rosparam file="$(env HOME)/kinefly2.yaml" ns="kinefly2/gui" />
     <param name="kinefly2/parameterfile"     type="string" value="$(env HOME)/kinefly2.yaml" />
     <param name="kinefly2/filenameBackground" type="string" value="$(env HOME)/kinefly2.png" />
     
