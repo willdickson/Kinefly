@@ -18,19 +18,19 @@
     
     <param name="kinefly2/head/autozero"      type="bool"   value="true" />
     <param name="kinefly2/head/threshold"     type="double" value="0.0" />
-    <param name="kinefly2/head/tracker"       type="string" value="texture" />   <!-- texture, edge, or tip -->
+    <param name="kinefly2/head/tracker"       type="string" value="area" />   <!-- area, edge, or tip -->
     
     <param name="kinefly2/abdomen/autozero"   type="bool"   value="true" />
     <param name="kinefly2/abdomen/threshold"  type="double" value="0.0" />
-    <param name="kinefly2/abdomen/tracker"    type="string" value="texture" />   <!-- texture, edge, or tip -->
+    <param name="kinefly2/abdomen/tracker"    type="string" value="area" />   <!-- area, edge, or tip -->
     
     <param name="kinefly2/left/autozero"      type="bool"   value="true" />
     <param name="kinefly2/left/threshold"     type="double" value="0.005" />
-    <param name="kinefly2/left/tracker"       type="string" value="tip" />      <!-- texture, edge, or tip -->
+    <param name="kinefly2/left/tracker"       type="string" value="tip" />      <!-- area, edge, or tip -->
     
     <param name="kinefly2/right/autozero"     type="bool"   value="true" />
     <param name="kinefly2/right/threshold"    type="double" value="0.005" />
-    <param name="kinefly2/right/tracker"      type="string" value="tip" />      <!-- texture, edge, or tip -->
+    <param name="kinefly2/right/tracker"      type="string" value="tip" />      <!-- area, edge, or tip -->
     
     <param name="kinefly2/aux/tracker"       type="string"  value="intensity" />
     

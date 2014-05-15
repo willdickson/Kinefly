@@ -1771,7 +1771,7 @@ class Fly(object):
         self.nodename = rospy.get_name()
 
         # Create the head tracker.        
-        if (params['head']['tracker']=='texture'):
+        if (params['head']['tracker']=='area'):
             self.head    = AreaTracker(name='head',      params=params, color='cyan',    bEqualizeHist=True)
         elif (params['head']['tracker']=='edge'):
             self.head    = EdgeTracker(name='head',      params=params, color='cyan',    bEqualizeHist=False)
@@ -1780,10 +1780,10 @@ class Fly(object):
         elif (params['head']['tracker']=='intensity'):
             self.head    = IntensityTracker(name='head', params=params, color='cyan',    bEqualizeHist=False)
         else:
-            rospy.logwarn('Head tracker parameter must be one of [''texture'', ''edge'', ''tip'', ''intensity'']')
+            rospy.logwarn('Head tracker parameter must be one of [''area'', ''edge'', ''tip'', ''intensity'']')
              
         # Create the abdomen tracker.        
-        if (params['abdomen']['tracker']=='texture'):
+        if (params['abdomen']['tracker']=='area'):
             self.abdomen    = AreaTracker(name='abdomen',      params=params, color='magenta',    bEqualizeHist=True)
         elif (params['abdomen']['tracker']=='edge'):
             self.abdomen    = EdgeTracker(name='abdomen',      params=params, color='magenta',    bEqualizeHist=False)
@@ -1792,10 +1792,10 @@ class Fly(object):
         elif (params['abdomen']['tracker']=='intensity'):
             self.abdomen    = IntensityTracker(name='abdomen', params=params, color='magenta',    bEqualizeHist=False)
         else:
-            rospy.logwarn('Abdomen tracker parameter must be one of [''texture'', ''edge'', ''tip'', ''intensity'']')
+            rospy.logwarn('Abdomen tracker parameter must be one of [''area'', ''edge'', ''tip'', ''intensity'']')
              
         # Create the right wing tracker.        
-        if (params['right']['tracker']=='texture'):
+        if (params['right']['tracker']=='area'):
             self.right    = AreaTracker(name='right',      params=params, color='red',    bEqualizeHist=True)
         elif (params['right']['tracker']=='edge'):
             self.right    = EdgeTracker(name='right',      params=params, color='red',    bEqualizeHist=False)
@@ -1804,10 +1804,10 @@ class Fly(object):
         elif (params['right']['tracker']=='intensity'):
             self.right    = IntensityTracker(name='right', params=params, color='red',    bEqualizeHist=False)
         else:
-            rospy.logwarn('Right wing tracker parameter must be one of [''texture'', ''edge'', ''tip'', ''intensity'']')
+            rospy.logwarn('Right wing tracker parameter must be one of [''area'', ''edge'', ''tip'', ''intensity'']')
              
         # Create the left wing tracker.        
-        if (params['left']['tracker']=='texture'):
+        if (params['left']['tracker']=='area'):
             self.left    = AreaTracker(name='left',      params=params, color='green',    bEqualizeHist=True)
         elif (params['left']['tracker']=='edge'):
             self.left    = EdgeTracker(name='left',      params=params, color='green',    bEqualizeHist=False)
@@ -1816,7 +1816,7 @@ class Fly(object):
         elif (params['left']['tracker']=='intensity'):
             self.left    = IntensityTracker(name='left', params=params, color='green',    bEqualizeHist=False)
         else:
-            rospy.logwarn('Left wing tracker parameter must be one of [''texture'', ''edge'', ''tip'', ''intensity'']')
+            rospy.logwarn('Left wing tracker parameter must be one of [''area'', ''edge'', ''tip'', ''intensity'']')
              
         # Create the aux tracker.        
         self.aux    = IntensityTracker(name='aux',    params=params, color='yellow',    bEqualizeHist=False)
@@ -2830,10 +2830,10 @@ class MainWindow:
                     'rc_background':1000.0,             # Time constant of the moving average background.
                     'wingbeat_min':180,                 # Bounds for wingbeat frequency measurement.
                     'wingbeat_max':220,
-                    'head':   {'tracker':'texture',
+                    'head':   {'tracker':'area',
                                'autozero':True,         # Automatically figure out where is the center of motion.
                                'threshold':0.0},        
-                    'abdomen':{'tracker':'texture',
+                    'abdomen':{'tracker':'area',
                                'autozero':True,
                                'threshold':0.0},
                     'left':   {'tracker':'edge',
@@ -2898,6 +2898,7 @@ class MainWindow:
         
         self.scale = self.params['scale_image']
         self.bMousing = False
+        self.bQuitting = False
         
         # Create the fly.
         self.fly = Fly(self.params)
@@ -3109,6 +3110,8 @@ class MainWindow:
         self.command = msg.command
         
         if (self.command == 'exit'):
+            self.bQuitting = True
+            
             # Save the params.
             SetDict().set_dict_with_preserve(self.params, rospy.get_param(self.nodename, {}))
             rospy.set_param(self.nodename.rstrip('/')+'/gui', self.params['gui'])
@@ -3177,7 +3180,8 @@ class MainWindow:
         iImgLoading = (self.iImgWorking+1) % 2
         
         # Receive the image:
-        self.rosimage[iImgLoading] = rosimage
+        if (not self.bQuitting):
+            self.rosimage[iImgLoading] = rosimage
                 
                 
                 
