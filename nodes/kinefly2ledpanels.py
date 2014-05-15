@@ -10,7 +10,7 @@ import numpy as np
 from std_msgs.msg import Float32, Header, String
 
 from ledpanels.msg import MsgPanelsCommand
-from Kinefly.msg import MsgFlystate, MsgWing, MsgBodypart, MsgAux
+from Kinefly.msg import MsgFlystate
 from setdict import SetDict
 
 
