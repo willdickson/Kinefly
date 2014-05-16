@@ -2,7 +2,7 @@ Kinefly
 ----------------
 Kinefly extracts kinematics variables from the camera image of a tethered winged insect.
 
-You may track the movement of each bodypart:  head, abdomen, leftwing, rightwing.  Several tracking techniques are available to choose from (texture tracking, edge finding, tip tracking).
+You may track the movement of each bodypart:  head, abdomen, leftwing, rightwing.  Several tracking techniques are available to choose from (area tracking, edge finding, tip tracking).
              
 An auxillary elliptical region may also be monitored (intended to capture leg motion or wingbeat frequency). 
 
@@ -127,14 +127,14 @@ Each bodypart (head, abdomen, and wings) has its own angle origin, which in gene
 Bodypart Trackers:
 ---------------------------
 The trackers available are as follows, and are specified via the 'tracker' parameter in the params_kinefly.launch file.  Any bodypart (except aux) can use any tracker.
-'texture'   Uses image registration techniques, and reports the rotation and
+'area'      Uses image registration techniques, and reports the rotation and
             radial movement of the area as a whole.
 'edge'      Finds radial edges, ordered by decreasing edge strength.
 'tip'       Finds the point where the bodypart is farthest from
             the rotation center.  
 
 
-Texture Tracking:
+Area Tracking:
 ---------------------------
 This is the default for the head & abdomen.  We measure rotation and radial expansion of the bodypart via an image registration technique in polar coordinates on the region of interest.  This state measurement is autozero'ed such that the origin tends to be near the midpoint of the range of motion.  
 
@@ -176,7 +176,7 @@ Parameters.
 ---------------------------
 Parameters are stored in the file 'Kinefly/launch/params_kinefly.launch'.  
 
-Handle positions and checkbox states are automatically saved to the kinefly.yaml file.
+Anything set via the GUI (such as handle positions, checkbox states) are automatically saved to the kinefly.yaml file.
 
 There are some global parameters, plus sections for each of head/abdomen/left/right.  
 
@@ -201,38 +201,31 @@ General Parameters:
                                 (default: ~/kinefly.yaml)
   
 Head/Abdomen/Left/Right Parameters:
-    tracker:                    Which feature to track.  Options are 'texture',
+    tracker:                    Which feature to track.  Options are 'area',
                                 'edge', and 'tip'. 
-                                (default: texture/texture/edge/edge)
+                                (default: area/area/edge/edge)
 
-Parameters that apply to Texture tracking:
+Parameters that apply to Area tracking:
     autozero:                   Automatically (true) determine the zero 
                                 angle based on center of motion, or (false)
                                 use the first valid frame as the zero angle.
                                 (default: true)
 
-Parameters that apply to Edge/Tip tracking:
+Parameters that apply to Edge & Tip tracking:
     threshold:                  This is the threshold for the intensity
-                                gradient to detect a bodypart edge or tip.  
-                                You may run the program in plot_wingdata.py or
-                                plot_tipdata.py for help setting these 
-                                thresholds, for example:
+                                gradient to detect a bodypart edge or tip.
+                                Typical values will be either 0.0 or something
+                                small such as 0.01.  You may run the program 
+                                in plot_wingdata.py or plot_tipdata.py for 
+                                help setting these thresholds, for example:
                                 rosrun Kinefly plot_wingdata.py
                                 rosrun Kinefly plot_tipdata.py
                                 (default: 0.0)
 
-Parameters that apply to Tip tracking:
-    threshold:                  This is the threshold for the intensity
-                                gradient to find the bodypart tip.  You may
-                                run the program in plot_tipdata.py for help 
-                                setting this threshold, for example:
-                                rosrun Kinefly plot_tipdata.py
-                                (default: 0.0)
-
 Parameters that apply only to aux:
-    wingbeat_min:               The lower frequency (hz) of wingbeats from 
+    wingbeat_min:               The lower wingbeat frequency (hz) of 
                                 your insect.  (default: 180.0)
-    wingbeat_max:               The upper frequency (hz) of wingbeats from 
+    wingbeat_max:               The upper wingbeat frequency (hz) of 
                                 your insect.  (default: 220.0)
 
                              
