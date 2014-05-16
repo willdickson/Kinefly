@@ -32,7 +32,7 @@ SIDE_RIGHT = 8
 SIDE_ALL = (SIDE_TOP | SIDE_BOTTOM | SIDE_LEFT | SIDE_RIGHT)
 
 # gImageTime = 0.0
-
+gbShowMasks = False
 
 # Colors.
 bgra_dict = {'black'         : cv.Scalar(0,0,0,0),
@@ -720,10 +720,10 @@ class PhaseCorrelation(object):
 ###############################################################################
 ###############################################################################
 class WindowFunctions(object):
-    # create_wfn_hanning()
+    # create_hanning()
     # Create a 2D Hanning window function.
     #
-    def create_wfn_hanning(self, shape):
+    def create_hanning(self, shape):
         (height,width) = shape
         wfn = np.ones(shape, dtype=np.float32)
         if (height>1) and (width>1):
@@ -736,10 +736,10 @@ class WindowFunctions(object):
         return wfn
 
 
-    # create_wfn_tukey()
+    # create_tukey()
     # Create a 2D Tukey window function.
     #
-    def create_wfn_tukey(self, shape):
+    def create_tukey(self, shape):
         (height,width) = shape
         alpha = 0.25 # Width of the flat top.  alpha==0 gives rectangular, alpha=1 gives Hann.
         wfn = np.ones(shape, dtype=np.float32)
@@ -781,7 +781,7 @@ class IntensityTrackedBodypart(object):
         self.name        = name
         self.bEqualizeHist = bEqualizeHist
 
-        self.bInitializedMasks = False
+        self.bValidMask = False
 
         self.bgra        = bgra_dict[color]
         self.bgra_dim    = tuple(0.5*np.array(bgra_dict[color]))
@@ -813,7 +813,7 @@ class IntensityTrackedBodypart(object):
         # Extra windows.
         self.windowBG         = ImageWindow(False, self.name+'BG')
         self.windowFG         = ImageWindow(False, self.name+'FG')
-        self.windowMask       = ImageWindow(False, self.name+'Mask')
+        self.windowMask       = ImageWindow(gbShowMasks, self.name+'Mask')
 
 
     
@@ -842,46 +842,47 @@ class IntensityTrackedBodypart(object):
     # Create elliptical wedge masks, and window functions.
     #
     def create_mask(self, shape):
-        x     = int(self.params['gui'][self.name]['center']['x'])
-        y     = int(self.params['gui'][self.name]['center']['y'])
-        r1    = int(self.params['gui'][self.name]['radius1'])
-        r2    = int(self.params['gui'][self.name]['radius2'])
-        angle = self.params['gui'][self.name]['angle']
-        bgra  = bgra_dict['white']
-        
-        # Create the mask.
-        mask = np.zeros(shape, dtype=np.uint8)
-        cv2.ellipse(mask, (x, y), (r1, r2), int(np.rad2deg(angle)), 0, 360, bgra, cv.CV_FILLED)
-        self.windowMask.set_image(mask)
-        
-        # Find the ROI of the mask.
-        b=0 # Border
-        xSum = np.sum(mask, 0)
-        ySum = np.sum(mask, 1)
-        xMask = np.where(xSum>0)[0]
-        yMask = np.where(ySum>0)[0]
-        
-        if (len(xMask)>0) and (len(yMask)>0): 
-            # Dilate with a border.
-            xMin0 = np.where(xSum>0)[0][0]  - b
-            xMax0 = np.where(xSum>0)[0][-1] + b+1
-            yMin0 = np.where(ySum>0)[0][0]  - b
-            yMax0 = np.where(ySum>0)[0][-1] + b+1
+        if (not self.bValidMask):
+            x     = int(self.params['gui'][self.name]['center']['x'])
+            y     = int(self.params['gui'][self.name]['center']['y'])
+            r1    = int(self.params['gui'][self.name]['radius1'])
+            r2    = int(self.params['gui'][self.name]['radius2'])
+            angle = self.params['gui'][self.name]['angle']
+            bgra  = bgra_dict['white']
             
-            # Clip border to image edges.
-            xMin = np.max([0,xMin0])
-            yMin = np.max([0,yMin0])
-            xMax = np.min([xMax0, shape[1]-1])
-            yMax = np.min([yMax0, shape[0]-1])
+            # Create the mask.
+            mask = np.zeros(shape, dtype=np.uint8)
+            cv2.ellipse(mask, (x, y), (r1, r2), int(np.rad2deg(angle)), 0, 360, bgra, cv.CV_FILLED)
+            self.windowMask.set_image(mask)
             
-            self.roi = np.array([xMin, yMin, xMax, yMax])
-            self.maskRoi = mask[yMin:yMax, xMin:xMax]
-            self.sumMask = np.sum(self.maskRoi).astype(np.float32)
-    
-            self.bInitializedMasks = True
-        else:
-            rospy.logwarn('%s: Empty mask.' % self.name)
-            self.bInitializedMasks = False
+            # Find the ROI of the mask.
+            b=0 # Border
+            xSum = np.sum(mask, 0)
+            ySum = np.sum(mask, 1)
+            xMask = np.where(xSum>0)[0]
+            yMask = np.where(ySum>0)[0]
+            
+            if (len(xMask)>0) and (len(yMask)>0): 
+                # Dilate with a border.
+                xMin0 = np.where(xSum>0)[0][0]  - b
+                xMax0 = np.where(xSum>0)[0][-1] + b+1
+                yMin0 = np.where(ySum>0)[0][0]  - b
+                yMax0 = np.where(ySum>0)[0][-1] + b+1
+                
+                # Clip border to image edges.
+                xMin = np.max([0,xMin0])
+                yMin = np.max([0,yMin0])
+                xMax = np.min([xMax0, shape[1]-1])
+                yMax = np.min([yMax0, shape[0]-1])
+                
+                self.roi = np.array([xMin, yMin, xMax, yMax])
+                self.maskRoi = mask[yMin:yMax, xMin:xMax]
+                self.sumMask = np.sum(self.maskRoi).astype(np.float32)
+        
+                self.bValidMask = True
+            else:
+                rospy.logwarn('%s: Empty mask.' % self.name)
+                self.bValidMask = False
         
         
     # set_background()
@@ -983,9 +984,7 @@ class IntensityTrackedBodypart(object):
         self.dt = dt
         
         if (self.params['gui'][self.name]['track']):
-            if (not self.bInitializedMasks):
-                self.create_mask(image.shape)
-                
+            self.create_mask(image.shape)
             self.update_background()
             self.update_roi(image, bInvertColor)
 
@@ -1051,7 +1050,7 @@ class PolarTrackedBodypart(object):
         self.name           = name
         self.bEqualizeHist  = bEqualizeHist
 
-        self.bInitializedMasks = False
+        self.bValidMask = False
 
         self.color          = color
         self.bgra           = bgra_dict[color]
@@ -1063,7 +1062,7 @@ class PolarTrackedBodypart(object):
         self.ptHinge_i      = np.array([0,0])
         self.roi            = None
         
-        self.create_wfn               = WindowFunctions().create_wfn_tukey
+        self.create_wfn               = WindowFunctions().create_tukey
         self.wfnRoi                   = None
         self.wfnRoiMaskedPolarCropped = None
         
@@ -1095,7 +1094,7 @@ class PolarTrackedBodypart(object):
         self.windowBG         = ImageWindow(False, self.name+'BG')
         self.windowFG         = ImageWindow(False, self.name+'FG')
         self.windowPolar      = ImageWindow(False, self.name+'Polar')
-        self.windowMask       = ImageWindow(False, self.name+'Mask')
+        self.windowMask       = ImageWindow(gbShowMasks, self.name+'Mask')
 
 
     
@@ -1193,7 +1192,7 @@ class PolarTrackedBodypart(object):
     # Create elliptical wedge masks, and window functions.
     #
     def create_mask(self, shape):
-        if (self.params['gui'][self.name]['track']):
+        if (not self.bValidMask):
             # Create the mask (for polar images the line-of-interest is at the midpoint).
             mask = np.zeros(shape, dtype=np.uint8)
             
@@ -1242,7 +1241,7 @@ class PolarTrackedBodypart(object):
                 
                 self.wfnRoi = None
                 self.wfnRoiMaskedPolarCropped = None
-                self.bInitializedMasks = True
+                self.bValidMask = True
         
         
                 # Find where the mask might be clipped.  First, draw an unclipped ellipse.        
@@ -1392,7 +1391,7 @@ class PolarTrackedBodypart(object):
             self.imgRoiFgMaskedPolarCropped = self.imgRoiFgMaskedPolar[0:iMinY]
     
              
-            if (self.bInitializedMasks):
+            if (self.bValidMask):
                 if (self.wfnRoi is None) or (self.imgRoiFg.shape != self.wfnRoi.shape):
                     self.wfnRoi = self.create_wfn(self.imgRoiFg.shape)
                 
@@ -1437,11 +1436,9 @@ class PolarTrackedBodypart(object):
         self.iCount += 1
         
         self.dt = dt
-        
-        if (self.params['gui'][self.name]['track']):
-            if (not self.bInitializedMasks):
-                self.create_mask(image.shape)
                 
+        if (self.params['gui'][self.name]['track']):
+            self.create_mask(image.shape)
             self.update_background()
             self.update_roi(image, bInvertColor)
             self.update_polar()
@@ -1549,7 +1546,6 @@ class WingbeatDetector(object):
         
                 
     def set(self, fw_min, fw_max):
-        self.bInitialized = False
         self.i = 0
         
         # Set the desired passband.
@@ -1754,8 +1750,6 @@ class WingbeatDetector(object):
         
         # Go the the next sample slot.
         self.i += 1
-        if (self.i == self.n):
-            self.bInitialized = True
         self.i %= self.n
         
 
@@ -1864,11 +1858,20 @@ class Fly(object):
         
     
     def create_masks(self, shapeImage):
-        self.head.create_mask (shapeImage)
-        self.abdomen.create_mask (shapeImage)
-        self.right.create_mask (shapeImage)
-        self.left.create_mask (shapeImage)
-        self.aux.create_mask (shapeImage)
+        if (self.params['gui']['head']['track']):
+            self.head.create_mask (shapeImage)
+            
+        if (self.params['gui']['abdomen']['track']):
+            self.abdomen.create_mask (shapeImage)
+            
+        if (self.params['gui']['right']['track']):
+            self.right.create_mask (shapeImage)
+            
+        if (self.params['gui']['left']['track']):
+            self.left.create_mask (shapeImage)
+            
+        if (self.params['gui']['aux']['track']):
+            self.aux.create_mask (shapeImage)
 
 
     def get_bodyangle_i(self):
@@ -2788,12 +2791,7 @@ class TipTracker(PolarTrackedBodypart):
 ###############################################################################
 ###############################################################################
 class MainWindow:
-
-    class struct:
-        pass
-    
     def __init__(self):
-        self.bInitialized = False
         self.stampPrev = None
         self.stampPrevAlt = None
         self.lockParams = threading.Lock()
@@ -2893,7 +2891,6 @@ class MainWindow:
                     }
 
         SetDict().set_dict_with_preserve(self.params, defaults)
-        #SetDict().set_dict_with_preserve(self.params, rospy.get_param(self.nodename, {}))
         self.params = self.legalizeParams(self.params)
         rospy.set_param(self.nodename.rstrip('/')+'/gui', self.params['gui'])
         
@@ -2919,40 +2916,40 @@ class MainWindow:
             self.bHaveBackground = False
         
         
-        self.nameSelected = None
-        self.uiSelected = None
-        self.stateSelected = None
+        self.nameSelected   = None
+        self.uiSelected     = None
+        self.stateSelected  = None
         self.fly.update_handle_points()
-        self.stampDiff = rospy.Duration(0)
-        self.stampMax = rospy.Duration(0)
-        self.dtCamera = np.inf
+        self.stampDiff      = rospy.Duration(0)
+        self.stampMax       = rospy.Duration(0)
+        self.dtCamera       = np.inf
         self.hzActual       = 0.0
         self.hzActualSum    = 0.0
         self.hzAvailable    = 0.0
         self.hzAvailableSum = 0.0
-        self.iCount = 0
-        self.iDroppedFrame = 0
+        self.iCount         = 0
+        self.iDroppedFrame  = 0
         
-        self.bufferImages = [None]*3 # Circular buffer for incoming images.
-        self.iImgLoading = 0  # Index of the next slot to load.
-        self.iImgWorking = 0  # Index of the slot to process, i.e. the oldest image in the buffer.
-        self.imgUnscaled = None
-        self.imgScaled = None
+        self.bufferImages   = [None]*3 # Circular buffer for incoming images.
+        self.iImgLoading    = 0  # Index of the next slot to load.
+        self.iImgWorking    = 0  # Index of the slot to process, i.e. the oldest image in the buffer.
+        self.imgUnscaled    = None
+        self.imgScaled      = None
+        
+        self.h_gap          = int(5 * self.scale)
+        self.w_gap          = int(10 * self.scale)
+        self.scaleText      = 0.4 * self.scale
+        self.fontface       = cv2.FONT_HERSHEY_SIMPLEX
+        self.buttons        = None
+        self.yToolbar       = 0
         
         # Publishers.
-        self.pubCommand    = rospy.Publisher(self.nodename.rstrip('/')+'/command', MsgCommand)
+        self.pubCommand     = rospy.Publisher(self.nodename.rstrip('/')+'/command', MsgCommand)
 
         # Subscriptions.        
-        self.subImage      = rospy.Subscriber(self.params['image_topic'],           Image,      self.image_callback,  queue_size=1)
-        self.subCommand    = rospy.Subscriber(self.nodename.rstrip('/')+'/command', MsgCommand, self.command_callback, queue_size=1000)
+        self.subImage       = rospy.Subscriber(self.params['image_topic'],           Image,      self.image_callback,  queue_size=1)
+        self.subCommand     = rospy.Subscriber(self.nodename.rstrip('/')+'/command', MsgCommand, self.command_callback, queue_size=1000)
 
-        self.h_gap = int(5 * self.scale)
-        self.w_gap = int(10 * self.scale)
-        self.scaleText = 0.4 * self.scale
-        self.fontface = cv2.FONT_HERSHEY_SIMPLEX
-        self.buttons = None
-        self.yToolbar = 0
-        
         # user callbacks
         cv2.setMouseCallback(self.window_name, self.onMouse, param=None)
         
@@ -3132,23 +3129,25 @@ class MainWindow:
             self.save_background()
             
         
-        if (self.command == 'use_gui'):
-            self.params['use_gui'] = (msg.arg1 > 0)
+        if (self.command == 'gui_on'):
+            self.params['use_gui'] = True
+            
+        
+        if (self.command == 'gui_off'):
+            self.params['use_gui'] = False
             
         
         if (self.command == 'help'):
             rospy.logwarn('The %s/command topic accepts the following string commands:' % self.nodename.rstrip('/'))
             rospy.logwarn('  help                 This message.')
-            rospy.logwarn('  save_background      Save the instant camera image to disk for')
-            rospy.logwarn('                       background subtraction.')
-            rospy.logwarn('  use_gui #            Turn off|on the user windows (#=0|1).')
+            rospy.logwarn('  save_background      Saves the instant image to disk for use as the')
+            rospy.logwarn('                       background.')
+            rospy.logwarn('  gui_on               Turn on the graphical user interface.')
+            rospy.logwarn('  gui_off              Turn off the graphical user interface.')
             rospy.logwarn('  exit                 Exit the program.')
             rospy.logwarn('')
             rospy.logwarn('You can send the above commands at the shell prompt via:')
-            rospy.logwarn('rostopic pub -1 %s/command Kinefly/MsgCommand commandtext arg1' % self.nodename.rstrip('/'))
-            rospy.logwarn('')
-            rospy.logwarn('You may also set some parameters via ROS dynamic_reconfigure, all others')
-            rospy.logwarn('are settable as launch-time parameters.')
+            rospy.logwarn('rostopic pub -1 %s/command Kinefly/MsgCommand commandtext' % self.nodename.rstrip('/'))
             rospy.logwarn('')
 
         
@@ -3255,11 +3254,6 @@ class MainWindow:
             # Create the button bar if needed.    
             self.create_buttons(self.imgScaled.shape)
         
-            if (not self.bInitialized):
-                self.fly.create_masks(self.shapeImage)
-                self.bInitialized = True
-                                
-
             if (not self.bMousing):
                 # Update the fly internals.
                 self.fly.update(self.header, self.imgScaled)
@@ -3512,14 +3506,15 @@ class MainWindow:
     # update_params_from_mouse()
     # Recalculate self.params based on a currently selected handle and mouse location.
     #
-    def update_params_from_mouse(self, tagSelected, partnameSelected, ptMouse):             
-        partnameSlave = 'right' if (self.partnameSelected=='left') else 'left'
+    def update_params_from_mouse(self, tagSelected, partnameSelected, ptMouse):
+        partnameSlave = {'head':'abdomen', 'abdomen':'head', 'right':'left', 'left':'right', 'aux':None}[partnameSelected]
         tagThis = tagSelected
         tagOther = 'angle_lo' if (tagSelected=='angle_hi') else 'angle_hi'
         tagSlave = tagOther
         bodypartSelected = self.bodypart_from_partname(partnameSelected)
         bodypartSlave    = self.bodypart_from_partname(partnameSlave)
 
+        # Scale the parameters in order to work on them.
         paramsScaled = self.scale_params(self.params, self.scale) 
         
         # Hinge.
@@ -3547,6 +3542,12 @@ class MainWindow:
                 paramsScaled['gui'][partnameSelected]['hinge']['x'] = float(pt[0])
                 paramsScaled['gui'][partnameSelected]['hinge']['y'] = float(pt[1])
                 
+                # Invalidate the masks.
+                self.fly.head.bValidMask    = False
+                self.fly.abdomen.bValidMask = False
+                self.fly.left.bValidMask    = False
+                self.fly.right.bValidMask   = False
+                
                 # Now move the hinge points relative to the new body axis.
                 if (paramsScaled['gui']['symmetric']):
                     ptHead = np.array([paramsScaled['gui']['head']['hinge']['x'], paramsScaled['gui']['head']['hinge']['y']])
@@ -3565,11 +3566,13 @@ class MainWindow:
             elif (partnameSelected=='left') or (partnameSelected=='right'):
                 paramsScaled['gui'][partnameSelected]['hinge']['x'] = float(ptMouse[0])
                 paramsScaled['gui'][partnameSelected]['hinge']['y'] = float(ptMouse[1])
+                bodypartSelected.bValidMask = False
 
                 if (paramsScaled['gui']['symmetric']):
                     ptSlave = self.get_reflection_across_bodyaxis(ptMouse)
                     paramsScaled['gui'][partnameSlave]['hinge']['x'] = float(ptSlave[0])
                     paramsScaled['gui'][partnameSlave]['hinge']['y'] = float(ptSlave[1])
+                    bodypartSlave.bValidMask = False
 
 
 
@@ -3618,11 +3621,14 @@ class MainWindow:
             if (paramsScaled['gui'][partnameSelected]['angle_hi'] < paramsScaled['gui'][partnameSelected]['angle_lo']):
                 paramsScaled['gui'][partnameSelected]['angle_hi'] += 2*np.pi
             
+            bodypartSelected.bValidMask = False
+
             if (partnameSelected in ['left','right']):
                 if (paramsScaled['gui']['symmetric']):
                     paramsScaled['gui'][partnameSlave][tagSlave]     = -paramsScaled['gui'][partnameSelected][tagSelected]
                     paramsScaled['gui'][partnameSlave][tagSelected]  = -paramsScaled['gui'][partnameSelected][tagSlave]
                     paramsScaled['gui'][partnameSlave]['radius_outer'] = paramsScaled['gui'][partnameSelected]['radius_outer']
+                    bodypartSlave.bValidMask = False
                     
 #                 if (paramsScaled['gui'][partnameSlave]['angle_hi'] < 0 < paramsScaled['gui'][partnameSlave]['angle_lo']):
 #                     paramsScaled['gui'][partnameSlave]['angle_hi'] += 2*np.pi
@@ -3632,8 +3638,12 @@ class MainWindow:
         elif (tagSelected=='radius_inner'): 
             paramsScaled['gui'][partnameSelected]['radius_inner'] = float(min(np.linalg.norm(bodypartSelected.ptHinge_i - ptMouse), 
                                                                                       bodypartSelected.params['gui'][partnameSelected]['radius_outer']-2*self.scale))
+            
+            bodypartSelected.bValidMask = False
+            
             if (partnameSelected in ['left','right']) and (paramsScaled['gui']['symmetric']):
                 paramsScaled['gui'][partnameSlave]['radius_inner'] = paramsScaled['gui'][partnameSelected]['radius_inner']
+                bodypartSlave.bValidMask = False
                 
         # Center.
         elif (tagSelected=='center'): 
@@ -3643,18 +3653,22 @@ class MainWindow:
                 pt = ptMouse
                 paramsScaled['gui'][partnameSelected]['center']['x'] = float(pt[0])
                 paramsScaled['gui'][partnameSelected]['center']['y'] = float(pt[1])
+                bodypartSelected.bValidMask = False
                 
         # Radius.
         elif (tagSelected=='radius1'): 
             pt = ptMouse - bodypartSelected.ptCenter_i
             paramsScaled['gui'][partnameSelected]['radius1'] = float(np.linalg.norm(pt))
-            paramsScaled['gui'][partnameSelected]['angle'] = float(np.arctan2(pt[1], pt[0]))        
+            paramsScaled['gui'][partnameSelected]['angle'] = float(np.arctan2(pt[1], pt[0]))
+            bodypartSelected.bValidMask = False        
         elif (tagSelected=='radius2'): 
             pt = bodypartSelected.ptCenter_i - ptMouse
             paramsScaled['gui'][partnameSelected]['radius2'] = float(np.linalg.norm(pt))
-            paramsScaled['gui'][partnameSelected]['angle'] = float(np.arctan2(pt[1], pt[0])-np.pi/2.0)        
+            paramsScaled['gui'][partnameSelected]['angle'] = float(np.arctan2(pt[1], pt[0])-np.pi/2.0)
+            bodypartSelected.bValidMask = False        
                 
 
+        # Unscale the parameters since we're finished adjusting them.
         self.params = self.scale_params(paramsScaled, 1/self.scale) 
 
 
@@ -3724,10 +3738,10 @@ class MainWindow:
             # If the mouse is on the same button at mouseup, then do the action.
             if (self.uiSelected=='pushbutton'):
                 if (self.nameSelected == self.nameSelectedNow == 'save_bg'):
-                    self.pubCommand.publish(MsgCommand('save_background',0))
+                    self.pubCommand.publish(MsgCommand('save_background'))
 
                 elif (self.nameSelected == self.nameSelectedNow == 'exit'):
-                    self.pubCommand.publish(MsgCommand('exit',0))
+                    self.pubCommand.publish(MsgCommand('exit'))
                     
                     
             elif (self.uiSelected=='checkbox'):
@@ -3846,10 +3860,7 @@ if __name__ == '__main__':
     rospy.logwarn('     Kinefly: Camera-based Tethered Insect Kinematics Analyzer for ROS')
     rospy.logwarn('         by Steve Safarik, Floris van Breugel (c) 2014')
     rospy.logwarn('')  
-    rospy.logwarn('     Left click+drag to move handle points.')
     rospy.logwarn('')  
-    rospy.logwarn('')  
-    main.command_callback(MsgCommand('help',0))
     rospy.logwarn('**************************************************************************')
     rospy.logwarn('')
     rospy.logwarn('')

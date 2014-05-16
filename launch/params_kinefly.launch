@@ -8,7 +8,7 @@
     <param name="kinefly/filenameBackground" type="string" value="$(env HOME)/kinefly.png" />
     
     <param name="kinefly/image_topic"        type="string" value="/camera/image_mono" />
-    <param name="kinefly/n_edges_max"        type="int"    value="4" />
+    <param name="kinefly/n_edges_max"        type="int"    value="2" />
     <param name="kinefly/rc_background"      type="double" value="1000" />
     <param name="kinefly/scale_image"        type="double" value="1.0" />
     <param name="kinefly/use_gui"            type="bool"   value="true" />
