@@ -172,6 +172,22 @@ Background Subtraction
 Background subtraction can be turned on/off for each bodypart individually.  The background is initialized with the kinefly.png image on disk, and updates as a moving average with the time constant (in seconds) parameter rc_background. 
 
 
+ROS Commands
+---------------------------
+The kinefly/command ROS topic accepts the following string commands:
+  help                 Shows this message.
+  gui_on               Turn on the graphical user interface.
+  gui_off              Turn off the graphical user interface.
+  exit                 Exit the program.
+
+You can send the above commands at the shell prompt, for example:
+rostopic pub -1 kinefly/command Kinefly/MsgCommand commandtext help
+rostopic pub -1 kinefly/command Kinefly/MsgCommand commandtext gui_on
+rostopic pub -1 kinefly/command Kinefly/MsgCommand commandtext gui_off
+rostopic pub -1 kinefly/command Kinefly/MsgCommand commandtext exit
+
+
+
 Parameters.
 ---------------------------
 Parameters are stored in the file 'Kinefly/launch/params_kinefly.launch'.  
