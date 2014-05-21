@@ -37,7 +37,8 @@ class Kinefly2PhidgetsAnalog:
                         'v10': 0.0, 'v1l1':0.0, 'v1l2':0.0, 'v1r1':1.0, 'v1r2':0.0, 'v1ha':0.0, 'v1hr':0.0, 'v1aa':0.0, 'v1ar':0.0, 'v1xi':0.0, # R
                         'v20': 0.0, 'v2l1':1.0, 'v2l2':0.0, 'v2r1':-1.0, 'v2r2':0.0, 'v2ha':0.0, 'v2hr':0.0, 'v2aa':0.0, 'v2ar':0.0, 'v2xi':0.0, # L-R
                         'v30': 0.0, 'v3l1':1.0, 'v3l2':0.0, 'v3r1':1.0, 'v3r2':0.0, 'v3ha':0.0, 'v3hr':0.0, 'v3aa':0.0, 'v3ar':0.0, 'v3xi':0.0, # L+R
-                         'autorange':False
+                         'autorange':False, 
+                         'serial':0         # The serial number of the Phidget.  0==any.
                          }
         SetDict().set_dict_with_preserve(self.params, self.defaults)
         rospy.set_param('%s' % self.nodename.rstrip('/'), self.params)
@@ -51,7 +52,11 @@ class Kinefly2PhidgetsAnalog:
         
         # Connect to the Phidget.
         self.analog = Phidgets.Devices.Analog.Analog()
-        self.analog.openPhidget()
+        if (self.params['serial']==0):
+            self.analog.openPhidget()
+        else:
+            self.analog.openPhidget(self.params['serial'])
+            
         self.analog.setOnAttachHandler(self.attach_callback)
         self.analog.setOnDetachHandler(self.detach_callback)
 
@@ -67,12 +72,14 @@ class Kinefly2PhidgetsAnalog:
         for i in range(4):
             self.analog.setEnabled(i, self.enable[i])
 
-        rospy.logwarn('PhidgetAnalog Attached to: %s, ID=%s' % (self.analog.getDeviceName(), self.analog.getDeviceID()))
+        self.phidgetserial = self.analog.getSerialNum()
+        self.phidgetname = self.analog.getDeviceName()
+        rospy.logwarn('%s - %s Attached: serial=%s' % (self.namespace, self.phidgetname, self.phidgetserial))
         self.bAttached = True
         
 
     def detach_callback(self, phidget):
-        rospy.logwarn ('PhidgetAnalog:  Detached.')
+        rospy.logwarn ('%s - %s Detached: serial=%s.' % (self.namespace, self.phidgetname, self.phidgetserial))
         self.bAttached = False
 
 
@@ -255,6 +262,8 @@ class Kinefly2PhidgetsAnalog:
         if (self.analog.isAttached()):
             for i in range(4):
                 self.analog.setVoltage(i, 0.0)
+        
+        self.analog.closePhidget()
 
 
 if __name__ == '__main__':
