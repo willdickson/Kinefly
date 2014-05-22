@@ -2929,8 +2929,9 @@ class MainWindow:
         self.hzAvailableSum = 0.0
         self.iCount         = 0
         self.iDroppedFrame  = 0
-        
-        self.bufferImages   = [None]*3 # Circular buffer for incoming images.
+
+        nQueue              = 2
+        self.bufferImages   = [None]*nQueue # Circular buffer for incoming images.
         self.iImgLoading    = 0  # Index of the next slot to load.
         self.iImgWorking    = 0  # Index of the slot to process, i.e. the oldest image in the buffer.
         self.imgUnscaled    = None
@@ -2947,7 +2948,8 @@ class MainWindow:
         self.pubCommand     = rospy.Publisher(self.nodename.rstrip('/')+'/command', MsgCommand)
 
         # Subscriptions.        
-        self.subImage       = rospy.Subscriber(self.params['image_topic'],           Image,      self.image_callback,  queue_size=1)
+        sizeImage = 650*90
+        self.subImage       = rospy.Subscriber(self.params['image_topic'],           Image,      self.image_callback,  queue_size=1, buff_size=1*sizeImage)
         self.subCommand     = rospy.Subscriber(self.nodename.rstrip('/')+'/command', MsgCommand, self.command_callback, queue_size=1000)
 
         # user callbacks
@@ -3177,7 +3179,7 @@ class MainWindow:
                 self.buttons[i].draw(image)
 
 
-    def image_callback(self, rosimage):
+    def image_callback(self, rosimg):
 #         global gImageTime
 #         gImageTime = self.header.stamp.to_sec()
 
@@ -3193,7 +3195,9 @@ class MainWindow:
                     iImgWorkingNext = (self.iImgWorking+1) % len(self.bufferImages)
                     self.iDroppedFrame += 1
     
-                self.bufferImages[self.iImgLoading] = rosimage
+#                if ('kinefly3' in self.nodename) and (self.stampPrev is not None):
+#                    rospy.logwarn('Filled %d: %0.6f, %0.6f' % (self.iImgLoading, self.stampPrev.to_sec(), rosimg.header.stamp.to_sec()))
+                self.bufferImages[self.iImgLoading] = rosimg
                 self.iImgLoading = iImgLoadingNext
                 self.iImgWorking = iImgWorkingNext
 
@@ -3202,45 +3206,61 @@ class MainWindow:
                 
     def process_image(self):
         stamp0 = rospy.Time.now()
-        img = None
+        rosimg = None
         
+#        if ('kinefly3' in self.nodename) and (self.stampPrev is not None):
+#            rospy.logwarn('Checking %d: %0.6f' % (self.iImgWorking, self.stampPrev.to_sec()))
+
         with self.lockBuffer:
             if (self.bufferImages[self.iImgWorking] is not None):
-                self.header = self.bufferImages[self.iImgWorking].header
-                
-                if (self.stampPrev is not None):
-                    self.dtCamera = max(0, (self.header.stamp - self.stampPrev).to_sec())
-                    
-                    # If the camera is not giving good timestamps, then use our own clock.
-                    if (self.dtCamera == 0.0):
-                        self.dtCamera = max(0, (stamp0 - self.stampPrevAlt).to_sec())
-                        
-                    # If time wrapped, then just assume a value.
-                    if (self.dtCamera == 0.0):
-                        self.dtCamera = 1.0
-                        
-                else:
-                    self.dtCamera = np.inf
-                    
-                self.stampPrev = self.header.stamp
-                self.stampPrevAlt = stamp0
-                
-                try:
-                    img = np.uint8(cv.GetMat(self.cvbridge.imgmsg_to_cv(self.bufferImages[self.iImgWorking], 'passthrough')))
-                    
-                except CvBridgeError, e:
-                    rospy.logwarn ('Exception converting background image from ROS to opencv:  %s' % e)
-                    img = np.zeros((320,240))
-    
+                rosimg = self.bufferImages[self.iImgWorking]
                 
                 # Mark this buffer entry as available for loading.
                 self.bufferImages[self.iImgWorking] = None
     
                 # Go to the next image.
                 self.iImgWorking = (self.iImgWorking+1) % len(self.bufferImages)
+        
 
 
-        if (img is not None):            
+        if (rosimg is not None):            
+            if (self.stampPrev is not None):
+                self.dtCamera = max(0, (rosimg.header.stamp - self.stampPrev).to_sec())
+                
+                # If the camera is not giving good timestamps, then use our own clock.
+                if (self.dtCamera == 0.0):
+                    self.dtCamera = max(0, (stamp0 - self.stampPrevAlt).to_sec())
+                    
+                # If time wrapped, then just assume a value.
+                if (self.dtCamera == 0.0):
+                    self.dtCamera = 1.0
+                    
+#                if ('kinefly3' in self.nodename):
+#                    rospy.logwarn('********************')
+#                    s1 = 'prev=%0.6f, img=%0.6f: img-prev=%0.6f, dt=%0.6f' % (self.stampPrev.to_sec(), rosimg.header.stamp.to_sec(), rosimg.header.stamp.to_sec()-self.stampPrev.to_sec(), self.dtCamera)
+#                    if (self.iDroppedFrame>0):
+#                        s1 += '    Dropped Frames: %d' % self.iDroppedFrame
+#                    rospy.logwarn(s1)
+#
+#                    s2 = 'prev0=%0.6f, 0=%0.6f: 0-prev0=%0.6f' % (self.stampPrevAlt.to_sec(), stamp0.to_sec(), stamp0.to_sec()-self.stampPrevAlt.to_sec())
+#                    if (self.iDroppedFrame>0):
+#                        s2 += '    Dropped Frames: %d' % self.iDroppedFrame
+#                    rospy.logwarn(s2)
+
+            else:
+                self.dtCamera = np.inf
+
+                
+            self.stampPrev = rosimg.header.stamp
+            self.stampPrevAlt = stamp0
+
+            try:
+                img = np.uint8(cv.GetMat(self.cvbridge.imgmsg_to_cv(rosimg, 'passthrough')))
+                
+            except CvBridgeError, e:
+                rospy.logwarn ('Exception converting background image from ROS to opencv:  %s' % e)
+                img = np.zeros((320,240))
+
             # Scale the image.
             self.imgUnscaled = img
             if (self.scale == 1.0):              
@@ -3256,7 +3276,7 @@ class MainWindow:
         
             if (not self.bMousing):
                 # Update the fly internals.
-                self.fly.update(self.header, self.imgScaled)
+                self.fly.update(rosimg.header, self.imgScaled)
     
                 # Publish the outputs.
                 self.fly.publish()
@@ -3277,6 +3297,7 @@ class MainWindow:
 
                 w = 55
                 if (not self.bMousing):
+
                     # Output the framerate.
                     hzNow = 1/self.dtCamera
                     self.iCount += 1
@@ -3405,6 +3426,23 @@ class MainWindow:
             self.stampMax = max(self.stampMax, self.stampDiff)
             if (self.iCount % 100)==0:
                 self.stampMax = rospy.Duration(0)
+        else:
+            if (self.hzAvailable != 0.0):
+                rospy.sleep(1/self.hzAvailable) # Pretend we spent time processing.
+        
+#            if ('kinefly3' in self.nodename):
+#                rospy.logwarn('Buffer is empty: %0.6f' % stamp0.to_sec())
+#
+#                if (self.stampPrev is not None):
+#                    s1 = 'prev=%0.6f: dt=%0.6f' % (self.stampPrev.to_sec(), self.dtCamera)
+#                    if (self.iDroppedFrame>0):
+#                        s1 += '    Dropped Frames: %d' % self.iDroppedFrame
+#                    rospy.logwarn(s1)
+#
+#                    s2 = 'prev0=%0.6f, now=%0.6f: 0-prev=%0.6f' % (self.stampPrevAlt.to_sec(), stamp0.to_sec(), stamp0.to_sec()-self.stampPrevAlt.to_sec())
+#                    if (self.iDroppedFrame>0):
+#                        s2 += '    Dropped Frames: %d' % self.iDroppedFrame
+#                    rospy.logwarn(s2)
             
             
                 
