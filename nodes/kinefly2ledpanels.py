@@ -73,7 +73,7 @@ class Kinefly2Ledpanels:
         
 
         # Publishers.
-        self.pubPanelsCommand = rospy.Publisher('ledpanels/command', MsgPanelsCommand)
+        self.pubPanelsCommand = rospy.Publisher('/ledpanels/command', MsgPanelsCommand)
         
         # Subscriptions.        
         self.subFlystate = rospy.Subscriber('%s/flystate' % self.namespace.rstrip('/'), MsgFlystate, self.flystate_callback, queue_size=1000)
