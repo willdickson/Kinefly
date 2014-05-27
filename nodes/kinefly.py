@@ -3912,15 +3912,10 @@ if __name__ == '__main__':
     main = MainWindow()
 
     rospy.logwarn('')
-    rospy.logwarn('')
     rospy.logwarn('**************************************************************************')
-    rospy.logwarn('')  
     rospy.logwarn('     Kinefly: Camera-based Tethered Insect Kinematics Analyzer for ROS')
     rospy.logwarn('         by Steve Safarik, Floris van Breugel (c) 2014')
-    rospy.logwarn('')  
-    rospy.logwarn('')  
     rospy.logwarn('**************************************************************************')
-    rospy.logwarn('')
     rospy.logwarn('')
 
 

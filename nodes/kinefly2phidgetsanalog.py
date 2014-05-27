@@ -63,7 +63,7 @@ class Kinefly2PhidgetsAnalog:
         # Subscriptions.        
         self.subFlystate = rospy.Subscriber('%s/flystate' % self.namespace.rstrip('/'), MsgFlystate, self.flystate_callback, queue_size=1000)
         self.subCommand  = rospy.Subscriber('%s/command' % self.nodename.rstrip('/'), String, self.command_callback, queue_size=1000)
-        rospy.sleep(1) # Allow time to connect publishers & subscribers.
+        #rospy.sleep(1) # Allow time to connect publishers & subscribers.
 
         self.bInitialized = True
         
@@ -74,6 +74,7 @@ class Kinefly2PhidgetsAnalog:
 
         self.phidgetserial = self.analog.getSerialNum()
         self.phidgetname = self.analog.getDeviceName()
+        rospy.sleep(1) # Wait so that other nodes can display their banner first.
         rospy.logwarn('%s - %s Attached: serial=%s' % (self.namespace, self.phidgetname, self.phidgetserial))
         self.bAttached = True
         
