@@ -192,9 +192,9 @@ Parameters.
 ---------------------------
 Parameters are stored in the file 'Kinefly/launch/params_kinefly.launch'.  
 
-Anything set via the GUI (such as handle positions, checkbox states) are automatically saved to the kinefly.yaml file.
+Anything set via the GUI (e.g. handle positions, checkbox states, etc) are automatically saved to the kinefly.yaml file.
 
-There are some global parameters, plus sections for each of head/abdomen/left/right.  
+The non-gui parameters are below.  
 
 General Parameters:
     filenameBackground:         Location to store the background image.  
