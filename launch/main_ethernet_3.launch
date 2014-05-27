@@ -1,0 +1,16 @@
+<launch>
+	<!-- ========================================================== -->
+	<!-- Launch everything needed for Kinefly.                      -->
+	<!-- ========================================================== -->
+
+
+    <include file="$(find Kinefly)/launch/params_kinefly_3.launch" />
+
+    <include file="$(find Kinefly)/launch/params_camera_3.launch"   ns="camera3" />
+    <include file="$(find Kinefly)/launch/camera_ethernet_3.launch" />
+
+    <node name="kinefly3" pkg="Kinefly" type="kinefly.py"  required="true"      />
+    <node name="kinefly2phidgetsanalog"  pkg="Kinefly"   type="kinefly2phidgetsanalog.py" ns="kinefly3"  />
+
+
+</launch>
