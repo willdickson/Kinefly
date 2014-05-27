@@ -143,11 +143,11 @@ class Kinefly2PhidgetsAnalog:
         a31 = 10/(lmax - lmin)
         a33 = 10/(rmax - rmin)
                 
-        #                     1   L1   L2   R1 R2 HA HR AA AR
-        self.a = np.array([[a00, a01,   0,   0, 0, 0, 0, 0, 0],
-                           [a10,   0,   0, a13, 0, 0, 0, 0, 0],
-                           [a20, a21,   0, a23, 0, 0, 0, 0, 0],
-                           [a30, a31,   0, a33, 0, 0, 0, 0, 0]],
+        #                     1   L1   L2   R1 R2 HA HR AA AR XI
+        self.a = np.array([[a00, a01,   0,   0, 0, 0, 0, 0, 0, 0],
+                           [a10,   0,   0, a13, 0, 0, 0, 0, 0, 0],
+                           [a20, a21,   0, a23, 0, 0, 0, 0, 0, 0],
+                           [a30, a31,   0, a33, 0, 0, 0, 0, 0, 0]],
                           )
         
         
@@ -205,18 +205,18 @@ class Kinefly2PhidgetsAnalog:
                           flystate.aux.intensity
                           ], dtype=np.float32)
         
-        if (self.iCount>10):
-            self.stateMin = np.min([self.stateMin, state], 0)
-            self.stateMax = np.max([state, self.stateMax], 0)
-
-            # Decay toward the mean.
-            stateMean = (self.stateMin + self.stateMax) * 0.5
-            d = (self.stateMax - stateMean) * 0.001
-            self.stateMax -= d
-            self.stateMin += d
-            
-        #rospy.logwarn((self.stateMin,self.stateMax))
         if (self.params['autorange']):
+            if (self.iCount>10):
+                self.stateMin = np.min([self.stateMin, state], 0)
+                self.stateMax = np.max([state, self.stateMax], 0)
+    
+                # Decay toward the mean.
+                stateMean = (self.stateMin + self.stateMax) * 0.5
+                d = (self.stateMax - stateMean) * 0.001
+                self.stateMax -= d
+                self.stateMin += d
+                
+            #rospy.logwarn((self.stateMin,self.stateMax))
             self.update_coefficients_from_autorange()
             
         voltages = np.dot(self.a, state)

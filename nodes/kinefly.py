@@ -160,7 +160,9 @@ class ImageWindow(object):
             else:
                 img = np.zeros(self.shape)
             
-            cv2.imshow(self.name, img)
+            (h,w) = img.shape
+            if (h>0) and (w>0):
+                cv2.imshow(self.name, img)
         
         
     def set_enable(self, bEnable):
@@ -1763,7 +1765,7 @@ class WingbeatDetector(object):
 ###############################################################################
 class Fly(object):
     def __init__(self, params={}):
-        self.nodename = rospy.get_name()
+        self.nodename = rospy.get_name().rstrip('/')
 
         # Create the head tracker.        
         if (params['head']['tracker']=='area'):
@@ -1829,7 +1831,7 @@ class Fly(object):
         self.stamp = rospy.Time(0)
         
 
-        self.pubFlystate = rospy.Publisher(self.nodename.rstrip('/')+'/flystate', MsgFlystate)
+        self.pubFlystate = rospy.Publisher(self.nodename+'/flystate', MsgFlystate)
  
 
     def set_params(self, params):
@@ -2800,18 +2802,18 @@ class MainWindow:
         
         # initialize
         rospy.init_node('kinefly')
-        self.nodename = rospy.get_name()
+        self.nodename = rospy.get_name().rstrip('/')
         
         # initialize display
         self.window_name = self.nodename.strip('/')
         cv2.namedWindow(self.window_name,1)
         self.cvbridge = CvBridge()
         
-        self.yamlfile = os.path.expanduser(rospy.get_param(self.nodename.rstrip('/')+'/yamlfile', '~/%s.yaml' % self.nodename.strip('/')))
+        self.yamlfile = os.path.expanduser(rospy.get_param(self.nodename+'/yamlfile', '~/%s.yaml' % self.nodename.strip('/')))
         with self.lockParams:
             # Load the parameters from server.
             try:
-                self.params = rospy.get_param(self.nodename.rstrip('/'), {})
+                self.params = rospy.get_param(self.nodename, {})
             except (rosparam.RosParamException, IndexError), e:
                 rospy.logwarn('%s.  Using default values.' % e)
                 self.params = {}
@@ -2864,7 +2866,7 @@ class MainWindow:
                                        'angle_hi':3.927, 
                                        'angle_lo':2.3562},
                             'left':   {'track':True,
-                                       'subtract_bg':True,
+                                       'subtract_bg':False,
                                        'stabilize':False,
                                        'hinge':{'x':250,
                                                 'y':200},
@@ -2873,7 +2875,7 @@ class MainWindow:
                                        'angle_hi':-0.7854, 
                                        'angle_lo':-2.3562},
                             'right':  {'track':True,
-                                       'subtract_bg':True,
+                                       'subtract_bg':False,
                                        'stabilize':False,
                                        'hinge':{'x':350,
                                                 'y':200},
@@ -2893,7 +2895,7 @@ class MainWindow:
 
         SetDict().set_dict_with_preserve(self.params, defaults)
         self.params = self.legalizeParams(self.params)
-        rospy.set_param(self.nodename.rstrip('/')+'/gui', self.params['gui'])
+        rospy.set_param(self.nodename+'/gui', self.params['gui'])
         
         self.scale = self.params['scale_image']
         self.bMousing = False
@@ -2946,12 +2948,12 @@ class MainWindow:
         self.yToolbar       = 0
         
         # Publishers.
-        self.pubCommand     = rospy.Publisher(self.nodename.rstrip('/')+'/command', MsgCommand)
+        self.pubCommand     = rospy.Publisher(self.nodename+'/command', MsgCommand)
 
         # Subscriptions.        
         sizeImage = 650*90
         self.subImage       = rospy.Subscriber(self.params['image_topic'],           Image,      self.image_callback,   queue_size=1, buff_size=1*sizeImage, tcp_nodelay=True)
-        self.subCommand     = rospy.Subscriber(self.nodename.rstrip('/')+'/command', MsgCommand, self.command_callback, queue_size=1000)
+        self.subCommand     = rospy.Subscriber(self.nodename+'/command', MsgCommand, self.command_callback, queue_size=1000)
 
         # user callbacks
         cv2.setMouseCallback(self.window_name, self.onMouse, param=None)
@@ -3105,7 +3107,7 @@ class MainWindow:
         # Set it into the wings.
         self.fly.set_params(self.scale_params(self.params, self.scale))
         with self.lockParams:
-            rosparam.dump_params(self.yamlfile, self.nodename.rstrip('/')+'/gui')
+            rosparam.dump_params(self.yamlfile, self.nodename+'/gui')
         
         return config
 
@@ -3121,9 +3123,9 @@ class MainWindow:
             
             # Save the params.
             SetDict().set_dict_with_preserve(self.params, rospy.get_param(self.nodename, {}))
-            rospy.set_param(self.nodename.rstrip('/')+'/gui', self.params['gui'])
+            rospy.set_param(self.nodename+'/gui', self.params['gui'])
             with self.lockParams:
-                rosparam.dump_params(self.yamlfile, self.nodename.rstrip('/')+'/gui')
+                rosparam.dump_params(self.yamlfile, self.nodename+'/gui')
 
             rospy.signal_shutdown('User requested exit.')
         
@@ -3141,7 +3143,7 @@ class MainWindow:
             
         
         if (self.command == 'help'):
-            rospy.logwarn('The %s/command topic accepts the following string commands:' % self.nodename.rstrip('/'))
+            rospy.logwarn('The %s/command topic accepts the following string commands:' % self.nodename)
             rospy.logwarn('  help                 This message.')
             rospy.logwarn('  save_background      Saves the instant image to disk for use as the')
             rospy.logwarn('                       background.')
@@ -3150,7 +3152,7 @@ class MainWindow:
             rospy.logwarn('  exit                 Exit the program.')
             rospy.logwarn('')
             rospy.logwarn('You can send the above commands at the shell prompt via:')
-            rospy.logwarn('rostopic pub -1 %s/command Kinefly/MsgCommand commandtext' % self.nodename.rstrip('/'))
+            rospy.logwarn('rostopic pub -1 %s/command Kinefly/MsgCommand commandtext' % self.nodename)
             rospy.logwarn('')
 
         
@@ -3874,9 +3876,9 @@ class MainWindow:
                 # Save the results.
                 SetDict().set_dict_with_preserve(self.params, rospy.get_param(self.nodename, {}))
 
-                rospy.set_param(self.nodename.rstrip('/')+'/gui', self.params['gui'])
+                rospy.set_param(self.nodename+'/gui', self.params['gui'])
                 with self.lockParams:
-                    rosparam.dump_params(self.yamlfile, self.nodename.rstrip('/')+'/gui')
+                    rosparam.dump_params(self.yamlfile, self.nodename+'/gui')
 
             # Dump the params to the screen, for debugging.
 #             for k,v in self.params.iteritems():

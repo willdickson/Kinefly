@@ -6,7 +6,7 @@
 
     <include file="$(find Kinefly)/launch/params_kinefly_2.launch" />
 
-    <include file="$(find Kinefly)/launch/params_camera2.launch"   ns="camera2" />
+    <include file="$(find Kinefly)/launch/params_camera_2.launch"   ns="camera2" />
     <include file="$(find Kinefly)/launch/camera_ethernet_2.launch" />
 
     <node name="kinefly2" pkg="Kinefly" type="kinefly.py"  required="true"      />
