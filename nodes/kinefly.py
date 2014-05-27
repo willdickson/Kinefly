@@ -2951,9 +2951,9 @@ class MainWindow:
         self.pubCommand     = rospy.Publisher(self.nodename+'/command', MsgCommand)
 
         # Subscriptions.        
-        sizeImage = 650*90
-        self.subImage       = rospy.Subscriber(self.params['image_topic'],           Image,      self.image_callback,   queue_size=1, buff_size=1*sizeImage, tcp_nodelay=True)
-        self.subCommand     = rospy.Subscriber(self.nodename+'/command', MsgCommand, self.command_callback, queue_size=1000)
+        sizeImage = 128+659*494 # Size of header + data.
+        self.subImage       = rospy.Subscriber(self.params['image_topic'], Image,      self.image_callback,   queue_size=2, buff_size=2*sizeImage, tcp_nodelay=True)
+        self.subCommand     = rospy.Subscriber(self.nodename+'/command',   MsgCommand, self.command_callback, queue_size=1000)
 
         # user callbacks
         cv2.setMouseCallback(self.window_name, self.onMouse, param=None)
