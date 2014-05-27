@@ -2794,6 +2794,7 @@ class MainWindow:
     def __init__(self):
         self.stampPrev = None
         self.stampPrevAlt = None
+        self.stampRosimagePrev = None
         self.lockParams = threading.Lock()
         self.lockBuffer = threading.Lock()
         
@@ -2949,7 +2950,7 @@ class MainWindow:
 
         # Subscriptions.        
         sizeImage = 650*90
-        self.subImage       = rospy.Subscriber(self.params['image_topic'],           Image,      self.image_callback,  queue_size=1, buff_size=1*sizeImage)
+        self.subImage       = rospy.Subscriber(self.params['image_topic'],           Image,      self.image_callback,   queue_size=1, buff_size=1*sizeImage, tcp_nodelay=True)
         self.subCommand     = rospy.Subscriber(self.nodename.rstrip('/')+'/command', MsgCommand, self.command_callback, queue_size=1000)
 
         # user callbacks
@@ -3201,7 +3202,24 @@ class MainWindow:
                 self.iImgLoading = iImgLoadingNext
                 self.iImgWorking = iImgWorkingNext
 
+#            # Warn if the camera is delaying.
+#            if (self.stampRosimagePrev is not None):
+#                if (rosimg.header.stamp.to_sec() - self.stampRosimagePrev.to_sec() > 1):
+#                    rospy.logwarn('%s: %d, %d %0.6f' % (self.nodename, rosimg.header.seq, (rosimg.header.stamp.secs*1e9)+rosimg.header.stamp.nsecs, rosimg.header.stamp.to_sec() - self.stampRosimagePrev.to_sec()))
+#
+#            self.stampRosimagePrev = rosimg.header.stamp
+
+            
+
                 
+    def process_image_fake(self):
+        with self.lockBuffer:
+            # Mark this buffer entry as available for loading.
+            self.bufferImages[self.iImgWorking] = None
+
+            # Go to the next image.
+            self.iImgWorking = (self.iImgWorking+1) % len(self.bufferImages)
+
                 
                 
     def process_image(self):
@@ -3302,7 +3320,7 @@ class MainWindow:
                     hzNow = 1/self.dtCamera
                     self.iCount += 1
                     if (self.iCount > 100):                     
-                        a= 0.04 # Filter the framerate.
+                        a= 0.01 # Filter the framerate.
                         self.hzActual = (1-a)*self.hzActual + a*hzNow 
                     else:                                       
                         if (self.iCount>20):             # Get past the transient response.       

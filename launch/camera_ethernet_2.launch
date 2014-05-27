@@ -5,6 +5,8 @@
     <!-- ========================================================== -->
 
     <node name="camera2"          pkg="camera_aravis"  type="camnode" />
+<!--
     <node name="image_proc2"       pkg="image_proc"  type="image_proc" ns="camera2" />
+-->
   
 </launch>

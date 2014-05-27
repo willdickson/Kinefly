@@ -123,5 +123,6 @@
     <param name="kinefly2/kinefly2phidgetsanalog/v3xi"        type="double" value="0.0" />
     
     <param name="kinefly2/kinefly2phidgetsanalog/autorange"   type="bool"   value="false" />
+    <param name="kinefly2/kinefly2phidgetsanalog/serial"      type="int"    value="277087" />
 
 </launch>

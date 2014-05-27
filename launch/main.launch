@@ -4,6 +4,6 @@
 	<!-- ========================================================== -->
 
 
-    <include file="$(find Kinefly)/launch/main_ethernet.launch" />
+    <include file="$(find Kinefly)/launch/main_triple.launch" />
     
 </launch>
