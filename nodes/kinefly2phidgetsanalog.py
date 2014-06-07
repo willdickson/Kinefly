@@ -33,10 +33,10 @@ class Kinefly2PhidgetsAnalog:
         # Load the parameters.
         self.params = rospy.get_param('%s' % self.nodename.rstrip('/'), {})
         self.defaults = {'v0enable':True, 'v1enable':True, 'v2enable':True, 'v3enable':True, 
-                        'v00': 0.0, 'v0l1':1.0, 'v0l2':0.0, 'v0r1':0.0, 'v0r2':0.0, 'v0ha':0.0, 'v0hr':0.0, 'v0aa':0.0, 'v0ar':0.0, 'v0xi':0.0, # L
-                        'v10': 0.0, 'v1l1':0.0, 'v1l2':0.0, 'v1r1':1.0, 'v1r2':0.0, 'v1ha':0.0, 'v1hr':0.0, 'v1aa':0.0, 'v1ar':0.0, 'v1xi':0.0, # R
-                        'v20': 0.0, 'v2l1':1.0, 'v2l2':0.0, 'v2r1':-1.0, 'v2r2':0.0, 'v2ha':0.0, 'v2hr':0.0, 'v2aa':0.0, 'v2ar':0.0, 'v2xi':0.0, # L-R
-                        'v30': 0.0, 'v3l1':1.0, 'v3l2':0.0, 'v3r1':1.0, 'v3r2':0.0, 'v3ha':0.0, 'v3hr':0.0, 'v3aa':0.0, 'v3ar':0.0, 'v3xi':0.0, # L+R
+                        'v00': 0.0, 'v0l1':1.0, 'v0l2':0.0, 'v0lr':0.0, 'v0r1':0.0,  'v0r2':0.0, 'v0rr':0.0, 'v0ha':0.0, 'v0hr':0.0, 'v0aa':0.0, 'v0ar':0.0, 'v0xi':0.0, # L
+                        'v10': 0.0, 'v1l1':0.0, 'v1l2':0.0, 'v1lr':0.0, 'v1r1':1.0,  'v1r2':0.0, 'v1rr':0.0, 'v1ha':0.0, 'v1hr':0.0, 'v1aa':0.0, 'v1ar':0.0, 'v1xi':0.0, # R
+                        'v20': 0.0, 'v2l1':1.0, 'v2l2':0.0, 'v2lr':0.0, 'v2r1':-1.0, 'v2r2':0.0, 'v2rr':0.0, 'v2ha':0.0, 'v2hr':0.0, 'v2aa':0.0, 'v2ar':0.0, 'v2xi':0.0, # L-R
+                        'v30': 0.0, 'v3l1':1.0, 'v3l2':0.0, 'v3lr':0.0, 'v3r1':1.0,  'v3r2':0.0, 'v3rr':0.0, 'v3ha':0.0, 'v3hr':0.0, 'v3aa':0.0, 'v3ar':0.0, 'v3xi':0.0, # L+R
                          'autorange':False, 
                          'serial':0         # The serial number of the Phidget.  0==any.
                          }
@@ -44,8 +44,8 @@ class Kinefly2PhidgetsAnalog:
         rospy.set_param('%s' % self.nodename.rstrip('/'), self.params)
         
 
-        self.stateMin = np.array([ np.inf,  np.inf,  np.inf,  np.inf,  np.inf,  np.inf,  np.inf,  np.inf,  np.inf,  np.inf])
-        self.stateMax = np.array([-np.inf, -np.inf, -np.inf, -np.inf, -np.inf, -np.inf, -np.inf, -np.inf, -np.inf, -np.inf])
+        self.stateMin = np.array([ np.inf,  np.inf,  np.inf,  np.inf,  np.inf,  np.inf,  np.inf,  np.inf,  np.inf,  np.inf,  np.inf,  np.inf])
+        self.stateMax = np.array([-np.inf, -np.inf, -np.inf, -np.inf, -np.inf, -np.inf, -np.inf, -np.inf, -np.inf, -np.inf, -np.inf, -np.inf])
         
         self.update_coefficients()
         
@@ -101,10 +101,10 @@ class Kinefly2PhidgetsAnalog:
     # coefficients to make a user-specified voltage from wing, head, and abdomen angles.
     # 
     def update_coefficients_from_params(self):
-        self.a = np.array([[self.params['v00'], self.params['v0l1'], self.params['v0l2'], self.params['v0r1'], self.params['v0r2'], self.params['v0ha'], self.params['v0hr'], self.params['v0aa'], self.params['v0ar'], self.params['v0xi']],
-                           [self.params['v10'], self.params['v1l1'], self.params['v1l2'], self.params['v1r1'], self.params['v1r2'], self.params['v1ha'], self.params['v1hr'], self.params['v1aa'], self.params['v1ar'], self.params['v1xi']],
-                           [self.params['v20'], self.params['v2l1'], self.params['v2l2'], self.params['v2r1'], self.params['v2r2'], self.params['v2ha'], self.params['v2hr'], self.params['v2aa'], self.params['v2ar'], self.params['v2xi']],
-                           [self.params['v30'], self.params['v3l1'], self.params['v3l2'], self.params['v3r1'], self.params['v3r2'], self.params['v3ha'], self.params['v3hr'], self.params['v3aa'], self.params['v3ar'], self.params['v3xi']]
+        self.a = np.array([[self.params['v00'], self.params['v0l1'], self.params['v0l2'], self.params['v0lr'], self.params['v0r1'], self.params['v0r2'], self.params['v0rr'], self.params['v0ha'], self.params['v0hr'], self.params['v0aa'], self.params['v0ar'], self.params['v0xi']],
+                           [self.params['v10'], self.params['v1l1'], self.params['v1l2'], self.params['v1lr'], self.params['v1r1'], self.params['v1r2'], self.params['v1rr'], self.params['v1ha'], self.params['v1hr'], self.params['v1aa'], self.params['v1ar'], self.params['v1xi']],
+                           [self.params['v20'], self.params['v2l1'], self.params['v2l2'], self.params['v2lr'], self.params['v2r1'], self.params['v2r2'], self.params['v2rr'], self.params['v2ha'], self.params['v2hr'], self.params['v2aa'], self.params['v2ar'], self.params['v2xi']],
+                           [self.params['v30'], self.params['v3l1'], self.params['v3l2'], self.params['v3lr'], self.params['v3r1'], self.params['v3r2'], self.params['v3rr'], self.params['v3ha'], self.params['v3hr'], self.params['v3aa'], self.params['v3ar'], self.params['v3xi']]
                           ],
                           dtype=np.float32
                           )
@@ -120,8 +120,8 @@ class Kinefly2PhidgetsAnalog:
         lmin = self.stateMin[1]
         lmean = (lmax-lmin)/2
 
-        rmax = self.stateMax[3]
-        rmin = self.stateMin[3]
+        rmax = self.stateMax[4]
+        rmin = self.stateMin[4]
         rmean = (rmax-rmin)/2
 
         # From Matlab:
@@ -144,11 +144,11 @@ class Kinefly2PhidgetsAnalog:
         a31 = 10/(lmax - lmin)
         a33 = 10/(rmax - rmin)
                 
-        #                     1   L1   L2   R1 R2 HA HR AA AR XI
-        self.a = np.array([[a00, a01,   0,   0, 0, 0, 0, 0, 0, 0],
-                           [a10,   0,   0, a13, 0, 0, 0, 0, 0, 0],
-                           [a20, a21,   0, a23, 0, 0, 0, 0, 0, 0],
-                           [a30, a31,   0, a33, 0, 0, 0, 0, 0, 0]],
+        #                     1   L1   L2  LR   R1 R2 RR HA HR AA AR XI
+        self.a = np.array([[a00, a01,   0,  0,   0, 0, 0, 0, 0, 0, 0, 0],
+                           [a10,   0,   0,  0, a13, 0, 0, 0, 0, 0, 0, 0],
+                           [a20, a21,   0,  0, a23, 0, 0, 0, 0, 0, 0, 0],
+                           [a30, a31,   0,  0, a33, 0, 0, 0, 0, 0, 0, 0]],
                           )
         
         
@@ -184,10 +184,12 @@ class Kinefly2PhidgetsAnalog:
     # get_voltages()
     #
     def voltages_from_flystate(self, flystate):
-        leftMajor = flystate.left.angles[0] if (0<len(flystate.left.angles)) else 0.0
-        leftMinor = flystate.left.angles[1] if (1<len(flystate.left.angles)) else 0.0
-        rightMajor = flystate.right.angles[0] if (0<len(flystate.right.angles)) else 0.0
-        rightMinor = flystate.right.angles[1] if (1<len(flystate.right.angles)) else 0.0
+        angle1Left = flystate.left.angles[0] if (0<len(flystate.left.angles)) else 0.0
+        angle2Left = flystate.left.angles[1] if (1<len(flystate.left.angles)) else 0.0
+        radiusLeft = flystate.left.radii[0] if (0<len(flystate.left.radii)) else 0.0
+        angle1Right = flystate.right.angles[0] if (0<len(flystate.right.angles)) else 0.0
+        angle2Right = flystate.right.angles[1] if (1<len(flystate.right.angles)) else 0.0
+        radiusRight = flystate.right.radii[0] if (0<len(flystate.right.radii)) else 0.0
             
         angleHead     = flystate.head.angles[0] if (0 < len(flystate.head.angles)) else 0.0
         radiusHead    = flystate.head.radii[0] if (0 < len(flystate.head.radii)) else 0.0
@@ -195,10 +197,12 @@ class Kinefly2PhidgetsAnalog:
         radiusAbdomen = flystate.abdomen.radii[0] if (0 < len(flystate.abdomen.radii)) else 0.0
                                                       
         state = np.array([1.0,
-                          leftMajor,
-                          leftMinor,
-                          rightMajor,
-                          rightMinor,
+                          angle1Left,
+                          angle2Left,
+                          radiusLeft,
+                          angle1Right,
+                          angle2Right,
+                          radiusRight,
                           angleHead,
                           radiusHead,
                           angleAbdomen,
@@ -222,10 +226,10 @@ class Kinefly2PhidgetsAnalog:
             
         voltages = np.dot(self.a, state)
         
-        # L1,L2,R1,R2,HA,AA are all in radians; XI is intensity on the range [0,1].
-        # v00,v0l1,v0l2,v0r1,v0r2,v0ha,v0hr,v0aa,v0ar,v0xi are coefficients to convert to voltage.
-#         voltages[0] = self.v00 + self.v0l1*L1 + self.v0l2*L2 + \
-#                                  self.v0r1*R1 + self.v0r2*R2 + \
+        # L1,L2,R1,R2,HA,AA are all in radians; LR,RR are in pixels; XI is intensity on the range [0,1].
+        # v00,v0l1,v0l2,v0lr,v0r1,v0r2,v0rr,v0ha,v0hr,v0aa,v0ar,v0xi are coefficients to convert to voltage.
+#         voltages[0] = self.v00 + self.v0l1*L1 + self.v0l2*L2 + self.v0lr*LR + \
+#                                  self.v0r1*R1 + self.v0r2*R2 + self.v0rr*RR + \
 #                                  self.v0ha*HA + self.v0hr*HR + \
 #                                  self.v0aa*AA + self.v0ar*AR + \ # Angle + Radius
 #                                  self.v0xi*XI                    # Aux intensity

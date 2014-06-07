@@ -7,5 +7,9 @@
     <include file="$(find Kinefly)/launch/main_ethernet_1.launch" />
     <include file="$(find Kinefly)/launch/main_ethernet_2.launch" />
     <include file="$(find Kinefly)/launch/main_ethernet_3.launch" />
+
+<!--
+    <include file="$(find Kinefly)/launch/record_triple.launch" />
+-->
     
 </launch>
