@@ -2670,7 +2670,7 @@ class TipDetector(object):
 ###############################################################################
 # TipTracker()
 # Track the position of the tip of a bodypart, e.g. a wingtip.  
-# Finds the point at the greatest distance from the hinge.  Usually used for Wings.
+# Finds the point at the greatest distance from the hinge.
 #
 class TipTracker(PolarTrackedBodypart):
     def __init__(self, name=None, params={}, color='white', bEqualizeHist=False):
@@ -3428,7 +3428,10 @@ class MainWindow:
     
                     # Output the abdomen state.
                     if (self.params['gui']['abdomen']['track']):
-                        s = 'ABDOMEN:% 7.4f' % (self.fly.abdomen.state.angles[0])
+                        s = 'ABDOMEN:'
+                        if (len(self.fly.abdomen.state.angles)>0):
+                            s += '% 7.4f' % (self.fly.abdomen.state.angles[0])
+
                         cv2.putText(imgOutput, s, (x, y), self.fontface, self.scaleText, self.fly.abdomen.bgra)
                         h_text = int(h * self.scale)
                         y -= h_text+self.h_gap
@@ -3436,7 +3439,10 @@ class MainWindow:
     
                     # Output the head state.
                     if (self.params['gui']['head']['track']):
-                        s = 'HEAD:% 7.4f' % (self.fly.head.state.angles[0])
+                        s = 'HEAD:'
+                        if (len(self.fly.head.state.angles)>0):
+                            s+= '% 7.4f' % (self.fly.head.state.angles[0])
+
                         cv2.putText(imgOutput, s, (x, y), self.fontface, self.scaleText, self.fly.head.bgra)
                         h_text = int(h * self.scale)
                         y -= h_text+self.h_gap
