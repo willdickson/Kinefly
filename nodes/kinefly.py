@@ -1081,6 +1081,8 @@ class PolarTrackedBodypart(object):
                         'radius_inner':Handle(np.array([0,0]), self.bgra, name='radius_inner')
                         }
         
+        self.lockBackground = threading.Lock()
+
         # Region of interest images.
         self.imgFullBackground                  = None
         self.imgRoiBackground                   = None
@@ -1290,33 +1292,36 @@ class PolarTrackedBodypart(object):
     # Set the given image as the background image.
     #                
     def set_background(self, image):
-        self.imgFullBackground = image.astype(np.float32)
-        self.imgRoiBackground = None
+        with self.lockBackground:
+            self.imgFullBackground = image.astype(np.float32)
+            self.imgRoiBackground = None
         
         
     # invert_background()
     # Invert the color of the background image.
     #                
     def invert_background(self):
-        if (self.imgRoiBackground is not None):
-            self.imgRoiBackground = 255-self.imgRoiBackground
+        with self.lockBackground:
+            if (self.imgRoiBackground is not None):
+                self.imgRoiBackground = 255-self.imgRoiBackground
         
         
     def update_background(self):
         alphaBackground = 1.0 - np.exp(-self.dt / self.rc_background)
 
-        if (self.imgRoiBackground is not None):
-            if (self.imgRoi is not None):
-                if (self.imgRoiBackground.size==self.imgRoi.size):
-                    cv2.accumulateWeighted(self.imgRoi.astype(np.float32), self.imgRoiBackground, alphaBackground)
-                else:
-                    self.imgRoiBackground = None
-                    self.imgRoi = None
-        else:
-            if (self.imgFullBackground is not None) and (self.roi is not None):
-                self.imgRoiBackground = copy.deepcopy(self.imgFullBackground[self.roi[1]:self.roi[3], self.roi[0]:self.roi[2]])
-                
-        self.windowBG.set_image(self.imgRoiBackground)
+        with self.lockBackground:
+            if (self.imgRoiBackground is not None):
+                if (self.imgRoi is not None):
+                    if (self.imgRoiBackground.size==self.imgRoi.size):
+                        cv2.accumulateWeighted(self.imgRoi.astype(np.float32), self.imgRoiBackground, alphaBackground)
+                    else:
+                        self.imgRoiBackground = None
+                        self.imgRoi = None
+            else:
+                if (self.imgFullBackground is not None) and (self.roi is not None):
+                    self.imgRoiBackground = copy.deepcopy(self.imgFullBackground[self.roi[1]:self.roi[3], self.roi[0]:self.roi[2]])
+                    
+            self.windowBG.set_image(self.imgRoiBackground)
         
 
     def update_roi(self, image, bInvertColor):
@@ -1334,12 +1339,13 @@ class PolarTrackedBodypart(object):
                 self.imgRoiFg = self.imgRoi
 
             if (self.params['gui'][self.name]['subtract_bg']):
-                if (self.imgRoiBackground is not None):
-                    if (self.imgRoiBackground.shape==self.imgRoiFg.shape):
-                        if (bInvertColor):
-                            self.imgRoiFg = cv2.absdiff(self.imgRoiFg, 255-self.imgRoiBackground.astype(np.uint8))
-                        else:
-                            self.imgRoiFg = cv2.absdiff(self.imgRoiFg, self.imgRoiBackground.astype(np.uint8))
+                with self.lockBackground:
+                    if (self.imgRoiBackground is not None):
+                        if (self.imgRoiBackground.shape==self.imgRoiFg.shape):
+                            if (bInvertColor):
+                                self.imgRoiFg = cv2.absdiff(self.imgRoiFg, 255-self.imgRoiBackground.astype(np.uint8))
+                            else:
+                                self.imgRoiFg = cv2.absdiff(self.imgRoiFg, self.imgRoiBackground.astype(np.uint8))
                         
                 
             # Equalize the brightness/contrast.
@@ -1769,7 +1775,7 @@ class Fly(object):
 
         # Create the head tracker.        
         if (params['head']['tracker']=='area'):
-            self.head    = AreaTracker(name='head',      params=params, color='cyan',    bEqualizeHist=True)
+            self.head    = AreaTracker(name='head',      params=params, color='cyan',    bEqualizeHist=False)
         elif (params['head']['tracker']=='edge'):
             self.head    = EdgeTracker(name='head',      params=params, color='cyan',    bEqualizeHist=False)
         elif (params['head']['tracker']=='tip'):
@@ -1781,7 +1787,7 @@ class Fly(object):
              
         # Create the abdomen tracker.        
         if (params['abdomen']['tracker']=='area'):
-            self.abdomen    = AreaTracker(name='abdomen',      params=params, color='magenta',    bEqualizeHist=True)
+            self.abdomen    = AreaTracker(name='abdomen',      params=params, color='magenta',    bEqualizeHist=False)
         elif (params['abdomen']['tracker']=='edge'):
             self.abdomen    = EdgeTracker(name='abdomen',      params=params, color='magenta',    bEqualizeHist=False)
         elif (params['abdomen']['tracker']=='tip'):
@@ -1793,7 +1799,7 @@ class Fly(object):
              
         # Create the right wing tracker.        
         if (params['right']['tracker']=='area'):
-            self.right    = AreaTracker(name='right',      params=params, color='red',    bEqualizeHist=True)
+            self.right    = AreaTracker(name='right',      params=params, color='red',    bEqualizeHist=False)
         elif (params['right']['tracker']=='edge'):
             self.right    = EdgeTracker(name='right',      params=params, color='red',    bEqualizeHist=False)
         elif (params['right']['tracker']=='tip'):
@@ -1805,7 +1811,7 @@ class Fly(object):
              
         # Create the left wing tracker.        
         if (params['left']['tracker']=='area'):
-            self.left    = AreaTracker(name='left',      params=params, color='green',    bEqualizeHist=True)
+            self.left    = AreaTracker(name='left',      params=params, color='green',    bEqualizeHist=False)
         elif (params['left']['tracker']=='edge'):
             self.left    = EdgeTracker(name='left',      params=params, color='green',    bEqualizeHist=False)
         elif (params['left']['tracker']=='tip'):

@@ -20,8 +20,8 @@
     <param name="kinefly1/head/tracker"       type="string" value="area" />   <!-- area, edge, or tip -->
     
     <param name="kinefly1/abdomen/autozero"   type="bool"   value="true" />
-    <param name="kinefly1/abdomen/threshold"  type="double" value="0.0" />
-    <param name="kinefly1/abdomen/tracker"    type="string" value="area" />   <!-- area, edge, or tip -->
+    <param name="kinefly1/abdomen/threshold"  type="double" value="0.01" />
+    <param name="kinefly1/abdomen/tracker"    type="string" value="tip" />   <!-- area, edge, or tip -->
     
     <param name="kinefly1/left/autozero"      type="bool"   value="true" />
     <param name="kinefly1/left/threshold"     type="double" value="0.005" />
@@ -87,7 +87,7 @@
 
     <!-- Voltage Channel 1 -->
     <param name="kinefly1/kinefly2phidgetsanalog/v1enable"    type="bool"   value="true" />
-    <param name="kinefly1/kinefly2phidgetsanalog/v10"         type="double" value="0.0" />
+    <param name="kinefly1/kinefly2phidgetsanalog/v10"         type="double" value="-18.0" />
     <param name="kinefly1/kinefly2phidgetsanalog/v1ha"        type="double" value="0.0" />
     <param name="kinefly1/kinefly2phidgetsanalog/v1hr"        type="double" value="0.0" />
     <param name="kinefly1/kinefly2phidgetsanalog/v1aa"        type="double" value="0.0" />
@@ -97,7 +97,7 @@
     <param name="kinefly1/kinefly2phidgetsanalog/v1lr"        type="double" value="0.0" />
     <param name="kinefly1/kinefly2phidgetsanalog/v1r1"        type="double" value="0.0" />
     <param name="kinefly1/kinefly2phidgetsanalog/v1r2"        type="double" value="0.0" />
-    <param name="kinefly1/kinefly2phidgetsanalog/v1rr"        type="double" value="0.05" />
+    <param name="kinefly1/kinefly2phidgetsanalog/v1rr"        type="double" value="0.1" />
     <param name="kinefly1/kinefly2phidgetsanalog/v1xi"        type="double" value="0.0" />
 
     <!-- Voltage Channel 2 -->
@@ -117,11 +117,11 @@
 
     <!-- Voltage Channel 3 -->
     <param name="kinefly1/kinefly2phidgetsanalog/v3enable"    type="bool"   value="true" />
-    <param name="kinefly1/kinefly2phidgetsanalog/v30"         type="double" value="0.0" />
+    <param name="kinefly1/kinefly2phidgetsanalog/v30"         type="double" value="-18.0" />
     <param name="kinefly1/kinefly2phidgetsanalog/v3ha"        type="double" value="0.0" />
     <param name="kinefly1/kinefly2phidgetsanalog/v3hr"        type="double" value="0.0" />
     <param name="kinefly1/kinefly2phidgetsanalog/v3aa"        type="double" value="0.0" />
-    <param name="kinefly1/kinefly2phidgetsanalog/v3ar"        type="double" value="0.05" />
+    <param name="kinefly1/kinefly2phidgetsanalog/v3ar"        type="double" value="0.1" />
     <param name="kinefly1/kinefly2phidgetsanalog/v3l1"        type="double" value="0.0" />
     <param name="kinefly1/kinefly2phidgetsanalog/v3l2"        type="double" value="0.0" />
     <param name="kinefly1/kinefly2phidgetsanalog/v3lr"        type="double" value="0.0" />
