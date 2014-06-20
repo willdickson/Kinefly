@@ -794,8 +794,9 @@ class IntensityTrackedBodypart(object):
         self.ptCenter_i = np.array([0,0])
         self.roi       = None
         
-        self.maskRoi           = None
-        self.sumMask = 1.0
+        self.mask = Struct()
+        self.mask.roi = None
+        self.mask.sum = 1.0
         
         self.dt = np.inf
 
@@ -844,48 +845,50 @@ class IntensityTrackedBodypart(object):
     # Create elliptical wedge masks, and window functions.
     #
     def create_mask(self, shape):
-        if (not self.bValidMask):
-            x     = int(self.params['gui'][self.name]['center']['x'])
-            y     = int(self.params['gui'][self.name]['center']['y'])
-            r1    = int(self.params['gui'][self.name]['radius1'])
-            r2    = int(self.params['gui'][self.name]['radius2'])
-            angle = self.params['gui'][self.name]['angle']
-            bgra  = bgra_dict['white']
-            
-            # Create the mask.
-            mask = np.zeros(shape, dtype=np.uint8)
-            cv2.ellipse(mask, (x, y), (r1, r2), int(np.rad2deg(angle)), 0, 360, bgra, cv.CV_FILLED)
-            self.windowMask.set_image(mask)
-            
-            # Find the ROI of the mask.
-            b=0 # Border
-            xSum = np.sum(mask, 0)
-            ySum = np.sum(mask, 1)
-            xMask = np.where(xSum>0)[0]
-            yMask = np.where(ySum>0)[0]
-            
-            if (len(xMask)>0) and (len(yMask)>0): 
-                # Dilate with a border.
-                xMin0 = np.where(xSum>0)[0][0]  - b
-                xMax0 = np.where(xSum>0)[0][-1] + b+1
-                yMin0 = np.where(ySum>0)[0][0]  - b
-                yMax0 = np.where(ySum>0)[0][-1] + b+1
-                
-                # Clip border to image edges.
-                xMin = np.max([0,xMin0])
-                yMin = np.max([0,yMin0])
-                xMax = np.min([xMax0, shape[1]-1])
-                yMax = np.min([yMax0, shape[0]-1])
-                
-                self.roi = np.array([xMin, yMin, xMax, yMax])
-                self.maskRoi = mask[yMin:yMax, xMin:xMax]
-                self.sumMask = np.sum(self.maskRoi).astype(np.float32)
+        x     = int(self.params['gui'][self.name]['center']['x'])
+        y     = int(self.params['gui'][self.name]['center']['y'])
+        r1    = int(self.params['gui'][self.name]['radius1'])
+        r2    = int(self.params['gui'][self.name]['radius2'])
+        angle = self.params['gui'][self.name]['angle']
+        bgra  = bgra_dict['white']
         
-                self.bValidMask = True
-            else:
-                rospy.logwarn('%s: Empty mask.' % self.name)
-                self.bValidMask = False
+        # Create the mask.
+        mask = np.zeros(shape, dtype=np.uint8)
+        cv2.ellipse(mask, (x, y), (r1, r2), int(np.rad2deg(angle)), 0, 360, bgra, cv.CV_FILLED)
+        self.windowMask.set_image(mask)
         
+        # Find the ROI of the mask.
+        xSum = np.sum(mask, 0)
+        ySum = np.sum(mask, 1)
+        xMask = np.where(xSum>0)[0]
+        yMask = np.where(ySum>0)[0]
+        
+        if (len(xMask)>0) and (len(yMask)>0): 
+            # Dilate with a border.
+            xMin = np.where(xSum>0)[0][0]  
+            xMax = np.where(xSum>0)[0][-1] + 1
+            yMin = np.where(ySum>0)[0][0]  
+            yMax = np.where(ySum>0)[0][-1] + 1
+            
+            # Clip border to image edges.
+            self.mask.xMin = np.max([0,xMin])
+            self.mask.yMin = np.max([0,yMin])
+            self.mask.xMax = np.min([xMax, shape[1]-1])
+            self.mask.yMax = np.min([yMax, shape[0]-1])
+            
+            self.roi = np.array([self.mask.xMin, self.mask.yMin, self.mask.xMax, self.mask.yMax])
+            self.mask.roi = mask[self.mask.yMin:self.mask.yMax, self.mask.xMin:self.mask.xMax]
+            self.mask.sum = np.sum(self.mask.roi).astype(np.float32)
+    
+            self.bValidMask = True
+        else:
+            self.mask.xMin = None
+            self.mask.yMin = None
+            self.mask.xMax = None
+            self.mask.yMax = None
+            
+            rospy.logwarn('%s: Empty mask.' % self.name)
+    
         
     # set_background()
     # Set the given image as the background image.
@@ -953,8 +956,8 @@ class IntensityTrackedBodypart(object):
                     self.imgRoiFg *= (255.0/float(max2))
                 
             # Apply the mask.
-            if (self.maskRoi is not None):
-                self.imgRoiFgMasked = cv2.bitwise_and(self.imgRoiFg, self.maskRoi)
+            if (self.mask.roi is not None):
+                self.imgRoiFgMasked = cv2.bitwise_and(self.imgRoiFg, self.mask.roi)
     
             self.windowFG.set_image(self.imgRoiFgMasked) 
         
@@ -986,7 +989,10 @@ class IntensityTrackedBodypart(object):
         self.dt = dt
         
         if (self.params['gui'][self.name]['track']):
-            self.create_mask(image.shape)
+            if (not self.bValidMask):
+                self.create_mask(image.shape)
+                self.bValidMask = True
+                
             self.update_background()
             self.update_roi(image, bInvertColor)
 
@@ -1045,14 +1051,15 @@ class IntensityTrackedBodypart(object):
 
 ###############################################################################
 ###############################################################################
-# Contains the common behavior for tracking a bodypart via a polar coordinates transform, e.g. Head, Abdomen, or Wing.
+# Contains the common behavior for tracking the motion of a bodypart via a polar 
+# coordinates transform, e.g. Head, Abdomen, or Wing.
 #
-class PolarTrackedBodypart(object):
+class MotionTrackedBodypart(object):
     def __init__(self, name=None, params={}, color='white', bEqualizeHist=False):
         self.name           = name
         self.bEqualizeHist  = bEqualizeHist
 
-        self.bValidMask = False
+        self.bValidMask     = False
 
         self.color          = color
         self.bgra           = bgra_dict[color]
@@ -1064,15 +1071,15 @@ class PolarTrackedBodypart(object):
         self.ptHinge_i      = np.array([0,0])
         self.roi            = None
         
-        self.create_wfn               = WindowFunctions().create_tukey
-        self.wfnRoi                   = None
-        self.wfnRoiMaskedPolarCropped = None
-        
-        self.maskRoi        = None
-        self.sumMask        = 1.0
+        self.mask       = Struct()
+        self.mask.roi   = None
+        self.mask.sum   = 1.0
+        self.mask.xMin = None
+        self.mask.yMin = None
+        self.mask.xMax = None
+        self.mask.yMax = None
         
         self.dt = np.inf
-        self.polartransforms = PolarTransforms()
 
         self.params = {}
         self.handles = {'hinge':Handle(np.array([0,0]), self.bgra, name='hinge'),
@@ -1089,15 +1096,11 @@ class PolarTrackedBodypart(object):
         self.imgRoi                             = None # Untouched roi image.
         self.imgRoiFg                           = None # Background subtracted.
         self.imgRoiFgMasked                     = None
-        self.imgRoiFgMaskedPolar                = None
-        self.imgRoiFgMaskedPolarCropped         = None
-        self.imgRoiFgMaskedPolarCroppedWindowed = None
-        self.imgComparison                      = None
+        self.imgFinal                           = None # The image to use for tracking.
 
         # Extra windows.
         self.windowBG         = ImageWindow(False, self.name+'BG')
         self.windowFG         = ImageWindow(False, self.name+'FG')
-        self.windowPolar      = ImageWindow(False, self.name+'Polar')
         self.windowMask       = ImageWindow(gbShowMasks, self.name+'Mask')
 
 
@@ -1139,7 +1142,6 @@ class PolarTrackedBodypart(object):
                            [sinAngleOutward_i, cosAngleOutward_i]])
 
         # Turn on/off the extra windows.
-        self.windowPolar.set_enable(self.params['gui']['windows'] and self.params['gui'][self.name]['track'])
         self.windowBG.set_enable(self.params['gui']['windows'] and self.params['gui'][self.name]['track'] and self.params['gui'][self.name]['subtract_bg'])
         self.windowFG.set_enable(self.params['gui']['windows'] and self.params['gui'][self.name]['track'])
 
@@ -1196,97 +1198,57 @@ class PolarTrackedBodypart(object):
     # Create elliptical wedge masks, and window functions.
     #
     def create_mask(self, shape):
-        if (not self.bValidMask):
-            # Create the mask (for polar images the line-of-interest is at the midpoint).
-            mask = np.zeros(shape, dtype=np.uint8)
+        # Create the mask.
+        mask = np.zeros(shape, dtype=np.uint8)
+        
+        # Args for the ellipse calls.
+        x = int(self.params['gui'][self.name]['hinge']['x'])
+        y = int(self.params['gui'][self.name]['hinge']['y'])
+        r_outer = int(np.ceil(self.params['gui'][self.name]['radius_outer']))
+        r_inner = int(np.floor(self.params['gui'][self.name]['radius_inner']))-1
+        hi = int(np.ceil(np.rad2deg(self.angle_hi_i)))
+        lo = int(np.floor(np.rad2deg(self.angle_lo_i)))
+        
+        # Draw the mask.
+        cv2.ellipse(mask, (x, y), (r_outer, r_outer), 0, hi, lo, bgra_dict['white'], cv.CV_FILLED)
+        cv2.ellipse(mask, (x, y), (r_inner, r_inner), 0, 0, 360, bgra_dict['black'], cv.CV_FILLED)
+        mask = cv2.dilate(mask, np.ones([3,3])) # Make the mask one pixel bigger to account for pixel aliasing.
+        self.windowMask.set_image(mask)
+        
+        
+        # Find the ROI of the mask.
+        xSum = np.sum(mask, 0)
+        ySum = np.sum(mask, 1)
+        x_list = np.where(xSum>0)[0]
+        y_list = np.where(ySum>0)[0]
+        
+        if (len(x_list)>0) and (len(y_list)>0): 
+            # Get the extents.
+            xMin = np.where(xSum>0)[0][0]  
+            xMax = np.where(xSum>0)[0][-1] + 1
+            yMin = np.where(ySum>0)[0][0]  
+            yMax = np.where(ySum>0)[0][-1] + 1
             
-            # Args for the two ellipse calls.
-            x = int(self.params['gui'][self.name]['hinge']['x'])
-            y = int(self.params['gui'][self.name]['hinge']['y'])
-            r_outer = int(np.ceil(self.params['gui'][self.name]['radius_outer']))
-            r_inner = int(np.floor(self.params['gui'][self.name]['radius_inner']))-1
-    
-            hi = int(np.ceil(np.rad2deg(self.angle_hi_i)))
-            lo = int(np.floor(np.rad2deg(self.angle_lo_i)))
+            # Clip border to image edges.
+            self.mask.xMin = np.max([0,xMin])
+            self.mask.yMin = np.max([0,yMin])
+            self.mask.xMax = np.min([xMax, shape[1]-1])
+            self.mask.yMax = np.min([yMax, shape[0]-1])
             
-            # Draw the mask.
-            cv2.ellipse(mask, (x, y), (r_outer, r_outer), 0, hi, lo, bgra_dict['white'], cv.CV_FILLED)
-            cv2.ellipse(mask, (x, y), (r_inner, r_inner), 0, 0, 360, bgra_dict['black'], cv.CV_FILLED)
-            mask = cv2.dilate(mask, np.ones([3,3])) # Make the mask one pixel bigger to account for pixel aliasing.
-            self.windowMask.set_image(mask)
+            self.roi = np.array([self.mask.xMin, self.mask.yMin, self.mask.xMax, self.mask.yMax])
+            self.mask.roi = mask[self.mask.yMin:self.mask.yMax, self.mask.xMin:self.mask.xMax]
+            self.mask.sum = np.sum(self.mask.roi).astype(np.float32)
+            self.bValidMask = True  
+
+        else:
+            self.mask.xMin = None
+            self.mask.yMin = None
+            self.mask.xMax = None
+            self.mask.yMax = None
+
+            rospy.logwarn('%s: Empty mask.' % self.name)      
             
-            # Find the ROI of the mask.
-            xSum = np.sum(mask, 0)
-            ySum = np.sum(mask, 1)
-            xMask = np.where(xSum>0)[0]
-            yMask = np.where(ySum>0)[0]
-            
-            if (len(xMask)>0) and (len(yMask)>0): 
-                # Dilate with a border.
-                b=0 # Border
-                xMin0 = np.where(xSum>0)[0][0]  - b
-                xMax0 = np.where(xSum>0)[0][-1] + b+1
-                yMin0 = np.where(ySum>0)[0][0]  - b
-                yMax0 = np.where(ySum>0)[0][-1] + b+1
-                
-                # Clip border to image edges.
-                xMin = np.max([0,xMin0])
-                yMin = np.max([0,yMin0])
-                xMax = np.min([xMax0, shape[1]-1])
-                yMax = np.min([yMax0, shape[0]-1])
-                
-                self.roi = np.array([xMin, yMin, xMax, yMax])
-                self.maskRoi = mask[yMin:yMax, xMin:xMax]
-                self.sumMask = np.sum(self.maskRoi).astype(np.float32)
-    
-        
-                self.i_0 = self.params['gui'][self.name]['hinge']['y'] - self.roi[1]
-                self.j_0 = self.params['gui'][self.name]['hinge']['x'] - self.roi[0]
-                
-                self.wfnRoi = None
-                self.wfnRoiMaskedPolarCropped = None
-                self.bValidMask = True
-        
-        
-                # Find where the mask might be clipped.  First, draw an unclipped ellipse.        
-                delta = 1
-                pts =                cv2.ellipse2Poly((x, y), (r_outer, r_outer), 0, hi, lo, delta)
-                pts = np.append(pts, cv2.ellipse2Poly((x, y), (r_inner, r_inner), 0, hi, lo, delta), 0)
-                #pts = np.append(pts, [list of line1 pixels connecting the two arcs], 0) 
-                #pts = np.append(pts, [list of line2 pixels connecting the two arcs], 0) 
-        
-        
-                # These are the unclipped locations.        
-                min0 = pts.min(0)
-                max0 = pts.max(0)
-                xMin0 = min0[0]
-                yMin0 = min0[1]
-                xMax0 = max0[0]+1
-                yMax0 = max0[1]+1
-    
-                # Compare unclipped with the as-drawn locations.
-                xClip0 = xMin-xMin0
-                yClip0 = yMin-yMin0
-                xClip1 = xMax0-xMax
-                yClip1 = yMax0-yMax
-                roiClipped = np.array([xClip0, yClip0, xClip1, yClip1])
-        
-                (i_n, j_n) = shape[:2]
-                        
-                # Determine how much of the bottom of the polar image to trim off (i.e. rClip) based on if the ellipse is partially offimage.
-                (rClip0, rClip1, rClip2, rClip3) = (1.0, 1.0, 1.0, 1.0)
-                if (roiClipped[0]>0): # Left
-                    rClip0 = 1.0 - (float(roiClipped[0])/float(r_outer-r_inner))#self.j_0))
-                if (roiClipped[1]>0): # Top
-                    rClip1 = 1.0 - (float(roiClipped[1])/float(r_outer-r_inner))#self.i_0))
-                if (roiClipped[2]>0): # Right
-                    rClip2 = 1.0 - (float(roiClipped[2])/float(r_outer-r_inner))#j_n-self.j_0))
-                if (roiClipped[3]>0): # Bottom
-                    rClip3 = 1.0 - (float(roiClipped[3])/float(r_outer-r_inner))#i_n-self.i_0))
-        
-                self.rClip = np.min([rClip0, rClip1, rClip2, rClip3])
-            else:
-                rospy.logwarn('%s: Empty mask.' % self.name)        
+
         
     # set_background()
     # Set the given image as the background image.
@@ -1353,68 +1315,13 @@ class PolarTrackedBodypart(object):
                 if (self.imgRoiFg is not None):
                     self.imgRoiFg -= np.min(self.imgRoiFg)
                     max2 = np.max([1.0, np.max(self.imgRoiFg)])
+    
                     self.imgRoiFg *= (255.0/float(max2))
                 
             self.windowFG.set_image(self.imgRoiFg) 
         
 
             
-    def update_polar(self):
-        if (self.imgRoiFg is not None):
-            # Apply the mask.
-            if (self.maskRoi is not None):
-                self.imgRoiFgMasked = cv2.bitwise_and(self.imgRoiFg, self.maskRoi) #self.imgRoiFg#
-                #self.imgRoiFgMasked  = cv2.multiply(self.imgRoiFg.astype(np.float32), self.wfnRoi)
-
-            xMax = self.imgRoiFg.shape[1]-1
-            yMax = self.imgRoiFg.shape[0]-1
-            
-            theta_0a = self.angle_lo_i - self.angleOutward_i
-            theta_1a = self.angle_hi_i - self.angleOutward_i
-            
-            radius_mid = (self.params['gui'][self.name]['radius_outer'] + self.params['gui'][self.name]['radius_inner'])/2.0
-            dr         = (self.params['gui'][self.name]['radius_outer'] - self.params['gui'][self.name]['radius_inner'])/2.0
-
-            self.imgRoiFgMaskedPolar  = self.polartransforms.transform_polar_elliptical(self.imgRoiFgMasked, 
-                                                     self.i_0, 
-                                                     self.j_0, 
-                                                     raxial=radius_mid, 
-                                                     rortho=radius_mid,
-                                                     dradiusStrip=int(dr),
-                                                     amplifyRho = 1.0,
-                                                     rClip = self.rClip,
-                                                     angleEllipse=self.angleOutward_i,
-                                                     theta_0 = min(theta_0a,theta_1a), 
-                                                     theta_1 = max(theta_0a,theta_1a),
-                                                     amplifyTheta = 1.0)
-                
-            # Find the y value where the black band should be cropped out (but leave at least one raster if image is all-black).
-            sumY = np.sum(self.imgRoiFgMaskedPolar,1)
-            iSumY = np.where(sumY==0)[0]
-            if (len(iSumY)>0):
-                iMinY = np.max([1,np.min(iSumY)])
-            else:
-                iMinY = self.imgRoiFgMaskedPolar.shape[0]
-
-            self.imgRoiFgMaskedPolarCropped = self.imgRoiFgMaskedPolar[0:iMinY]
-    
-             
-            if (self.bValidMask):
-                if (self.wfnRoi is None) or (self.imgRoiFg.shape != self.wfnRoi.shape):
-                    self.wfnRoi = self.create_wfn(self.imgRoiFg.shape)
-                
-                if (self.wfnRoiMaskedPolarCropped is None) or (self.imgRoiFgMaskedPolarCropped.shape != self.wfnRoiMaskedPolarCropped.shape):
-                    self.wfnRoiMaskedPolarCropped = self.create_wfn(self.imgRoiFgMaskedPolarCropped.shape)
-                
-                self.imgRoiFgMaskedPolarCroppedWindowed = cv2.multiply(self.imgRoiFgMaskedPolarCropped.astype(np.float32), self.wfnRoiMaskedPolarCropped)
-
-            
-        # Show the image.
-        img = self.imgRoiFgMaskedPolarCroppedWindowed
-        #img = self.imgRoiFgMaskedPolarCropped
-        self.windowPolar.set_image(img)
-        
-
     # update_handle_points()
     # Update the dictionary of handle point names and locations.
     # Compute the various handle points.
@@ -1446,10 +1353,22 @@ class PolarTrackedBodypart(object):
         self.dt = dt
                 
         if (self.params['gui'][self.name]['track']):
-            self.create_mask(image.shape)
+            if (not self.bValidMask):
+                self.create_mask(image.shape)
+                self.bValidMask = True
+                
             self.update_background()
             self.update_roi(image, bInvertColor)
-            self.update_polar()
+
+            # Apply the mask.
+            if (self.imgRoiFg is not None) and (self.mask.roi is not None):
+                self.imgRoiFgMasked = cv2.bitwise_and(self.imgRoiFg, self.mask.roi) #self.imgRoiFg#
+                #self.imgRoiFgMasked  = cv2.multiply(self.imgRoiFg.astype(np.float32), self.wfnRoi)
+                
+                self.imgFinal = self.imgRoiFgMasked 
+            else:
+                self.imgFinal = None
+                
 
 
     # hit_object()
@@ -1537,10 +1456,151 @@ class PolarTrackedBodypart(object):
             # Show the extra windows.
             self.windowBG.show()
             self.windowFG.show()
-            self.windowPolar.show()
             self.windowMask.show()
                 
-# end class PolarTrackedBodypart
+# end class MotionTrackedBodypart
+
+
+
+###############################################################################
+###############################################################################
+class MotionTrackedBodypartPolar(MotionTrackedBodypart):
+    def __init__(self, name=None, params={}, color='white', bEqualizeHist=False):
+        MotionTrackedBodypart.__init__(self, name, params, color, bEqualizeHist)
+
+        self.polartransforms                    = PolarTransforms()
+        self.create_wfn                         = WindowFunctions().create_tukey
+        self.wfnRoiMaskedPolarCropped           = None
+        
+        self.imgRoiFgMaskedPolar                = None
+        self.imgRoiFgMaskedPolarCropped         = None
+        self.imgRoiFgMaskedPolarCroppedWindowed = None
+        self.imgFinal                           = None # The image to use for tracking.
+
+        self.windowPolar                        = ImageWindow(False, self.name+'Polar')
+        
+        
+    def set_params(self, params):
+        MotionTrackedBodypart.set_params(self, params)
+        self.windowPolar.set_enable(self.params['gui']['windows'] and self.params['gui'][self.name]['track'])
+
+        
+    def create_mask(self, shape):
+        MotionTrackedBodypart.create_mask(self, shape)
+
+        self.wfnRoiMaskedPolarCropped = None
+
+        if (self.mask.xMin is not None): 
+            self.i_0 = self.params['gui'][self.name]['hinge']['y'] - self.roi[1]
+            self.j_0 = self.params['gui'][self.name]['hinge']['x'] - self.roi[0]
+
+    
+            # Args for the ellipse calls.
+            x = int(self.params['gui'][self.name]['hinge']['x'])
+            y = int(self.params['gui'][self.name]['hinge']['y'])
+            r_outer = int(np.ceil(self.params['gui'][self.name]['radius_outer']))
+            r_inner = int(np.floor(self.params['gui'][self.name]['radius_inner']))-1
+            hi = int(np.ceil(np.rad2deg(self.angle_hi_i)))
+            lo = int(np.floor(np.rad2deg(self.angle_lo_i)))
+
+    
+            # Find where the mask might be clipped.  First, draw an unclipped ellipse.        
+            delta = 1
+            ptsUnclipped =                         cv2.ellipse2Poly((x, y), (r_outer, r_outer), 0, hi, lo, delta)
+            ptsUnclipped = np.append(ptsUnclipped, cv2.ellipse2Poly((x, y), (r_inner, r_inner), 0, hi, lo, delta), 0)
+            #ptsUnclipped = np.append(ptsUnclipped, [list of line1 pixels connecting the two arcs], 0) 
+            #ptsUnclipped = np.append(ptsUnclipped, [list of line2 pixels connecting the two arcs], 0) 
+    
+    
+            # These are the unclipped locations.        
+            minUnclipped = ptsUnclipped.min(0)
+            maxUnclipped = ptsUnclipped.max(0)
+            xMinUnclipped = minUnclipped[0]
+            yMinUnclipped = minUnclipped[1]
+            xMaxUnclipped = maxUnclipped[0]+1
+            yMaxUnclipped = maxUnclipped[1]+1
+
+            # Compare unclipped with the as-drawn locations.
+            xClip0 = self.mask.xMin - xMinUnclipped
+            yClip0 = self.mask.yMin - yMinUnclipped
+            xClip1 = xMaxUnclipped - self.mask.xMax
+            yClip1 = yMaxUnclipped - self.mask.yMax
+            roiClipped = np.array([xClip0, yClip0, xClip1, yClip1])
+    
+            (i_n, j_n) = shape[:2]
+                    
+            # Determine how much of the bottom of the polar image to trim off (i.e. rClip) based on if the ellipse is partially offimage.
+            (rClip0, rClip1, rClip2, rClip3) = (1.0, 1.0, 1.0, 1.0)
+            if (roiClipped[0]>0): # Left
+                rClip0 = 1.0 - (float(roiClipped[0])/float(r_outer-r_inner))#self.j_0))
+            if (roiClipped[1]>0): # Top
+                rClip1 = 1.0 - (float(roiClipped[1])/float(r_outer-r_inner))#self.i_0))
+            if (roiClipped[2]>0): # Right
+                rClip2 = 1.0 - (float(roiClipped[2])/float(r_outer-r_inner))#j_n-self.j_0))
+            if (roiClipped[3]>0): # Bottom
+                rClip3 = 1.0 - (float(roiClipped[3])/float(r_outer-r_inner))#i_n-self.i_0))
+    
+            self.rClip = np.min([rClip0, rClip1, rClip2, rClip3])
+
+        
+    def update_polarimage(self):
+        if (self.imgRoiFgMasked is not None):
+            theta_0a = self.angle_lo_i - self.angleOutward_i
+            theta_1a = self.angle_hi_i - self.angleOutward_i
+            
+            radius_mid = (self.params['gui'][self.name]['radius_outer'] + self.params['gui'][self.name]['radius_inner'])/2.0
+            dr         = (self.params['gui'][self.name]['radius_outer'] - self.params['gui'][self.name]['radius_inner'])/2.0
+
+            self.imgRoiFgMaskedPolar  = self.polartransforms.transform_polar_elliptical(self.imgRoiFgMasked, 
+                                                     self.i_0, 
+                                                     self.j_0, 
+                                                     raxial=radius_mid, 
+                                                     rortho=radius_mid,
+                                                     dradiusStrip=int(dr),
+                                                     amplifyRho = 1.0,
+                                                     rClip = self.rClip,
+                                                     angleEllipse=self.angleOutward_i,
+                                                     theta_0 = min(theta_0a,theta_1a), 
+                                                     theta_1 = max(theta_0a,theta_1a),
+                                                     amplifyTheta = 1.0)
+                
+            # Find the y value where the black band should be cropped out (but leave at least one raster if image is all-black).
+            sumY = np.sum(self.imgRoiFgMaskedPolar,1)
+            iSumY = np.where(sumY==0)[0]
+            if (len(iSumY)>0):
+                iMinY = np.max([1,np.min(iSumY)])
+            else:
+                iMinY = self.imgRoiFgMaskedPolar.shape[0]
+
+            self.imgRoiFgMaskedPolarCropped = self.imgRoiFgMaskedPolar[0:iMinY]
+    
+             
+            if (self.bValidMask):
+                if (self.wfnRoiMaskedPolarCropped is None) or (self.imgRoiFgMaskedPolarCropped.shape != self.wfnRoiMaskedPolarCropped.shape):
+                    self.wfnRoiMaskedPolarCropped = self.create_wfn(self.imgRoiFgMaskedPolarCropped.shape)
+                
+                self.imgRoiFgMaskedPolarCroppedWindowed = cv2.multiply(self.imgRoiFgMaskedPolarCropped.astype(np.float32), self.wfnRoiMaskedPolarCropped)
+
+            
+        # Show the image.
+        img = self.imgRoiFgMaskedPolarCroppedWindowed
+        #img = self.imgRoiFgMaskedPolarCropped
+        self.windowPolar.set_image(img)
+        
+
+    def update(self, dt, image, bInvertColor):
+        MotionTrackedBodypart.update(self, dt, image, bInvertColor)
+        self.update_polarimage()
+        self.imgFinal = self.imgRoiFgMaskedPolarCroppedWindowed
+        
+
+        
+    def draw(self, image):
+        MotionTrackedBodypart.draw(self, image)
+        self.windowPolar.show()
+        
+    
+# end class MotionTrackedBodypartPolar
 
 
 
@@ -1571,7 +1631,7 @@ class WingbeatDetector(object):
 
     def warn(self):    
         rospy.logwarn('Note: The wingbeat detector is set to measure wingbeat frequencies in the ')
-        rospy.logwarn('range [%0.1f, %0.1f] Hz.  To make a valid measurement, the camera ' % (self.fw_min, self.fw_max))
+        rospy.logwarn('band [%0.1f, %0.1f] Hz.  To make a valid measurement, the camera ' % (self.fw_min, self.fw_max))
         rospy.logwarn('framerate must be in, and stay in, one of the following ranges:')
         rospy.logwarn(self.fs_dict['fs_range_list'])
 
@@ -1772,6 +1832,8 @@ class WingbeatDetector(object):
 class Fly(object):
     def __init__(self, params={}):
         self.nodename = rospy.get_name().rstrip('/')
+        EdgeTracker = EdgeTrackerByIntensityProfile
+        #EdgeTracker = EdgeTrackerByHoughTransform
 
         # Create the head tracker.        
         if (params['head']['tracker']=='area'):
@@ -1867,19 +1929,30 @@ class Fly(object):
     
     def create_masks(self, shapeImage):
         if (self.params['gui']['head']['track']):
-            self.head.create_mask (shapeImage)
+            if (not self.head.bValidMask):
+                self.head.create_mask (shapeImage)
+                self.head.bValidMask = True
+                
             
         if (self.params['gui']['abdomen']['track']):
-            self.abdomen.create_mask (shapeImage)
+            if (not self.abdomen.bValidMask):
+                self.abdomen.create_mask (shapeImage)
+                self.abdomen.bValidMask = True
             
         if (self.params['gui']['right']['track']):
-            self.right.create_mask (shapeImage)
+            if (not self.right.bValidMask):
+                self.right.create_mask (shapeImage)
+                self.right.bValidMask = True
             
         if (self.params['gui']['left']['track']):
-            self.left.create_mask (shapeImage)
+            if (not self.left.bValidMask):
+                self.left.create_mask (shapeImage)
+                self.left.bValidMask = True
             
         if (self.params['gui']['aux']['track']):
-            self.aux.create_mask (shapeImage)
+            if (not self.aux.bValidMask):
+                self.aux.create_mask (shapeImage)
+                self.aux.bValidMask = True
 
 
     def get_bodyangle_i(self):
@@ -2056,7 +2129,7 @@ class IntensityTracker(IntensityTrackedBodypart):
         #f = 175         # Simulate this freq.
         #t = gImageTime 
         #self.state.intensity = np.cos(2*np.pi*f*t)
-        self.state.intensity = np.sum(self.imgRoiFgMasked).astype(np.float32) / self.sumMask
+        self.state.intensity = np.sum(self.imgRoiFgMasked).astype(np.float32) / self.mask.sum
         self.state.freq = self.wingbeat.freq_from_intensity(self.state.intensity, 1.0/self.dt)
     
         
@@ -2089,18 +2162,20 @@ class IntensityTracker(IntensityTrackedBodypart):
 # motion based on the movement of the pixels in the area of the image.
 # Usually used for Head or Abdomen.
 #
-class AreaTracker(PolarTrackedBodypart):
+class AreaTracker(MotionTrackedBodypartPolar):
     def __init__(self, name=None, params={}, color='white', bEqualizeHist=False):
-        PolarTrackedBodypart.__init__(self, name, params, color, bEqualizeHist)
+        MotionTrackedBodypartPolar.__init__(self, name, params, color, bEqualizeHist)
         
-        self.phasecorr         = PhaseCorrelation()
-        self.state             = MsgState() # In the bodypart frame.
-        self.stateOrigin_p     = MsgState() # In the bodypart frame.
-        self.stateLo_p         = MsgState() # In the bodypart frame.
-        self.stateHi_p         = MsgState() # In the bodypart frame.
+        self.phasecorr          = PhaseCorrelation()
+        self.state              = MsgState() # In the bodypart frame.
+        self.stateOrigin_p      = MsgState() # In the bodypart frame.
+        self.stateLo_p          = MsgState() # In the bodypart frame.
+        self.stateHi_p          = MsgState() # In the bodypart frame.
+
+        self.imgComparison      = None
         
-        self.windowStabilized = ImageWindow(False, self.name+'Stable')
-        self.windowTest       = ImageWindow(True, self.name+'Test')
+        self.windowStabilized   = ImageWindow(False, self.name+'Stable')
+        self.windowComparison   = ImageWindow(True, self.name+'Comparison')
         self.set_params(params)
 
     
@@ -2108,11 +2183,11 @@ class AreaTracker(PolarTrackedBodypart):
     # Set the given params dict into this object.
     #
     def set_params(self, params):
-        PolarTrackedBodypart.set_params(self, params)
+        MotionTrackedBodypartPolar.set_params(self, params)
         
         self.imgRoiBackground = None
         self.imgComparison = None
-        self.windowTest.set_image(self.imgComparison)
+        self.windowComparison.set_image(self.imgComparison)
         
         self.iCount = 0
 
@@ -2147,7 +2222,7 @@ class AreaTracker(PolarTrackedBodypart):
         
         
         self.windowStabilized.set_enable(self.params['gui']['windows'] and self.params['gui'][self.name]['track'] and self.params['gui'][self.name]['stabilize'])
-        self.windowTest.set_enable(self.params['gui']['windows'] and self.params['gui'][self.name]['track'])
+        self.windowComparison.set_enable(self.params['gui']['windows'] and self.params['gui'][self.name]['track'])
 
 
         
@@ -2186,7 +2261,7 @@ class AreaTracker(PolarTrackedBodypart):
 
                 if (angleRef_p < self.state.angles[0] < self.stateOrigin_p.angles[0]) or (self.stateOrigin_p.angles[0] < self.state.angles[0] < angleRef_p):
                     self.imgComparison = imgNow
-                    self.windowTest.set_image(self.imgComparison)
+                    self.windowComparison.set_image(self.imgComparison)
 
                     # Converge the origin to zero.
                     self.stateLo_p.angles[0] -= angleOffset
@@ -2219,7 +2294,7 @@ class AreaTracker(PolarTrackedBodypart):
 
             
         if (self.imgRoiFgMasked is not None):
-            self.state.intensity = float(np.sum(self.imgRoiFgMasked) / self.sumMask)
+            self.state.intensity = float(np.sum(self.imgRoiFgMasked) / self.mask.sum)
         else:
             self.state.intensity = 0.0            
         
@@ -2228,11 +2303,11 @@ class AreaTracker(PolarTrackedBodypart):
     # Update all the internals given a foreground camera image.
     #
     def update(self, dt, image, bInvertColor):
-        PolarTrackedBodypart.update(self, dt, image, bInvertColor)
+        MotionTrackedBodypartPolar.update(self, dt, image, bInvertColor)
 
         if (self.imgComparison is None) and (self.iCount>1):
             self.imgComparison = self.imgRoiFgMaskedPolarCroppedWindowed
-            self.windowTest.set_image(self.imgComparison)
+            self.windowComparison.set_image(self.imgComparison)
         
         if (self.params['gui'][self.name]['track']):
             self.update_state()
@@ -2242,7 +2317,7 @@ class AreaTracker(PolarTrackedBodypart):
     # Draw the outline.
     #
     def draw(self, image):
-        PolarTrackedBodypart.draw(self, image)
+        MotionTrackedBodypartPolar.draw(self, image)
 
         if (self.params['gui'][self.name]['track']):
             # Draw the bodypart state position.
@@ -2289,7 +2364,7 @@ class AreaTracker(PolarTrackedBodypart):
             cv2.line(image, ptHinge_i, ptState_i, self.bgra_state, 1)
             
             self.windowStabilized.show()
-            self.windowTest.show()
+            self.windowComparison.show()
         
 # end class AreaTracker
 
@@ -2297,17 +2372,17 @@ class AreaTracker(PolarTrackedBodypart):
 
 ###############################################################################
 ###############################################################################
-# Find the two largest gradients in the horizontal intensity profile of an image.
+# Find the N largest gradients in the horizontal intensity profile of an image.
 #
-class EdgeDetector(object):
+class EdgeDetectorByIntensityProfile(object):
     def __init__(self, threshold=0.0, n_edges_max=1000, sense=1):
         self.intensities = []
         self.diff = []
         self.diffF = []
-        self.set_threshold(threshold, n_edges_max, sense)
+        self.set_params(threshold, n_edges_max, sense)
 
 
-    def set_threshold(self, threshold, n_edges_max, sense):
+    def set_params(self, threshold, n_edges_max, sense):
         self.threshold = threshold
         self.n_edges_max = n_edges_max
         self.sense = sense
@@ -2479,24 +2554,24 @@ class EdgeDetector(object):
             
         return (edgesMajor, edgesMinor)
     
-# End class EdgeDetector
+# End class EdgeDetectorByIntensityProfile
     
     
 ###############################################################################
 ###############################################################################
-# EdgeTracker()
+# EdgeTrackerByIntensityProfile()
 # Track radial bodypart edges using the gradient of the image intensity.  
 # i.e. Compute how the intensity changes with angle, and find the locations
 # of the greatest change.  Usually used for Wings.
 #
-class EdgeTracker(PolarTrackedBodypart):
+class EdgeTrackerByIntensityProfile(MotionTrackedBodypartPolar):
     def __init__(self, name=None, params={}, color='white', bEqualizeHist=False):
-        PolarTrackedBodypart.__init__(self, name, params, color, bEqualizeHist)
+        MotionTrackedBodypartPolar.__init__(self, name, params, color, bEqualizeHist)
         
         self.name       = name
-        self.detector   = EdgeDetector()
+        self.detector   = EdgeDetectorByIntensityProfile()
         self.state      = MsgState()
-        self.windowTest = ImageWindow(False, self.name+'Edge')
+        self.windowEdges = ImageWindow(False, self.name+'Edges')
         self.set_params(params)
 
         # Services, for live intensities plots via live_wing_histograms.py
@@ -2507,10 +2582,11 @@ class EdgeTracker(PolarTrackedBodypart):
     # Set the given params dict into this object.
     #
     def set_params(self, params):
-        PolarTrackedBodypart.set_params(self, params)
+        MotionTrackedBodypartPolar.set_params(self, params)
         
         self.imgRoiBackground = None
         self.iCount = 0
+
         self.state.intensity = 0.0
         self.state.angles = []
         self.state.gradients = []
@@ -2525,14 +2601,14 @@ class EdgeTracker(PolarTrackedBodypart):
         else:
             self.sense = 1  
 
-        self.detector.set_threshold(params[self.name]['threshold'], params['n_edges_max'], self.sense)
+        self.detector.set_params(params[self.name]['threshold'], params['n_edges_max'], self.sense)
     
         
     # update_state()
     #
     def update_state(self):
         imgNow = self.imgRoiFgMaskedPolarCropped
-        self.windowTest.set_image(imgNow)
+        self.windowEdges.set_image(imgNow)
         
         # Get the rotation & expansion between images.
         if (imgNow is not None):
@@ -2560,7 +2636,7 @@ class EdgeTracker(PolarTrackedBodypart):
     # Update all the internals given a foreground camera image.
     #
     def update(self, dt, image, bInvertColor):
-        PolarTrackedBodypart.update(self, dt, image, bInvertColor)
+        MotionTrackedBodypartPolar.update(self, dt, image, bInvertColor)
 
         if (self.params['gui'][self.name]['track']):
             self.update_state()
@@ -2572,7 +2648,7 @@ class EdgeTracker(PolarTrackedBodypart):
     # Draw the outline.
     #
     def draw(self, image):
-        PolarTrackedBodypart.draw(self, image)
+        MotionTrackedBodypartPolar.draw(self, image)
         
         if (self.params['gui'][self.name]['track']):
             # Draw the major and minor edges alternately, until the max number has been reached.
@@ -2588,7 +2664,7 @@ class EdgeTracker(PolarTrackedBodypart):
                 cv2.line(image, (int(x0),int(y0)), (int(x1),int(y1)), bgra, 1)
                 bgra = tuple(0.5*np.array(bgra))
                 
-            self.windowTest.show()
+            self.windowEdges.show()
         
         
     def serve_wingdata_callback(self, request):
@@ -2607,7 +2683,179 @@ class EdgeTracker(PolarTrackedBodypart):
         return SrvWingdataResponse(abscissa, self.detector.intensities, self.detector.diff, angles, gradients)
         
         
-# end class EdgeTracker
+# end class EdgeTrackerByIntensityProfile
+
+    
+###############################################################################
+###############################################################################
+# Find the N largest edges in the image, that go through the hinge point.
+#
+class EdgeDetectorByHoughTransform(object):
+    def __init__(self, threshold=0.0, n_edges_max=1000, sense=1, ptHinge=(0,0)):
+        self.set_params(threshold, n_edges_max, sense, ptHinge)
+
+
+    def set_params(self, threshold, n_edges_max, sense, ptHinge=(0,0), shapeImage=None):
+        self.threshold = threshold
+        self.n_edges_max = n_edges_max
+        self.sense = sense
+        self.ptHinge = ptHinge
+
+        # Get the angles from the hinge to each pixel.
+        self.angles = self.CalcAngles(shapeImage)
+            
+            
+    def CalcAngles(self, shape):
+        if (shape is not None):        
+            x = np.linspace(0, shape[1]-1, shape[1]) - self.ptHinge[0]
+            y = np.linspace(0, shape[0]-1, shape[0]) - self.ptHinge[1]
+            (xMesh,yMesh) = np.meshgrid(x,y)
+            angles = np.arctan2(yMesh,xMesh) # The angle from the hinge at each pixel.
+        else:
+            angles = None
+        
+        return angles
+        
+        
+    # find()
+    # Get the horizontal pixel position of all the vertical edge pairs that exceed a magnitude threshold.
+    #
+    def find(self, image):
+        if (self.angles is None):
+            self.angles = self.CalcAngles(image.shape)
+        
+        (H,edges) = np.histogram(self.angles, bins=100, weights=image)
+        angles = (edges[1:]-edges[:-1])/2 + edges[:-1]
+        #self.accumulator = (image * self.angles)
+        self.accumulator = (image * self.angles)
+        self.accumulator -= np.min(self.accumulator)
+        self.accumulator *= (255.0 / np.max(self.accumulator))
+        
+        angles_sorted = []
+        magnitudes_sorted = []
+        for i in range(self.n_edges_max):
+            iMax         = np.argmax(H)
+            angles_sorted.append(angles[iMax])
+            magnitudes_sorted.append(H[iMax])
+            angles[iMax] = 0
+        
+    
+        return (angles_sorted, magnitudes_sorted)
+        
+           
+    
+# End class EdgeDetectorByHoughTransform
+    
+    
+###############################################################################
+###############################################################################
+# EdgeTrackerByHoughTransform()
+# Track radial bodypart edges using the Hough transform to find lines through the hinge.  
+#
+class EdgeTrackerByHoughTransform(MotionTrackedBodypart):
+    def __init__(self, name=None, params={}, color='white', bEqualizeHist=False):
+        MotionTrackedBodypart.__init__(self, name, params, color, bEqualizeHist)
+        
+        self.name       = name
+        self.detector   = EdgeDetectorByHoughTransform()
+        self.state      = MsgState()
+        self.windowEdges = ImageWindow(False, self.name+'Edges')
+        self.set_params(params)
+
+    
+    # set_params()
+    # Set the given params dict into this object.
+    #
+    def set_params(self, params):
+        MotionTrackedBodypart.set_params(self, params)
+        
+        self.imgRoiBackground = None
+        self.iCount = 0
+        
+        self.state.intensity = 0.0
+        self.state.angles = []
+        self.state.gradients = []
+
+        # Compute the 'handedness' of the head/abdomen and wing/wing axes.  self.sense specifies the direction of positive angles.
+        matAxes = np.array([[self.params['gui']['head']['hinge']['x']-self.params['gui']['abdomen']['hinge']['x'], self.params['gui']['head']['hinge']['y']-self.params['gui']['abdomen']['hinge']['y']],
+                            [self.params['gui']['right']['hinge']['x']-self.params['gui']['left']['hinge']['x'],   self.params['gui']['right']['hinge']['y']-self.params['gui']['left']['hinge']['y']]])
+        if (self.name in ['left','right']):
+            self.senseAxes = np.sign(np.linalg.det(matAxes))
+            a = -1 if (self.name=='right') else 1
+            self.sense = a*self.senseAxes
+        else:
+            self.sense = 1  
+
+        rospy.logwarn((self.mask.xMin, self.mask.yMin))
+        if (self.mask.xMin is not None):
+            ptHinge = (self.params['gui'][self.name]['hinge']['x']-self.mask.xMin, self.params['gui'][self.name]['hinge']['y']-self.mask.yMin)
+            self.detector.set_params(params[self.name]['threshold'], params['n_edges_max'], self.sense, ptHinge)
+            self.windowEdges.set_enable(self.params['gui']['windows'] and self.params['gui'][self.name]['track'])
+        
+    
+        
+    # update_state()
+    #
+    def update_state(self):
+        imgNow = self.imgRoiFg #Masked
+        
+        if (imgNow is not None):
+            # Pixel position and strength of the edges.
+            (angles, magnitudes) = self.detector.find(imgNow)
+            self.windowEdges.set_image(self.detector.accumulator)
+
+            # Put angle into the wing frame.
+            self.state.angles = []
+            self.state.gradients = []
+            for i in range(len(angles)):
+                angle = angles[i]
+                magnitude = magnitudes[i]
+                angle_b = self.params['gui'][self.name]['angle_lo'] + angle
+                angle_p = (self.transform_angle_p_from_b(angle_b) + np.pi) % (2*np.pi) - np.pi
+                self.state.angles.append(angle_p)
+                self.state.gradients.append(magnitude)
+                
+
+            self.state.intensity = np.mean(self.imgRoiFgMasked)/255.0
+
+        
+    # update()
+    # Update all the internals given a foreground camera image.
+    #
+    def update(self, dt, image, bInvertColor):
+        MotionTrackedBodypart.update(self, dt, image, bInvertColor)
+
+        if (self.params['gui'][self.name]['track']):
+            self.update_state()
+            
+            
+    
+    
+    # draw()
+    # Draw the outline.
+    #
+    def draw(self, image):
+        MotionTrackedBodypart.draw(self, image)
+        
+        if (self.params['gui'][self.name]['track']):
+            # Draw the major and minor edges alternately, until the max number has been reached.
+            bgra = self.bgra
+            for i in range(len(self.state.angles)):
+                angle_b = self.transform_angle_b_from_p(self.state.angles[i])
+                angle_i = self.transform_angle_i_from_b(angle_b)
+
+                x0 = self.ptHinge_i[0] + self.params['gui'][self.name]['radius_inner'] * np.cos(angle_i)
+                y0 = self.ptHinge_i[1] + self.params['gui'][self.name]['radius_inner'] * np.sin(angle_i)
+                x1 = self.ptHinge_i[0] + self.params['gui'][self.name]['radius_outer'] * np.cos(angle_i)
+                y1 = self.ptHinge_i[1] + self.params['gui'][self.name]['radius_outer'] * np.sin(angle_i)
+                cv2.line(image, (int(x0),int(y0)), (int(x1),int(y1)), bgra, 1)
+                bgra = tuple(0.5*np.array(bgra))
+                
+            self.windowEdges.show()
+        
+        
+        
+# end class EdgeTrackerByHoughTransform
 
     
 ###############################################################################
@@ -2619,11 +2867,11 @@ class TipDetector(object):
         self.intensities = []
         self.diff = []
         self.diffF = []
-        self.set_threshold(threshold, sense)
+        self.set_params(threshold, sense)
         self.imgThreshold = None
 
 
-    def set_threshold(self, threshold, sense):
+    def set_params(self, threshold, sense):
         self.threshold = threshold
         self.sense = sense
 
@@ -2672,15 +2920,15 @@ class TipDetector(object):
 # Track the position of the tip of a bodypart, e.g. a wingtip.  
 # Finds the point at the greatest distance from the hinge.
 #
-class TipTracker(PolarTrackedBodypart):
+class TipTracker(MotionTrackedBodypartPolar):
     def __init__(self, name=None, params={}, color='white', bEqualizeHist=False):
-        PolarTrackedBodypart.__init__(self, name, params, color, bEqualizeHist)
+        MotionTrackedBodypartPolar.__init__(self, name, params, color, bEqualizeHist)
         
         self.name     = name
         self.detector = TipDetector()
         self.state    = MsgState()
         self.set_params(params)
-        self.windowTest = ImageWindow(False, self.name+'Tip')
+        self.windowTip = ImageWindow(False, self.name+'Tip')
         self.iAngle = 0
         self.iRadius = 0
 
@@ -2692,7 +2940,7 @@ class TipTracker(PolarTrackedBodypart):
     # Set the given params dict into this object.
     #
     def set_params(self, params):
-        PolarTrackedBodypart.set_params(self, params)
+        MotionTrackedBodypartPolar.set_params(self, params)
         
         self.imgRoiBackground = None
         self.iCount = 0
@@ -2710,7 +2958,7 @@ class TipTracker(PolarTrackedBodypart):
         else:
             self.sense = 1  
 
-        self.detector.set_threshold(params[self.name]['threshold'], self.sense)
+        self.detector.set_params(params[self.name]['threshold'], self.sense)
     
         
     # update_state()
@@ -2740,11 +2988,11 @@ class TipTracker(PolarTrackedBodypart):
     # Update all the internals given a foreground camera image.
     #
     def update(self, dt, image, bInvertColor):
-        PolarTrackedBodypart.update(self, dt, image, bInvertColor)
+        MotionTrackedBodypartPolar.update(self, dt, image, bInvertColor)
 
         if (self.params['gui'][self.name]['track']):
             self.update_state()
-            self.windowTest.set_image(self.detector.imgThreshold)
+            self.windowTip.set_image(self.detector.imgThreshold)
             
             
     
@@ -2753,7 +3001,7 @@ class TipTracker(PolarTrackedBodypart):
     # Draw the state.
     #
     def draw(self, image):
-        PolarTrackedBodypart.draw(self, image)
+        MotionTrackedBodypartPolar.draw(self, image)
 
         if (self.params['gui'][self.name]['track']) and (len(self.state.angles)>0):
             # Draw the bodypart state position.
@@ -2775,7 +3023,7 @@ class TipTracker(PolarTrackedBodypart):
             # Draw line from hinge to state point.        
             ptHinge_i = clip_pt((int(self.ptHinge_i[0]), int(self.ptHinge_i[1])), image.shape) 
             cv2.line(image, ptHinge_i, ptState_i, self.bgra_state, 1)
-            self.windowTest.show()
+            self.windowTip.show()
         
         
     def serve_tipdata_callback(self, request):
@@ -3665,7 +3913,7 @@ class MainWindow:
                     angle_lo_b = paramsScaled['gui'][partnameSelected][tagOther]
             
             paramsScaled['gui'][partnameSelected]['radius_outer'] = float(max(bodypartSelected.params['gui'][partnameSelected]['radius_inner']+2*self.scale, 
-                                                                      np.linalg.norm(bodypartSelected.ptHinge_i - ptMouse)))
+                                                                              np.linalg.norm(bodypartSelected.ptHinge_i - ptMouse)))
                 
             # Make angles relative to bodypart origin.
             angle_lo_b -= bodypartSelected.angleOutward_b
@@ -3698,6 +3946,7 @@ class MainWindow:
                     paramsScaled['gui'][partnameSlave][tagSlave]     = -paramsScaled['gui'][partnameSelected][tagSelected]
                     paramsScaled['gui'][partnameSlave][tagSelected]  = -paramsScaled['gui'][partnameSelected][tagSlave]
                     paramsScaled['gui'][partnameSlave]['radius_outer'] = paramsScaled['gui'][partnameSelected]['radius_outer']
+                    paramsScaled['gui'][partnameSlave]['radius_inner'] = paramsScaled['gui'][partnameSelected]['radius_inner']
                     bodypartSlave.bValidMask = False
                     
 #                 if (paramsScaled['gui'][partnameSlave]['angle_hi'] < 0 < paramsScaled['gui'][partnameSlave]['angle_lo']):
@@ -3707,11 +3956,12 @@ class MainWindow:
         # Inner radius.
         elif (tagSelected=='radius_inner'): 
             paramsScaled['gui'][partnameSelected]['radius_inner'] = float(min(np.linalg.norm(bodypartSelected.ptHinge_i - ptMouse), 
-                                                                                      bodypartSelected.params['gui'][partnameSelected]['radius_outer']-2*self.scale))
+                                                                              bodypartSelected.params['gui'][partnameSelected]['radius_outer']-2*self.scale))
             
             bodypartSelected.bValidMask = False
             
             if (partnameSelected in ['left','right']) and (paramsScaled['gui']['symmetric']):
+                paramsScaled['gui'][partnameSlave]['radius_outer'] = paramsScaled['gui'][partnameSelected]['radius_outer']
                 paramsScaled['gui'][partnameSlave]['radius_inner'] = paramsScaled['gui'][partnameSelected]['radius_inner']
                 bodypartSlave.bValidMask = False
                 
