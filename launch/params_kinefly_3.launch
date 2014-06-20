@@ -9,7 +9,7 @@
     
     <param name="kinefly3/image_topic"        type="string" value="/camera3/image_raw" />
     <param name="kinefly3/n_edges_max"        type="int"    value="1" />
-    <param name="kinefly3/rc_background"      type="double" value="1000" />
+    <param name="kinefly3/rc_background"      type="double" value="10" />
     <param name="kinefly3/scale_image"        type="double" value="1.0" />
     <param name="kinefly3/use_gui"            type="bool"   value="true" />
     <param name="kinefly3/wingbeat_min"       type="double" value="180" />
