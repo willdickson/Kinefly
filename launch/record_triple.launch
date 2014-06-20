@@ -1,0 +1,10 @@
+<launch>
+	<!-- ========================================================== -->
+	<!-- Record image streams.                                      -->
+	<!-- ========================================================== -->
+
+
+    <node name="rosbag"  pkg="rosbag"   type="record" args="-j -o $(env HOME)/bagfiles/ /camera1/image_raw/compressed /camera2/image_raw/compressed /camera3/image_raw/compressed"  />
+
+
+</launch>
