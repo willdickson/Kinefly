@@ -16,14 +16,14 @@ from setdict import SetDict
 
 ###############################################################################
 ###############################################################################
-class Kinefly2Ledpanels:
+class Flystate2Ledpanels:
 
     def __init__(self):
         self.bInitialized = False
         self.bRunning = False
 
         # initialize
-        self.name = 'kinefly2ledpanels'
+        self.name = 'Flystate2ledpanels'
         rospy.init_node(self.name, anonymous=True)
         self.nodename = rospy.get_name()
         self.namespace = rospy.get_namespace()
@@ -301,6 +301,6 @@ class Kinefly2Ledpanels:
 
 if __name__ == '__main__':
 
-    k2l = Kinefly2Ledpanels()
+    k2l = Flystate2Ledpanels()
     k2l.run()
 

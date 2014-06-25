@@ -17,7 +17,7 @@ from setdict import SetDict
 
 ###############################################################################
 ###############################################################################
-class Kinefly2PhidgetsAnalog:
+class Flystate2PhidgetsAnalog:
 
     def __init__(self):
         self.bInitialized = False
@@ -25,7 +25,7 @@ class Kinefly2PhidgetsAnalog:
         self.bAttached = False
         
         # initialize
-        self.name = 'kinefly2phidgetsanalog'
+        self.name = 'Flystate2PhidgetsAnalog'
         rospy.init_node(self.name, anonymous=True)
         self.nodename = rospy.get_name()
         self.namespace = rospy.get_namespace()
@@ -273,6 +273,6 @@ class Kinefly2PhidgetsAnalog:
 
 if __name__ == '__main__':
 
-    s2pa = Kinefly2PhidgetsAnalog()
+    s2pa = Flystate2PhidgetsAnalog()
     s2pa.run()
 

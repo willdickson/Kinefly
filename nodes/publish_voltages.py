@@ -81,15 +81,16 @@ class PublishVoltages:
     
         
     def run(self):
+        channels = self.params['channels_ai']
         iCount = 0
         while (not rospy.is_shutdown()):
             header = Header(seq=iCount, stamp=rospy.Time.now())
             try:
-                voltages = self.get_ai(self.params['channels_ai'])
+                resp = self.get_ai(channels)
             except rospy.service.ServiceException, e:
                 self.get_ai = rospy.ServiceProxy(self.topicAI, SrvPhidgetsInterfaceKitGetAI)
                 
-            self.pubAI.publish(header, voltages.voltages)
+            self.pubAI.publish(header, channels, resp.voltages)
             iCount += 1
 
 
