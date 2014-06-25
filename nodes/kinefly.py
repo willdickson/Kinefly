@@ -20,8 +20,9 @@ from setdict import SetDict
 from cv_bridge import CvBridge, CvBridgeError
 from sensor_msgs.msg import Image
 from std_msgs.msg import Float32, Header, String
+
 from Kinefly.srv import SrvWingdata, SrvWingdataResponse, SrvTipdata, SrvTipdataResponse
-from Kinefly.msg import MsgFlystate, MsgState, MsgCommand
+from Kinefly.msg import MsgFlystate, MsgState
 from Kinefly.cfg import kineflyConfig
 
 # Define button sides for drawing.
@@ -2982,6 +2983,12 @@ class TipTracker(MotionTrackedBodypartPolar):
                 radius = self.params['gui'][self.name]['radius_inner'] + self.iRadius
                 self.state.radii = [radius]
                 self.state.intensity = np.mean(imgNow)/255.0
+            else:
+                self.state.angles = []
+                self.state.radii = []
+                self.state.gradients = self.detector.diff
+                self.state.intensity = np.mean(imgNow)/255.0
+                
 
         
     # update()
@@ -3200,19 +3207,30 @@ class MainWindow:
         self.fontface       = cv2.FONT_HERSHEY_SIMPLEX
         self.buttons        = None
         self.yToolbar       = 0
+        self.shapeToolbar   = (0,0)
         
         # Publishers.
-        self.pubCommand     = rospy.Publisher(self.nodename+'/command', MsgCommand)
+        self.pubCommand     = rospy.Publisher(self.nodename+'/command', String)
 
         # Subscriptions.        
         sizeImage = 128+1024*1024 # Size of header + data.
         self.subImage       = rospy.Subscriber(self.params['image_topic'], Image,      self.image_callback,   queue_size=2, buff_size=2*sizeImage, tcp_nodelay=True)
-        self.subCommand     = rospy.Subscriber(self.nodename+'/command',   MsgCommand, self.command_callback, queue_size=1000)
+        self.subCommand     = rospy.Subscriber(self.nodename+'/command',   String, self.command_callback, queue_size=1000)
 
         # user callbacks
         cv2.setMouseCallback(self.window_name, self.onMouse, param=None)
         
         self.reconfigure = dynamic_reconfigure.server.Server(kineflyConfig, self.reconfigure_callback)
+        
+        # Preload a "Waiting..." image.
+        h=int(480 * self.scale)
+        w=int(640 * self.scale)
+        imgInitial = np.zeros((h,w), dtype=np.uint8)
+        for i in range(20):
+            color = cv.Scalar(int(255*np.random.random()), int(255*np.random.random()), int(255*np.random.random()), 0)
+            cv2.putText(imgInitial, 'Waiting for Camera...', (int(w*0.8*np.random.random()),int(h*np.random.random())), self.fontface, 2*self.scaleText, color)
+        rosimg = self.cvbridge.cv_to_imgmsg(cv.fromarray(imgInitial), 'passthrough')
+        self.image_callback(rosimg)
         
 
     # Check the given button to see if it extends outside the image, and if so then reposition it to the next line.
@@ -3223,7 +3241,9 @@ class MainWindow:
         
     # Create the button bar, with overflow onto more than one line if needed to fit on the image.        
     def create_buttons(self, shape):
-        if (self.buttons is None):
+        if (self.buttons is None) or (shape != self.shapeToolbar):
+            self.shapeToolbar = shape
+            
             # UI button specs.
             self.buttons = []
             x = 1
@@ -3370,7 +3390,7 @@ class MainWindow:
     # Execute any commands sent over the command topic.
     #
     def command_callback(self, msg):
-        self.command = msg.command
+        self.command = msg.data
         
         if (self.command == 'exit'):
             self.bQuitting = True
@@ -3406,7 +3426,7 @@ class MainWindow:
             rospy.logwarn('  exit                 Exit the program.')
             rospy.logwarn('')
             rospy.logwarn('You can send the above commands at the shell prompt via:')
-            rospy.logwarn('rostopic pub -1 %s/command Kinefly/MsgCommand commandtext' % self.nodename)
+            rospy.logwarn('rostopic pub -1 %s/command std_msgs/String commandtext' % self.nodename)
             rospy.logwarn('')
 
         
@@ -3452,8 +3472,6 @@ class MainWindow:
                     iImgWorkingNext = (self.iImgWorking+1) % len(self.bufferImages)
                     self.iDroppedFrame += 1
     
-#                if ('kinefly3' in self.nodename) and (self.stampPrev is not None):
-#                    rospy.logwarn('Filled %d: %0.6f, %0.6f' % (self.iImgLoading, self.stampPrev.to_sec(), rosimg.header.stamp.to_sec()))
                 self.bufferImages[self.iImgLoading] = rosimg
                 self.iImgLoading = iImgLoadingNext
                 self.iImgWorking = iImgWorkingNext
@@ -3698,7 +3716,6 @@ class MainWindow:
 
                 # Display the image.
                 cv2.imshow(self.window_name, imgOutput)
-                cv2.waitKey(1)
 
             # Compute processing time.
             stamp1 = rospy.Time.now()
@@ -3723,7 +3740,9 @@ class MainWindow:
 #                    if (self.iDroppedFrame>0):
 #                        s2 += '    Dropped Frames: %d' % self.iDroppedFrame
 #                    rospy.logwarn(s2)
-            
+        cv2.waitKey(1)
+
+    # End process_image()
             
                 
     # save_background()
@@ -3989,7 +4008,9 @@ class MainWindow:
                 
 
         # Unscale the parameters since we're finished adjusting them.
-        self.params = self.scale_params(paramsScaled, 1/self.scale) 
+        self.params = self.scale_params(paramsScaled, 1/self.scale)
+        
+    # End update_params_from_mouse() 
 
 
     # onMouse()
@@ -4058,10 +4079,10 @@ class MainWindow:
             # If the mouse is on the same button at mouseup, then do the action.
             if (self.uiSelected=='pushbutton'):
                 if (self.nameSelected == self.nameSelectedNow == 'save_bg'):
-                    self.pubCommand.publish(MsgCommand('save_background'))
+                    self.pubCommand.publish('save_background')
 
                 elif (self.nameSelected == self.nameSelectedNow == 'exit'):
-                    self.pubCommand.publish(MsgCommand('exit'))
+                    self.pubCommand.publish('exit')
                     
                     
             elif (self.uiSelected=='checkbox'):
@@ -4157,6 +4178,8 @@ class MainWindow:
             self.uiSelectedNow      = None
             self.iButtonSelected    = None
             self.iButtonSelectedNow = None
+        
+    # End onMouse()
 
             
                 
@@ -4179,7 +4202,6 @@ if __name__ == '__main__':
     rospy.logwarn('         by Steve Safarik, Floris van Breugel (c) 2014')
     rospy.logwarn('**************************************************************************')
     rospy.logwarn('')
-
 
     main.run()
 
