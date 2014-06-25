@@ -1117,7 +1117,10 @@ class MotionTrackedBodypart(object):
         self.cosAngleBody_i = np.cos(self.angleBody_i)
         self.sinAngleBody_i = np.sin(self.angleBody_i)
 
-        self.ptHinge_i = np.array([self.params['gui'][self.name]['hinge']['x'], self.params['gui'][self.name]['hinge']['y']])
+        self.ptHinge_i        = np.array([self.params['gui'][self.name]['hinge']['x'], self.params['gui'][self.name]['hinge']['y']])
+        self.ptHingeHead_i    = np.array([self.params['gui']['head']['hinge']['x'], self.params['gui']['head']['hinge']['y']])
+        self.ptHingeAbdomen_i = np.array([self.params['gui']['abdomen']['hinge']['x'], self.params['gui']['abdomen']['hinge']['y']])
+
         
         # Compute the body-outward-facing angle, which is the angle from the body center to the bodypart hinge.
 #         pt1 = [params['head']['hinge']['x'], params['head']['hinge']['y']]
@@ -1127,14 +1130,21 @@ class MotionTrackedBodypart(object):
 #         ptBodyCenter_i = get_intersection(pt1,pt2,pt3,pt4)
 #         self.angleOutward_i = float(np.arctan2(self.ptHinge_i[1]-ptBodyCenter_i[1], self.ptHinge_i[0]-ptBodyCenter_i[0]))
 
-        # Compute the body-outward-facing angle, which is the angle to the current point from the relative part's point (e.g. left hinge to right hinge).
-        nameRelative = {'head':'abdomen', 
-                        'abdomen':'head', 
-                        'left':'right', 
-                        'right':'left'}
-        self.angleOutward_i = float(np.arctan2(self.params['gui'][self.name]['hinge']['y']-self.params['gui'][nameRelative[self.name]]['hinge']['y'], 
-                                               self.params['gui'][self.name]['hinge']['x']-self.params['gui'][nameRelative[self.name]]['hinge']['x']))
+        # Compute the body-outward-facing angle, which is the angle to the current point from the forward body axis.
+        if (self.name in ['head','abdomen']):
+            nameRelative = {'head':'abdomen', 
+                            'abdomen':'head', 
+                            'left':'right', 
+                            'right':'left'}
+            self.angleOutward_i = float(np.arctan2(self.params['gui'][self.name]['hinge']['y']-self.params['gui'][nameRelative[self.name]]['hinge']['y'], 
+                                                   self.params['gui'][self.name]['hinge']['x']-self.params['gui'][nameRelative[self.name]]['hinge']['x']))
+        else:
+            ptBodyaxis_i = self.get_projection_onto_bodyaxis(self.ptHinge_i)
+            self.angleOutward_i = float(np.arctan2(self.params['gui'][self.name]['hinge']['y']-ptBodyaxis_i[1], 
+                                                   self.params['gui'][self.name]['hinge']['x']-ptBodyaxis_i[0]))
+
         self.angleOutward_b = self.angleOutward_i - self.angleBody_i
+        #rospy.logwarn('%s: %0.2f, %0.2f' % (self.name, self.angleOutward_i, self.angleOutward_b))
 
         
         cosAngleOutward_i = np.cos(self.angleOutward_i)
@@ -1153,6 +1163,18 @@ class MotionTrackedBodypart(object):
         self.update_handle_points()
 
 
+    # get_projection_onto_bodyaxis()
+    # Project the given point onto the body axis.
+    #
+    def get_projection_onto_bodyaxis(self, ptAnywhere):
+        # Project the point onto the body axis.
+        ptB = self.ptHingeHead_i - self.ptHingeAbdomen_i
+        ptM = ptAnywhere - self.ptHingeAbdomen_i
+        ptAxis = np.dot(ptB,ptM) / np.dot(ptB,ptB) * ptB + self.ptHingeAbdomen_i
+            
+        return ptAxis
+        
+                
     # transform_angle_b_from_p()
     # Transform an angle from the bodypart frame to the fly body frame.
     #

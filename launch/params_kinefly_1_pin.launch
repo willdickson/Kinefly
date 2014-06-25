@@ -70,6 +70,7 @@
     <param name="kinefly2ledpanels/coeff_usb/yxi"       type="double" value="0.0" />
     
     
+    <!-- Analog Voltage Output -->
     <!-- Voltage Channel 0 -->
     <param name="kinefly2phidgetsanalog/v0enable"    type="bool"   value="true" />
     <param name="kinefly2phidgetsanalog/v00"         type="double" value="0.0" />

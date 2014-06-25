@@ -42,8 +42,8 @@ class PublishVoltages:
         self.command = None
 
         # Messages & Services.
-        self.stAI = '%s/ai' % self.namespace.rstrip('/')
-        self.pubAI       = rospy.Publisher(self.stAI, MsgAnalogIn)
+        self.topicAI = '%s/ai' % self.namespace.rstrip('/')
+        self.pubAI       = rospy.Publisher(self.topicAI, MsgAnalogIn)
         self.subCommand  = rospy.Subscriber('%s/command' % self.nodename.rstrip('/'), String, self.command_callback, queue_size=1000)
         
         self.get_ai = self.get_wingdata_right = rospy.ServiceProxy('get_ai', SrvPhidgetsInterfaceKitGetAI)
@@ -87,7 +87,7 @@ class PublishVoltages:
             try:
                 voltages = self.get_ai(self.params['channels_ai'])
             except rospy.service.ServiceException, e:
-                self.get_ai = rospy.ServiceProxy(self.stAI, SrvPhidgetsInterfaceKitGetAI)
+                self.get_ai = rospy.ServiceProxy(self.topicAI, SrvPhidgetsInterfaceKitGetAI)
                 
             self.pubAI.publish(header, voltages.voltages)
             iCount += 1
