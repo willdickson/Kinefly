@@ -20,7 +20,7 @@
     <param name="head/tracker"       type="string" value="area" />   <!-- area, edge, or tip -->
     
     <param name="abdomen/autozero"   type="bool"   value="true" />
-    <param name="abdomen/threshold"  type="double" value="0.003" />
+    <param name="abdomen/threshold"  type="double" value="0.005" />
     <param name="abdomen/tracker"    type="string" value="tip" />   <!-- area, edge, or tip -->
     
     <param name="left/autozero"      type="bool"   value="true" />
@@ -117,11 +117,11 @@
 
     <!-- Voltage Channel 3 -->
     <param name="kinefly2phidgetsanalog/v3enable"    type="bool"   value="true" />
-    <param name="kinefly2phidgetsanalog/v30"         type="double" value="-18.0" />
-    <param name="kinefly2phidgetsanalog/v3ha"        type="double" value="0.0" />
+    <param name="kinefly2phidgetsanalog/v30"         type="double" value="0.0" />
+    <param name="kinefly2phidgetsanalog/v3ha"        type="double" value="1.0" />
     <param name="kinefly2phidgetsanalog/v3hr"        type="double" value="0.0" />
     <param name="kinefly2phidgetsanalog/v3aa"        type="double" value="0.0" />
-    <param name="kinefly2phidgetsanalog/v3ar"        type="double" value="0.1" />
+    <param name="kinefly2phidgetsanalog/v3ar"        type="double" value="0.0" />
     <param name="kinefly2phidgetsanalog/v3l1"        type="double" value="0.0" />
     <param name="kinefly2phidgetsanalog/v3l2"        type="double" value="0.0" />
     <param name="kinefly2phidgetsanalog/v3lr"        type="double" value="0.0" />

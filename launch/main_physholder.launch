@@ -1,0 +1,34 @@
+<launch>
+	<!-- ========================================================== -->
+	<!-- Launch everything needed for Kinefly, 3 cameras with the   --> 
+	<!-- physiology holder.                                         -->
+	<!-- ========================================================== -->
+
+
+    <include file="$(find Kinefly)/launch/params_camera_1.launch"                         ns="camera1" />
+    <include file="$(find Kinefly)/launch/camera_ethernet_1.launch" />
+    <include file="$(find Kinefly)/launch/params_kinefly_1_phys.launch"                   ns="kinefly1_phys" />
+    <node name="kinefly2phidgetsanalog"  pkg="Kinefly"   type="kinefly2phidgetsanalog.py" ns="kinefly1_phys" />
+    <node name="kinefly1_phys"           pkg="Kinefly"   type="kinefly.py"                                   required="true" />
+
+
+    <include file="$(find Kinefly)/launch/params_camera_2.launch"                         ns="camera2" />
+    <include file="$(find Kinefly)/launch/camera_ethernet_2.launch" />
+    <include file="$(find Kinefly)/launch/params_kinefly_2_phys.launch"                   ns="kinefly2_phys" />
+    <node name="kinefly2phidgetsanalog"  pkg="Kinefly"   type="kinefly2phidgetsanalog.py" ns="kinefly2_phys" />
+    <node name="kinefly2_phys"           pkg="Kinefly"   type="kinefly.py"                                   required="true" />
+
+
+    <include file="$(find Kinefly)/launch/params_camera_3.launch"                         ns="camera3" />
+    <include file="$(find Kinefly)/launch/camera_ethernet_3.launch" />
+    <include file="$(find Kinefly)/launch/params_kinefly_3_phys.launch"                   ns="kinefly3_phys" />
+    <node name="kinefly2phidgetsanalog"  pkg="Kinefly"   type="kinefly2phidgetsanalog.py" ns="kinefly3_phys" />
+    <node name="kinefly3_phys"           pkg="Kinefly"   type="kinefly.py"                                   required="true" />
+
+    <rosparam param="stimulus/publish_voltages/channels_ai" >[0, 1, 2]</rosparam>
+    <node name="interfacekit"            pkg="phidgets"  type="phidgets_interfacekit.py"  ns="stimulus"     required="true" />
+    <node name="publish_voltages"        pkg="Kinefly"   type="publish_voltages.py"       ns="stimulus"     required="true" />
+
+
+
+</launch>

@@ -16,6 +16,12 @@ from setdict import SetDict
 
 ###############################################################################
 ###############################################################################
+# PublishVoltages()
+#
+# Reads the analog input channels on the Phidgets InterfaceKit, and publish
+# the voltages on the topic 'ai'.  The list of channels is specified by the
+# parameter 'channels_ai'.
+#
 class PublishVoltages:
 
     def __init__(self):
@@ -29,7 +35,7 @@ class PublishVoltages:
         
         # Load the parameters.
         self.params = rospy.get_param('%s' % self.nodename.rstrip('/'), {})
-        self.defaults = {}
+        self.defaults = {'channels_ai':[0,1,2,3,4,5,6,7]}
         SetDict().set_dict_with_preserve(self.params, self.defaults)
         rospy.set_param('%s' % self.nodename.rstrip('/'), self.params)
         
@@ -58,6 +64,11 @@ class PublishVoltages:
 
 
         if (self.command == 'help'):
+            rospy.logwarn('')
+            rospy.logwarn('Reads the analog input channels on the Phidgets InterfaceKit, and publishes')
+            rospy.logwarn('the voltages on the topic ''ai''.  The list of channels is specified by the ')
+            rospy.logwarn('parameter ''channels_ai''.')
+            rospy.logwarn('')
             rospy.logwarn('The %s/command topic accepts the following string commands:' % self.nodename.rstrip('/'))
             rospy.logwarn('  help                 This message.')
             rospy.logwarn('  exit                 Exit the program.')
@@ -74,7 +85,7 @@ class PublishVoltages:
         while (not rospy.is_shutdown()):
             header = Header(seq=iCount, stamp=rospy.Time.now())
             try:
-                voltages = self.get_ai([0,1,2])
+                voltages = self.get_ai(self.params['channels_ai'])
             except rospy.service.ServiceException, e:
                 self.get_ai = rospy.ServiceProxy(self.stAI, SrvPhidgetsInterfaceKitGetAI)
                 

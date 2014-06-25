@@ -20,7 +20,7 @@
     <param name="head/tracker"       type="string" value="area" />   <!-- area, edge, or tip -->
     
     <param name="abdomen/autozero"   type="bool"   value="true" />
-    <param name="abdomen/threshold"  type="double" value="0.01" />
+    <param name="abdomen/threshold"  type="double" value="0.5" />
     <param name="abdomen/tracker"    type="string" value="tip" />   <!-- area, edge, or tip -->
     
     <param name="left/autozero"      type="bool"   value="true" />
@@ -132,5 +132,6 @@
     
     <param name="kinefly2phidgetsanalog/autorange"   type="bool"   value="false" />
     <param name="kinefly2phidgetsanalog/serial"      type="int"    value="277047" />
+
 
 </launch>

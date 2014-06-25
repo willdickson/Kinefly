@@ -5,31 +5,30 @@
 	<!-- ========================================================== -->
 
 
-    <include file="$(find Kinefly)/launch/params_camera_1.launch"   ns="camera1" />
+    <include file="$(find Kinefly)/launch/params_camera_1.launch"                         ns="camera1" />
     <include file="$(find Kinefly)/launch/camera_ethernet_1.launch" />
-    <include file="$(find Kinefly)/launch/params_kinefly_1_pin.launch" ns="kinefly1_pin" />
-    <node name="kinefly1_pin"            pkg="Kinefly"   type="kinefly.py"  required="true"      />
-    <node name="kinefly2phidgetsanalog"  pkg="Kinefly"   type="kinefly2phidgetsanalog.py" ns="kinefly1_pin"  />
+    <include file="$(find Kinefly)/launch/params_kinefly_1_pin.launch"                    ns="kinefly1_pin" />
+    <node name="kinefly2phidgetsanalog"  pkg="Kinefly"   type="kinefly2phidgetsanalog.py" ns="kinefly1_pin" />
+    <node name="kinefly1_pin"            pkg="Kinefly"   type="kinefly.py"                                   required="true" />
 
 
-    <include file="$(find Kinefly)/launch/params_camera_2.launch"   ns="camera2" />
+    <include file="$(find Kinefly)/launch/params_camera_2.launch"                         ns="camera2" />
     <include file="$(find Kinefly)/launch/camera_ethernet_2.launch" />
-    <include file="$(find Kinefly)/launch/params_kinefly_2_pin.launch" ns="kinefly2_pin" />
-    <node name="kinefly2_pin"            pkg="Kinefly"   type="kinefly.py"  required="true"      />
+    <include file="$(find Kinefly)/launch/params_kinefly_2_pin.launch"                    ns="kinefly2_pin" />
     <node name="kinefly2phidgetsanalog"  pkg="Kinefly"   type="kinefly2phidgetsanalog.py" ns="kinefly2_pin"  />
+    <node name="kinefly2_pin"            pkg="Kinefly"   type="kinefly.py"                                   required="true" />
 
 
-    <include file="$(find Kinefly)/launch/params_camera_3.launch"   ns="camera3" />
+    <include file="$(find Kinefly)/launch/params_camera_3.launch"                         ns="camera3" />
     <include file="$(find Kinefly)/launch/camera_ethernet_3.launch" />
-    <include file="$(find Kinefly)/launch/params_kinefly_3_pin.launch" ns="kinefly3_pin" />
-    <node name="kinefly3_pin"            pkg="Kinefly"   type="kinefly.py"  required="true"      />
+    <include file="$(find Kinefly)/launch/params_kinefly_3_pin.launch"                    ns="kinefly3_pin" />
     <node name="kinefly2phidgetsanalog"  pkg="Kinefly"   type="kinefly2phidgetsanalog.py" ns="kinefly3_pin"  />
+    <node name="kinefly3_pin"            pkg="Kinefly"   type="kinefly.py"                                  required="true"  />
 
-
-
-
-<!--
-    <include file="$(find Kinefly)/launch/record_triple.launch" />
--->
+    <rosparam param="stimulus/publish_voltages/channels_ai" >[0, 1, 2]</rosparam>
+    <node name="interfacekit"            pkg="phidgets"  type="phidgets_interfacekit.py"  ns="stimulus"     required="true" />
+    <node name="publish_voltages"        pkg="Kinefly"   type="publish_voltages.py"       ns="stimulus"     required="true" />
     
+
+
 </launch>
