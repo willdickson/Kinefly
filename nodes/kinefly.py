@@ -3216,8 +3216,8 @@ class MainWindow:
         self.iCount         = 0
         self.iDroppedFrame  = 0
 
-        nQueue              = 2
-        self.bufferImages   = [None]*nQueue # Circular buffer for incoming images.
+        nQueueImages        = 8
+        self.bufferImages   = [None]*nQueueImages # Circular buffer for incoming images.
         self.iImgLoading    = 0  # Index of the next slot to load.
         self.iImgWorking    = 0  # Index of the slot to process, i.e. the oldest image in the buffer.
         self.imgUnscaled    = None
@@ -3253,6 +3253,7 @@ class MainWindow:
             cv2.putText(imgInitial, 'Waiting for Camera...', (int(w*0.8*np.random.random()),int(h*np.random.random())), self.fontface, 2*self.scaleText, color)
         rosimg = self.cvbridge.cv_to_imgmsg(cv.fromarray(imgInitial), 'passthrough')
         self.image_callback(rosimg)
+        self.bValidImage = False
         
 
     # Check the given button to see if it extends outside the image, and if so then reposition it to the next line.
@@ -3505,6 +3506,8 @@ class MainWindow:
 #
 #            self.stampRosimagePrev = rosimg.header.stamp
 
+            self.bValidImage = True
+
             
 
                 
@@ -3588,7 +3591,7 @@ class MainWindow:
             # Create the button bar if needed.    
             self.create_buttons(self.imgScaled.shape)
         
-            if (not self.bMousing):
+            if (not self.bMousing) and (self.bValidImage):
                 # Update the fly internals.
                 self.fly.update(rosimg.header, self.imgScaled)
     
