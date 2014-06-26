@@ -4,7 +4,7 @@
 	<!-- ========================================================== -->
 
 
-    <include file="$(find Kinefly)/launch/params_kinefly_1.launch" />
+    <include file="$(find Kinefly)/launch/params_kinefly_1.launch" ns="kinefly1" />
 
     <include file="$(find Kinefly)/launch/params_camera_1.launch"   ns="camera1" />
     <include file="$(find Kinefly)/launch/camera_ethernet_1.launch" />

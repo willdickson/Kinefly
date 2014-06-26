@@ -3,6 +3,7 @@
 	<!-- Launch everything needed for Kinefly, 3 cameras with the   --> 
 	<!-- physiology holder.                                         -->
 	<!-- ========================================================== -->
+    <param name="use_sim_time"                 type="bool" value="false"/>
 
 
     <include file="$(find Kinefly)/launch/params_camera_1.launch"                         ns="camera1" />

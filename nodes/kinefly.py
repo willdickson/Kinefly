@@ -3109,6 +3109,7 @@ class MainWindow:
             
         defaults = {'filenameBackground':'~/%s.png' % self.nodename.strip('/'),
                     'image_topic':'/camera/image_raw',
+                    'n_queue_images':2,
                     'use_gui':True,                     # You can turn off the GUI to speed the framerate.
                     'scale_image':1.0,                  # Reducing the image scale will speed the framerate.
                     'n_edges_max':1,                    # Max number of edges per wing to find, subject to threshold.
@@ -3216,8 +3217,7 @@ class MainWindow:
         self.iCount         = 0
         self.iDroppedFrame  = 0
 
-        nQueueImages        = 8
-        self.bufferImages   = [None]*nQueueImages # Circular buffer for incoming images.
+        self.bufferImages   = [None]*self.params['n_queue_images'] # Circular buffer for incoming images.
         self.iImgLoading    = 0  # Index of the next slot to load.
         self.iImgWorking    = 0  # Index of the slot to process, i.e. the oldest image in the buffer.
         self.imgUnscaled    = None
