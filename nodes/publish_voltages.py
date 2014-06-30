@@ -9,8 +9,8 @@ import numpy as np
 
 from std_msgs.msg import Header, String
 
-from Kinefly.msg import MsgAnalogIn
-from phidgets.srv import SrvPhidgetsInterfaceKitGetAI
+from Kinefly.msg import MsgAnalogIn, MsgDigitalIn
+from phidgets.srv import SrvPhidgetsInterfaceKitGetAI, SrvPhidgetsInterfaceKitGetDI
 from setdict import SetDict
 
 
@@ -35,7 +35,8 @@ class PublishVoltages:
         
         # Load the parameters.
         self.params = rospy.get_param('%s' % self.nodename.rstrip('/'), {})
-        self.defaults = {'channels_ai':[0,1,2,3,4,5,6,7]}
+        self.defaults = {'channels_ai':[0,1,2,3,4,5,6,7],
+                         'channels_di':[0,1,2,3,4,5,6,7]}
         SetDict().set_dict_with_preserve(self.params, self.defaults)
         rospy.set_param('%s' % self.nodename.rstrip('/'), self.params)
         
@@ -44,9 +45,12 @@ class PublishVoltages:
         # Messages & Services.
         self.topicAI = '%s/ai' % self.namespace.rstrip('/')
         self.pubAI       = rospy.Publisher(self.topicAI, MsgAnalogIn)
+        self.topicDI = '%s/di' % self.namespace.rstrip('/')
+        self.pubDI       = rospy.Publisher(self.topicDI, MsgDigitalIn)
         self.subCommand  = rospy.Subscriber('%s/command' % self.nodename.rstrip('/'), String, self.command_callback, queue_size=1000)
         
-        self.get_ai = self.get_wingdata_right = rospy.ServiceProxy('get_ai', SrvPhidgetsInterfaceKitGetAI)
+        self.get_ai = rospy.ServiceProxy('get_ai', SrvPhidgetsInterfaceKitGetAI)
+        self.get_di = rospy.ServiceProxy('get_di', SrvPhidgetsInterfaceKitGetDI)
         
         rospy.sleep(1) # Allow time to connect.
         
@@ -65,9 +69,9 @@ class PublishVoltages:
 
         if (self.command == 'help'):
             rospy.logwarn('')
-            rospy.logwarn('Reads the analog input channels on the Phidgets InterfaceKit, and publishes')
-            rospy.logwarn('the voltages on the topic ''ai''.  The list of channels is specified by the ')
-            rospy.logwarn('parameter ''channels_ai''.')
+            rospy.logwarn('Reads the input channels on the Phidgets InterfaceKit, and publishes')
+            rospy.logwarn('the values on the topics ''ai'' and ''di''.  The list of channels is specified by the ')
+            rospy.logwarn('parameters ''channels_ai'',  ''channels_di''.')
             rospy.logwarn('')
             rospy.logwarn('The %s/command topic accepts the following string commands:' % self.nodename.rstrip('/'))
             rospy.logwarn('  help                 This message.')
@@ -81,16 +85,27 @@ class PublishVoltages:
     
         
     def run(self):
-        channels = self.params['channels_ai']
+        channels_ai = self.params['channels_ai']
+        channels_di = self.params['channels_di']
         iCount = 0
         while (not rospy.is_shutdown()):
             header = Header(seq=iCount, stamp=rospy.Time.now())
-            try:
-                resp = self.get_ai(channels)
-            except rospy.service.ServiceException, e:
-                self.get_ai = rospy.ServiceProxy(self.topicAI, SrvPhidgetsInterfaceKitGetAI)
-                
-            self.pubAI.publish(header, channels, resp.voltages)
+            if (len(channels_ai)>0):
+                try:
+                    resp = self.get_ai(channels_ai)
+                except rospy.service.ServiceException, e:
+                    self.get_ai = rospy.ServiceProxy(self.topicAI, SrvPhidgetsInterfaceKitGetAI)
+                else:
+                    self.pubAI.publish(header, channels_ai, resp.voltages)
+
+            if (len(channels_di)>0):
+                try:
+                    resp = self.get_di(channels_di)
+                except rospy.service.ServiceException, e:
+                    self.get_di = rospy.ServiceProxy(self.topicDI, SrvPhidgetsInterfaceKitGetDI)
+                else:    
+                    self.pubDI.publish(header, channels_di, resp.values)
+
             iCount += 1
 
 
