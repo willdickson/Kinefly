@@ -42,8 +42,8 @@ class TrackerPlotter:
         self.fig = plt.figure(service_name)
         self.sub1 = plt.subplot(2,1,1)
         self.sub2 = plt.subplot(2,1,2)
-        self.sub1.set_xlim(0, len(trackerdata.abscissa))
-        self.sub2.set_xlim(0, len(trackerdata.abscissa))
+        self.sub1.set_xlim(np.min(trackerdata.abscissa), np.max(trackerdata.abscissa))
+        self.sub2.set_xlim(np.min(trackerdata.abscissa), np.max(trackerdata.abscissa))
         self.sub1.set_title('Intensity')
         self.sub2.set_title('Intensity Gradient')
 
@@ -73,7 +73,7 @@ class TrackerPlotter:
         
         
     def update_plots(self, i):
-        rv = [self.plot1_markers]
+        rv = self.plot1_markers
 
         # Get the trackerdata.
         try:
@@ -92,8 +92,8 @@ class TrackerPlotter:
             self.diffs_lo = np.min(np.hstack(np.append(diffs, self.diffs_lo*decay).flat))
     
             # Set axis limits.
-            self.sub1.set_xlim(0, len(trackerdata.abscissa))
-            self.sub2.set_xlim(0, len(trackerdata.abscissa))
+            self.sub1.set_xlim(np.min(trackerdata.abscissa), np.max(trackerdata.abscissa))
+            self.sub2.set_xlim(np.min(trackerdata.abscissa), np.max(trackerdata.abscissa))
             self.sub1.set_ylim(self.intensities_lo, self.intensities_hi)
             self.sub2.set_ylim(self.diffs_lo, self.diffs_hi)
             self.fig.show()

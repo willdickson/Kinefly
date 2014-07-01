@@ -9,7 +9,7 @@ import matplotlib.axes as axes
 import matplotlib.animation as animation
 import numpy as np
 
-from Kinefly.srv import SrvWingdata
+from Kinefly.srv import SrvTrackerdata
 
 class WingPlotter:
     
@@ -18,13 +18,13 @@ class WingPlotter:
         rospy.init_node('wingplotter', anonymous=True)
         
         # Attach to services.
-        service_name = "wingdata_right"
+        service_name = "trackerdata_right"
         rospy.wait_for_service(service_name)
-        self.get_wingdata_right = rospy.ServiceProxy(service_name, SrvWingdata)
+        self.get_trackerdata_right = rospy.ServiceProxy(service_name, SrvTrackerdata)
         
-        service_name = "wingdata_left"
+        service_name = "trackerdata_left"
         rospy.wait_for_service(service_name)
-        self.get_wingdata_left = rospy.ServiceProxy(service_name, SrvWingdata)
+        self.get_trackerdata_left = rospy.ServiceProxy(service_name, SrvTrackerdata)
 
         
         self.timePrev = rospy.Time.now().to_sec()
@@ -39,18 +39,18 @@ class WingPlotter:
         self.sub2.set_title('Intensity Gradient')
 
 
-        wingdata_right = self.get_wingdata_right(0)
-        wingdata_left  = self.get_wingdata_left(0)
+        trackerdata_right = self.get_trackerdata_right(0)
+        trackerdata_left  = self.get_trackerdata_left(0)
         
         self.limits_right = [-np.pi, np.pi]
         self.limits_left  = [-np.pi, np.pi]
         edges_right = [-np.pi, np.pi]
         edges_left  = [-np.pi, np.pi]
         
-        intensities_right = np.zeros(len(wingdata_right.angles))
-        intensities_left  = np.zeros(len(wingdata_left.angles))
-        diffs_right = np.zeros(len(wingdata_right.angles))
-        diffs_left  = np.zeros(len(wingdata_left.angles))
+        intensities_right = np.zeros(len(trackerdata_right.abscissa))
+        intensities_left  = np.zeros(len(trackerdata_left.abscissa))
+        diffs_right = np.zeros(len(trackerdata_right.abscissa))
+        diffs_left  = np.zeros(len(trackerdata_left.abscissa))
 
         self.intensities_hi = -np.inf
         self.intensities_lo = np.inf
@@ -63,25 +63,25 @@ class WingPlotter:
         colorLdim = (0,0.5,0,1)#'green'
         
         
-        self.plot1_intensities_right,    = self.sub1.plot(wingdata_right.angles, intensities_right, '.', color=colorR)
+        self.plot1_intensities_right,    = self.sub1.plot(trackerdata_right.abscissa, intensities_right, '.', color=colorR)
         self.plot1_limits_lo_right,      = self.sub1.plot([self.limits_right[0], self.limits_right[0]], [0,1], color='black', linewidth=1)
         self.plot1_limits_hi_right,      = self.sub1.plot([self.limits_right[1], self.limits_right[1]], [0,1], color='black', linewidth=1)
         self.plot1_edges_major_right,    = self.sub1.plot([edges_right[0], edges_right[0]], [0,1], color=colorR, linewidth=1)
         self.plot1_edges_minor_right,    = self.sub1.plot([edges_right[1], edges_right[1]], [0,1], color=colorRdim, linewidth=1)
 
-        self.plot1_intensities_left,     = self.sub1.plot(wingdata_left.angles, intensities_left, '.', color=colorL)
+        self.plot1_intensities_left,     = self.sub1.plot(trackerdata_left.abscissa, intensities_left, '.', color=colorL)
         self.plot1_limits_lo_left,       = self.sub1.plot([self.limits_left[0], self.limits_left[0]], [0,1], color='black', linewidth=1)
         self.plot1_limits_hi_left,       = self.sub1.plot([self.limits_left[1], self.limits_left[1]], [0,1], color='black', linewidth=1)
         self.plot1_edges_major_left,     = self.sub1.plot([edges_left[0], edges_left[0]], [0,1], color=colorL, linewidth=1)
         self.plot1_edges_minor_left,     = self.sub1.plot([edges_left[1], edges_left[1]], [0,1], color=colorLdim, linewidth=1)
         
-        self.plot2_diffs_right,          = self.sub2.plot(wingdata_right.angles, diffs_right, '.', color=colorR)
+        self.plot2_diffs_right,          = self.sub2.plot(trackerdata_right.abscissa, diffs_right, '.', color=colorR)
         self.plot2_limits_lo_right,      = self.sub2.plot([self.limits_right[0], self.limits_right[0]], [0,1], color='black', linewidth=1)
         self.plot2_limits_hi_right,      = self.sub2.plot([self.limits_right[1], self.limits_right[1]], [0,1], color='black', linewidth=1)
         self.plot2_edges_major_right,    = self.sub2.plot([edges_right[0], edges_right[0]], [0,1], color=colorR, linewidth=1)
         self.plot2_edges_minor_right,    = self.sub2.plot([edges_right[1], edges_right[1]], [0,1], color=colorRdim, linewidth=1)
 
-        self.plot2_diffs_left,           = self.sub2.plot(wingdata_left.angles, diffs_left, '.', color=colorL)
+        self.plot2_diffs_left,           = self.sub2.plot(trackerdata_left.abscissa, diffs_left, '.', color=colorL)
         self.plot2_limits_lo_left,       = self.sub2.plot([self.limits_left[0], self.limits_left[0]], [0,1], color='black', linewidth=1)
         self.plot2_limits_hi_left,       = self.sub2.plot([self.limits_left[1], self.limits_left[1]], [0,1], color='black', linewidth=1)
         self.plot2_edges_major_left,     = self.sub2.plot([edges_left[0], edges_left[0]], [0,1], color=colorL, linewidth=1)
@@ -111,18 +111,18 @@ class WingPlotter:
                   self.plot2_edges_minor_left, 
                   self.plot2_edges_major_left)
 
-            # Get the wingdata.
-            wingdata_right = self.get_wingdata_right(0)
-            wingdata_left = self.get_wingdata_left(0)
+            # Get the trackerdata.
+            trackerdata_right = self.get_trackerdata_right(0)
+            trackerdata_left = self.get_trackerdata_left(0)
             
             
             decay = 1.0#0.97
 
-            intensities = np.array([wingdata_right.intensities, wingdata_left.intensities])
+            intensities = np.array([trackerdata_right.intensities, trackerdata_left.intensities])
             self.intensities_hi = np.max(np.hstack(np.append(intensities, self.intensities_hi*decay).flat))
             self.intensities_lo = np.min(np.hstack(np.append(intensities, self.intensities_lo*decay).flat))
 
-            diffs = np.array([wingdata_right.diffs, wingdata_left.diffs])
+            diffs = np.array([trackerdata_right.diffs, trackerdata_left.diffs])
             self.diffs_hi = np.max(np.hstack(np.append(diffs, self.diffs_hi*decay).flat))
             self.diffs_lo = np.min(np.hstack(np.append(diffs, self.diffs_lo*decay).flat))
 
@@ -140,28 +140,28 @@ class WingPlotter:
             
             
             # Plot the intensities.    
-            if (wingdata_right.intensities is not None):
-                self.plot1_intensities_right.set_data(wingdata_right.angles, wingdata_right.intensities)
-            if (wingdata_left.intensities is not None):
-                self.plot1_intensities_left.set_data(wingdata_left.angles, wingdata_left.intensities)
+            if (trackerdata_right.intensities is not None):
+                self.plot1_intensities_right.set_data(trackerdata_right.abscissa, trackerdata_right.intensities)
+            if (trackerdata_left.intensities is not None):
+                self.plot1_intensities_left.set_data(trackerdata_left.abscissa, trackerdata_left.intensities)
             
             
             # Plot the intensity diffs.
-            if (wingdata_right.diffs is not None):
-                self.plot2_diffs_right.set_data(wingdata_right.angles, wingdata_right.diffs)
-            if (wingdata_left.diffs is not None):
-                self.plot2_diffs_left.set_data(wingdata_left.angles, wingdata_left.diffs)
+            if (trackerdata_right.diffs is not None):
+                self.plot2_diffs_right.set_data(trackerdata_right.abscissa, trackerdata_right.diffs)
+            if (trackerdata_left.diffs is not None):
+                self.plot2_diffs_left.set_data(trackerdata_left.abscissa, trackerdata_left.diffs)
             
             
             # Plot the right minor/major edge bars on plot1.
             self.plot1_limits_lo_right.set_data([self.limits_right[0], self.limits_right[0]], [self.intensities_lo, self.intensities_hi])
             self.plot1_limits_hi_right.set_data([self.limits_right[1], self.limits_right[1]], [self.intensities_lo, self.intensities_hi])
-            if (len(wingdata_right.anglesMinor)>0):
-                self.plot1_edges_minor_right.set_data([wingdata_right.anglesMinor[0], wingdata_right.anglesMinor[0]], [self.intensities_lo, self.intensities_hi])
+            if (len(trackerdata_right.anglesMinor)>0):
+                self.plot1_edges_minor_right.set_data([trackerdata_right.anglesMinor[0], trackerdata_right.anglesMinor[0]], [self.intensities_lo, self.intensities_hi])
             else:
                 self.plot1_edges_minor_right.set_data([], [])
-            if (len(wingdata_right.anglesMajor)>0):
-                self.plot1_edges_major_right.set_data([wingdata_right.anglesMajor[0], wingdata_right.anglesMajor[0]], [self.intensities_lo, self.intensities_hi])
+            if (len(trackerdata_right.anglesMajor)>0):
+                self.plot1_edges_major_right.set_data([trackerdata_right.anglesMajor[0], trackerdata_right.anglesMajor[0]], [self.intensities_lo, self.intensities_hi])
             else:
                 self.plot1_edges_major_right.set_data([], [])
             
@@ -169,12 +169,12 @@ class WingPlotter:
             # Plot the left minor/major edge bars on plot1.
             self.plot1_limits_lo_left.set_data([self.limits_left[0], self.limits_left[0]], [self.intensities_lo, self.intensities_hi])
             self.plot1_limits_hi_left.set_data([self.limits_left[1], self.limits_left[1]], [self.intensities_lo, self.intensities_hi])
-            if (len(wingdata_left.anglesMinor)>0):
-                self.plot1_edges_minor_left.set_data([wingdata_left.anglesMinor[0], wingdata_left.anglesMinor[0]], [self.intensities_lo, self.intensities_hi])
+            if (len(trackerdata_left.anglesMinor)>0):
+                self.plot1_edges_minor_left.set_data([trackerdata_left.anglesMinor[0], trackerdata_left.anglesMinor[0]], [self.intensities_lo, self.intensities_hi])
             else:
                 self.plot1_edges_minor_left.set_data([], [])
-            if (len(wingdata_left.anglesMajor)>0):
-                self.plot1_edges_major_left.set_data([wingdata_left.anglesMajor[0], wingdata_left.anglesMajor[0]], [self.intensities_lo, self.intensities_hi])
+            if (len(trackerdata_left.anglesMajor)>0):
+                self.plot1_edges_major_left.set_data([trackerdata_left.anglesMajor[0], trackerdata_left.anglesMajor[0]], [self.intensities_lo, self.intensities_hi])
             else:
                 self.plot1_edges_major_left.set_data([], [])
     
@@ -182,12 +182,12 @@ class WingPlotter:
             # Plot the right minor/major edge bars on plot2.
             self.plot2_limits_lo_right.set_data([self.limits_right[0], self.limits_right[0]], [self.diffs_lo, self.diffs_hi])
             self.plot2_limits_hi_right.set_data([self.limits_right[1], self.limits_right[1]], [self.diffs_lo, self.diffs_hi])
-            if (len(wingdata_right.anglesMinor)>0):
-                self.plot2_edges_minor_right.set_data([wingdata_right.anglesMinor[0], wingdata_right.anglesMinor[0]], [self.diffs_lo, self.diffs_hi])
+            if (len(trackerdata_right.anglesMinor)>0):
+                self.plot2_edges_minor_right.set_data([trackerdata_right.anglesMinor[0], trackerdata_right.anglesMinor[0]], [self.diffs_lo, self.diffs_hi])
             else:
                 self.plot2_edges_minor_right.set_data([], [])
-            if (len(wingdata_right.anglesMajor)>0):
-                self.plot2_edges_major_right.set_data([wingdata_right.anglesMajor[0], wingdata_right.anglesMajor[0]], [self.diffs_lo, self.diffs_hi])
+            if (len(trackerdata_right.anglesMajor)>0):
+                self.plot2_edges_major_right.set_data([trackerdata_right.anglesMajor[0], trackerdata_right.anglesMajor[0]], [self.diffs_lo, self.diffs_hi])
             else:
                 self.plot2_edges_major_right.set_data([], [])
             
@@ -195,17 +195,17 @@ class WingPlotter:
             # Plot the left minor/major edge bars on plot2.
             self.plot2_limits_lo_left.set_data([self.limits_left[0], self.limits_left[0]], [self.diffs_lo, self.diffs_hi])
             self.plot2_limits_hi_left.set_data([self.limits_left[1], self.limits_left[1]], [self.diffs_lo, self.diffs_hi])
-            if (len(wingdata_left.anglesMinor)>0):
-                self.plot2_edges_minor_left.set_data([wingdata_left.anglesMinor[0], wingdata_left.anglesMinor[0]], [self.diffs_lo, self.diffs_hi])
+            if (len(trackerdata_left.anglesMinor)>0):
+                self.plot2_edges_minor_left.set_data([trackerdata_left.anglesMinor[0], trackerdata_left.anglesMinor[0]], [self.diffs_lo, self.diffs_hi])
             else:
                 self.plot2_edges_minor_left.set_data([], [])
-            if (len(wingdata_left.anglesMajor)>0):
-                self.plot2_edges_major_left.set_data([wingdata_left.anglesMajor[0], wingdata_left.anglesMajor[0]], [self.diffs_lo, self.diffs_hi])
+            if (len(trackerdata_left.anglesMajor)>0):
+                self.plot2_edges_major_left.set_data([trackerdata_left.anglesMajor[0], trackerdata_left.anglesMajor[0]], [self.diffs_lo, self.diffs_hi])
             else:
                 self.plot2_edges_major_left.set_data([], [])
     
     
-            if (len(wingdata_right.angles)==len(wingdata_right.intensities)) and (len(wingdata_left.angles)==len(wingdata_left.intensities)) and (len(wingdata_right.angles)==len(wingdata_right.diffs)) and (len(wingdata_left.angles)==len(wingdata_left.diffs)):        
+            if (len(trackerdata_right.abscissa)==len(trackerdata_right.intensities)) and (len(trackerdata_left.abscissa)==len(trackerdata_left.intensities)) and (len(trackerdata_right.abscissa)==len(trackerdata_right.diffs)) and (len(trackerdata_left.abscissa)==len(trackerdata_left.diffs)):        
                 rv = (self.plot1_intensities_right, 
                       self.plot1_intensities_left, 
                       self.plot1_limits_lo_right, 
@@ -231,7 +231,7 @@ class WingPlotter:
             pass
         
         except Exception,e:
-            rospy.logwarn('Exception in plot_wingdata.update_plots() %s' % e)
+            rospy.logwarn('Exception in plot_trackerdata.update_plots() %s' % e)
 
         return rv
         

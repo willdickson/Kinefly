@@ -21,7 +21,7 @@ from cv_bridge import CvBridge, CvBridgeError
 from sensor_msgs.msg import Image
 from std_msgs.msg import Float32, Header, String
 
-from Kinefly.srv import SrvWingdata, SrvWingdataResponse, SrvTipdata, SrvTipdataResponse
+from Kinefly.srv import SrvTrackerdata, SrvTrackerdataResponse
 from Kinefly.msg import MsgFlystate, MsgState
 from Kinefly.cfg import kineflyConfig
 
@@ -796,7 +796,7 @@ class IntensityTrackedBodypart(object):
         self.roi       = None
         
         self.mask = Struct()
-        self.mask.roi = None
+        self.mask.img = None
         self.mask.sum = 1.0
         
         self.dt = np.inf
@@ -854,13 +854,13 @@ class IntensityTrackedBodypart(object):
         bgra  = bgra_dict['white']
         
         # Create the mask.
-        mask = np.zeros(shape, dtype=np.uint8)
-        cv2.ellipse(mask, (x, y), (r1, r2), int(np.rad2deg(angle)), 0, 360, bgra, cv.CV_FILLED)
-        self.windowMask.set_image(mask)
+        img = np.zeros(shape, dtype=np.uint8)
+        cv2.ellipse(img, (x, y), (r1, r2), int(np.rad2deg(angle)), 0, 360, bgra, cv.CV_FILLED)
+        self.windowMask.set_image(img)
         
         # Find the ROI of the mask.
-        xSum = np.sum(mask, 0)
-        ySum = np.sum(mask, 1)
+        xSum = np.sum(img, 0)
+        ySum = np.sum(img, 1)
         xMask = np.where(xSum>0)[0]
         yMask = np.where(ySum>0)[0]
         
@@ -878,8 +878,8 @@ class IntensityTrackedBodypart(object):
             self.mask.yMax = np.min([yMax, shape[0]-1])
             
             self.roi = np.array([self.mask.xMin, self.mask.yMin, self.mask.xMax, self.mask.yMax])
-            self.mask.roi = mask[self.mask.yMin:self.mask.yMax, self.mask.xMin:self.mask.xMax]
-            self.mask.sum = np.sum(self.mask.roi).astype(np.float32)
+            self.mask.img = img[self.mask.yMin:self.mask.yMax, self.mask.xMin:self.mask.xMax]
+            self.mask.sum = np.sum(self.mask.img).astype(np.float32)
     
             self.bValidMask = True
         else:
@@ -957,8 +957,8 @@ class IntensityTrackedBodypart(object):
                     self.imgRoiFg *= (255.0/float(max2))
                 
             # Apply the mask.
-            if (self.mask.roi is not None):
-                self.imgRoiFgMasked = cv2.bitwise_and(self.imgRoiFg, self.mask.roi)
+            if (self.mask.img is not None):
+                self.imgRoiFgMasked = cv2.bitwise_and(self.imgRoiFg, self.mask.img)
     
             self.windowFG.set_image(self.imgRoiFgMasked) 
         
@@ -1073,7 +1073,7 @@ class MotionTrackedBodypart(object):
         self.roi            = None
         
         self.mask       = Struct()
-        self.mask.roi   = None
+        self.mask.img   = None
         self.mask.sum   = 1.0
         self.mask.xMin = None
         self.mask.yMin = None
@@ -1128,7 +1128,7 @@ class MotionTrackedBodypart(object):
 #         pt3 = [params['gui']['left']['hinge']['x'], params['gui']['left']['hinge']['y']]
 #         pt4 = [params['right']['hinge']['x'], params['right']['hinge']['y']]
 #         ptBodyCenter_i = get_intersection(pt1,pt2,pt3,pt4)
-#         self.angleOutward_i = float(np.arctan2(self.ptHinge_i[1]-ptBodyCenter_i[1], self.ptHinge_i[0]-ptBodyCenter_i[0]))
+#         self.angleBodypart_i = float(np.arctan2(self.ptHinge_i[1]-ptBodyCenter_i[1], self.ptHinge_i[0]-ptBodyCenter_i[0]))
 
         # Compute the body-outward-facing angle, which is the angle to the current point from the forward body axis.
         if (self.name in ['head','abdomen']):
@@ -1136,21 +1136,21 @@ class MotionTrackedBodypart(object):
                             'abdomen':'head', 
                             'left':'right', 
                             'right':'left'}
-            self.angleOutward_i = float(np.arctan2(self.params['gui'][self.name]['hinge']['y']-self.params['gui'][nameRelative[self.name]]['hinge']['y'], 
+            self.angleBodypart_i = float(np.arctan2(self.params['gui'][self.name]['hinge']['y']-self.params['gui'][nameRelative[self.name]]['hinge']['y'], 
                                                    self.params['gui'][self.name]['hinge']['x']-self.params['gui'][nameRelative[self.name]]['hinge']['x']))
         else:
             ptBodyaxis_i = self.get_projection_onto_bodyaxis(self.ptHinge_i)
-            self.angleOutward_i = float(np.arctan2(self.params['gui'][self.name]['hinge']['y']-ptBodyaxis_i[1], 
+            self.angleBodypart_i = float(np.arctan2(self.params['gui'][self.name]['hinge']['y']-ptBodyaxis_i[1], 
                                                    self.params['gui'][self.name]['hinge']['x']-ptBodyaxis_i[0]))
 
-        self.angleOutward_b = self.angleOutward_i - self.angleBody_i
-        #rospy.logwarn('%s: %0.2f, %0.2f' % (self.name, self.angleOutward_i, self.angleOutward_b))
+        self.angleBodypart_b = self.angleBodypart_i - self.angleBody_i
+        #rospy.logwarn('%s: %0.2f, %0.2f' % (self.name, self.angleBodypart_i, self.angleBodypart_b))
 
         
-        cosAngleOutward_i = np.cos(self.angleOutward_i)
-        sinAngleOutward_i = np.sin(self.angleOutward_i)
-        self.R = np.array([[cosAngleOutward_i, -sinAngleOutward_i], 
-                           [sinAngleOutward_i, cosAngleOutward_i]])
+        cosAngleBodypart_i = np.cos(self.angleBodypart_i)
+        sinAngleBodypart_i = np.sin(self.angleBodypart_i)
+        self.R = np.array([[cosAngleBodypart_i, -sinAngleBodypart_i], 
+                           [sinAngleBodypart_i, cosAngleBodypart_i]])
 
         # Turn on/off the extra windows.
         self.windowBG.set_enable(self.params['gui']['windows'] and self.params['gui'][self.name]['track'] and self.params['gui'][self.name]['subtract_bg'])
@@ -1179,7 +1179,7 @@ class MotionTrackedBodypart(object):
     # Transform an angle from the bodypart frame to the fly body frame.
     #
     def transform_angle_b_from_p(self, angle_p):
-        angle_b =  self.sense * angle_p + self.angleOutward_b
+        angle_b =  self.sense * angle_p + self.angleBodypart_b
         return angle_b
 
 
@@ -1187,7 +1187,7 @@ class MotionTrackedBodypart(object):
     # Transform an angle from the fly body frame to the bodypart frame.
     #
     def transform_angle_p_from_b(self, angle_b):
-        angle_p =  self.sense * (angle_b - self.angleOutward_b)
+        angle_p =  self.sense * (angle_b - self.angleBodypart_b)
         return angle_p
 
 
@@ -1222,7 +1222,7 @@ class MotionTrackedBodypart(object):
     #
     def create_mask(self, shape):
         # Create the mask.
-        mask = np.zeros(shape, dtype=np.uint8)
+        img = np.zeros(shape, dtype=np.uint8)
         
         # Args for the ellipse calls.
         x = int(self.params['gui'][self.name]['hinge']['x'])
@@ -1233,15 +1233,15 @@ class MotionTrackedBodypart(object):
         lo = int(np.floor(np.rad2deg(self.angle_lo_i)))
         
         # Draw the mask.
-        cv2.ellipse(mask, (x, y), (r_outer, r_outer), 0, hi, lo, bgra_dict['white'], cv.CV_FILLED)
-        cv2.ellipse(mask, (x, y), (r_inner, r_inner), 0, 0, 360, bgra_dict['black'], cv.CV_FILLED)
-        mask = cv2.dilate(mask, np.ones([3,3])) # Make the mask one pixel bigger to account for pixel aliasing.
-        self.windowMask.set_image(mask)
+        cv2.ellipse(img, (x, y), (r_outer, r_outer), 0, hi, lo, bgra_dict['white'], cv.CV_FILLED)
+        cv2.ellipse(img, (x, y), (r_inner, r_inner), 0, 0, 360, bgra_dict['black'], cv.CV_FILLED)
+        img = cv2.dilate(img, np.ones([3,3])) # Make the mask one pixel bigger to account for pixel aliasing.
+        self.windowMask.set_image(img)
         
         
         # Find the ROI of the mask.
-        xSum = np.sum(mask, 0)
-        ySum = np.sum(mask, 1)
+        xSum = np.sum(img, 0)
+        ySum = np.sum(img, 1)
         x_list = np.where(xSum>0)[0]
         y_list = np.where(ySum>0)[0]
         
@@ -1259,8 +1259,8 @@ class MotionTrackedBodypart(object):
             self.mask.yMax = np.min([yMax, shape[0]-1])
             
             self.roi = np.array([self.mask.xMin, self.mask.yMin, self.mask.xMax, self.mask.yMax])
-            self.mask.roi = mask[self.mask.yMin:self.mask.yMax, self.mask.xMin:self.mask.xMax]
-            self.mask.sum = np.sum(self.mask.roi).astype(np.float32)
+            self.mask.img = img[self.mask.yMin:self.mask.yMax, self.mask.xMin:self.mask.xMax]
+            self.mask.sum = np.sum(self.mask.img).astype(np.float32)
             self.bValidMask = True  
 
         else:
@@ -1384,8 +1384,8 @@ class MotionTrackedBodypart(object):
             self.update_roi(image, bInvertColor)
 
             # Apply the mask.
-            if (self.imgRoiFg is not None) and (self.mask.roi is not None):
-                self.imgRoiFgMasked = cv2.bitwise_and(self.imgRoiFg, self.mask.roi) #self.imgRoiFg#
+            if (self.imgRoiFg is not None) and (self.mask.img is not None):
+                self.imgRoiFgMasked = cv2.bitwise_and(self.imgRoiFg, self.mask.img) #self.imgRoiFg#
                 #self.imgRoiFgMasked  = cv2.multiply(self.imgRoiFg.astype(np.float32), self.wfnRoi)
                 
                 self.imgFinal = self.imgRoiFgMasked 
@@ -1568,8 +1568,8 @@ class MotionTrackedBodypartPolar(MotionTrackedBodypart):
         
     def update_polarimage(self):
         if (self.imgRoiFgMasked is not None):
-            theta_0a = self.angle_lo_i - self.angleOutward_i
-            theta_1a = self.angle_hi_i - self.angleOutward_i
+            theta_0a = self.angle_lo_i - self.angleBodypart_i
+            theta_1a = self.angle_hi_i - self.angleBodypart_i
             
             radius_mid = (self.params['gui'][self.name]['radius_outer'] + self.params['gui'][self.name]['radius_inner'])/2.0
             dr         = (self.params['gui'][self.name]['radius_outer'] - self.params['gui'][self.name]['radius_inner'])/2.0
@@ -1582,7 +1582,7 @@ class MotionTrackedBodypartPolar(MotionTrackedBodypart):
                                                      dradiusStrip=int(dr),
                                                      amplifyRho = 1.0,
                                                      rClip = self.rClip,
-                                                     angleEllipse=self.angleOutward_i,
+                                                     angleEllipse=self.angleBodypart_i,
                                                      theta_0 = min(theta_0a,theta_1a), 
                                                      theta_1 = max(theta_0a,theta_1a),
                                                      amplifyTheta = 1.0)
@@ -2411,21 +2411,20 @@ class EdgeDetectorByIntensityProfile(object):
         self.sense = sense
 
 
-    # find()
+    # detect()
     # Get the horizontal pixel position of all the vertical edge pairs that exceed a magnitude threshold.
     #
-    def find(self, image):
+    def detect(self, image):
         axis = 0
         intensitiesRaw = np.sum(image, axis).astype(np.float32)
         intensitiesRaw /= (255.0*image.shape[axis]) # Put into range [0,1]
         self.intensities = intensitiesRaw#filter_median(intensitiesRaw, q=1)
         
         # Compute the intensity gradient. 
-        n = 5
-        diffRaw = self.intensities[n:] - self.intensities[:-n]
-        diffF = diffRaw#filter_median(diffRaw, q=1)
-        #diffF -= np.mean(diffF)
-        self.diff = np.append(diffF, np.zeros(n))
+        n = 2
+        a = np.append(self.intensities[n:], self.intensities[-n]*np.ones(n))
+        b = np.append(self.intensities[n]*np.ones(n), self.intensities[:-n])
+        self.diff = b-a
         
         # Make copies for positive-going and negative-going edges.
         diffP = copy.copy( self.sense*diffF)
@@ -2450,7 +2449,7 @@ class EdgeDetectorByIntensityProfile(object):
         abs_list = [absP, absN] 
         iCount = 0
         
-        # While there are edges to find, put them in lists in order of decending strength.
+        # While there are edges to detect, put them in lists in order of decending strength.
         while ((0.0 < np.max(diffP)) or (0.0 < np.max(diffN))) and (iCount < nCount):
 
             # If there's an edge in this diff.
@@ -2584,7 +2583,7 @@ class EdgeDetectorByIntensityProfile(object):
 ###############################################################################
 # EdgeTrackerByIntensityProfile()
 # Track radial bodypart edges using the gradient of the image intensity.  
-# i.e. Compute how the intensity changes with angle, and find the locations
+# i.e. Compute how the intensity changes with angle, and detect the locations
 # of the greatest change.  Usually used for Wings.
 #
 class EdgeTrackerByIntensityProfile(MotionTrackedBodypartPolar):
@@ -2598,7 +2597,7 @@ class EdgeTrackerByIntensityProfile(MotionTrackedBodypartPolar):
         self.set_params(params)
 
         # Services, for live intensities plots via live_wing_histograms.py
-        self.service_wingdata    = rospy.Service('wingdata_'+name, SrvWingdata, self.serve_wingdata_callback)
+        self.service_trackerdata    = rospy.Service('trackerdata_'+name, SrvTrackerdata, self.serve_trackerdata_callback)
     
     
     # set_params()
@@ -2636,7 +2635,7 @@ class EdgeTrackerByIntensityProfile(MotionTrackedBodypartPolar):
         # Get the rotation & expansion between images.
         if (imgNow is not None):
             # Pixel position and strength of the edges.
-            (edges, gradients) = self.detector.find(imgNow)
+            (edges, gradients) = self.detector.detect(imgNow)
 
             anglePerPixel = (self.params['gui'][self.name]['angle_hi']-self.params['gui'][self.name]['angle_lo']) / float(imgNow.shape[1])
 
@@ -2690,7 +2689,7 @@ class EdgeTrackerByIntensityProfile(MotionTrackedBodypartPolar):
             self.windowEdges.show()
         
         
-    def serve_wingdata_callback(self, request):
+    def serve_trackerdata_callback(self, request):
         abscissa = np.linspace(self.params['gui'][self.name]['angle_lo'], self.params['gui'][self.name]['angle_hi'], len(self.detector.intensities))
         
             
@@ -2703,7 +2702,7 @@ class EdgeTrackerByIntensityProfile(MotionTrackedBodypartPolar):
             angles.append(angle_b)
             gradients.append(gradient)
 
-        return SrvWingdataResponse(abscissa, self.detector.intensities, self.detector.diff, angles, gradients)
+        return SrvTrackerdataResponse(self.color, abscissa, self.detector.intensities, self.detector.diff, angles, gradients)
         
         
 # end class EdgeTrackerByIntensityProfile
@@ -2712,57 +2711,91 @@ class EdgeTrackerByIntensityProfile(MotionTrackedBodypartPolar):
 ###############################################################################
 ###############################################################################
 # Find the N largest edges in the image, that go through the hinge point.
+# This is a reduced Hough transform, in that it only detects lines through
+# the hinge, rather than any line.
 #
 class EdgeDetectorByHoughTransform(object):
-    def __init__(self, threshold=0.0, n_edges_max=1000, sense=1, ptHinge=(0,0)):
-        self.set_params(threshold, n_edges_max, sense, ptHinge)
+    def __init__(self, name, params, sense=1, angleBodypart_i=0.0, angleBodypart_b=0.0):
+        self.set_params(name, params, sense, angleBodypart_i, angleBodypart_i)
 
 
-    def set_params(self, threshold, n_edges_max, sense, ptHinge=(0,0), shapeImage=None):
-        self.threshold = threshold
-        self.n_edges_max = n_edges_max
+    def set_params(self, name, params, sense, angleBodypart_i, angleBodypart_b, shapeImage=None, mask=None):
+        self.name = name
+        self.params = params
         self.sense = sense
-        self.ptHinge = ptHinge
-
-        # Get the angles from the hinge to each pixel.
-        self.angles = self.CalcAngles(shapeImage)
+        self.angleBodypart_i = angleBodypart_i
+        self.angleBodypart_b = angleBodypart_b
+        self.intensities = []
+        self.mask = mask
+        
+        # Reset the angles from the hinge to each pixel.
+        self.imgAngles = None
             
             
     def CalcAngles(self, shape):
-        if (shape is not None):        
-            x = np.linspace(0, shape[1]-1, shape[1]) - self.ptHinge[0]
-            y = np.linspace(0, shape[0]-1, shape[0]) - self.ptHinge[1]
-            (xMesh,yMesh) = np.meshgrid(x,y)
-            angles = np.arctan2(yMesh,xMesh) # The angle from the hinge at each pixel.
+        if (shape is not None):
+            cTheta = np.cos(-self.angleBodypart_i)       
+            sTheta = np.sin(-self.angleBodypart_i)       
+            R = np.array([[cTheta, -sTheta],
+                          [sTheta,  cTheta]])  
+            ptHinge = (self.params['gui'][self.name]['hinge']['x']-self.mask.xMin, self.params['gui'][self.name]['hinge']['y']-self.mask.yMin)
+            
+            xRel = np.linspace(0, shape[1]-1, shape[1]) - ptHinge[0]
+            yRel = np.linspace(0, shape[0]-1, shape[0]) - ptHinge[1]
+            (xMesh,yMesh) = np.meshgrid(xRel,yRel)
+            xyMeshRot = np.dot(R,np.array([xMesh.flatten(),yMesh.flatten()]))
+            xMeshRot = xyMeshRot[0].reshape(xMesh.shape)
+            yMeshRot = xyMeshRot[1].reshape(yMesh.shape)
+            angles = self.sense * np.arctan2(yMeshRot,xMeshRot) # The angle from the hinge to each pixel.
         else:
             angles = None
         
         return angles
         
         
-    # find()
-    # Get the horizontal pixel position of all the vertical edge pairs that exceed a magnitude threshold.
+    # detect()
+    # Get the angles of all the edges that go through the hinge point.
     #
-    def find(self, image):
-        if (self.angles is None):
-            self.angles = self.CalcAngles(image.shape)
+    def detect(self, image):
+        if (self.imgAngles is None) or (self.imgAngles.shape != image.shape):
+            self.imgAngles = self.CalcAngles(image.shape)
         
-        (H,edges) = np.histogram(self.angles, bins=100, weights=image)
+        self.imgMasked = cv2.bitwise_and(image, self.mask.img)
+        
+        # 1 bin per degree.  Note that the bins must be large enough so that the number of pixels in each bin are
+        # approximately equal.  If the bins are too small, you'll get false detections due simply to the variation
+        # in the number of pixels counted.
+        nBins = int(1 * 180/np.pi*(self.params['gui'][self.name]['angle_hi'] - self.params['gui'][self.name]['angle_lo']))
+        
+         
+        lo = self.sense * (self.params['gui'][self.name]['angle_lo'] - self.angleBodypart_b)
+        hi = self.sense * (self.params['gui'][self.name]['angle_hi'] - self.angleBodypart_b)
+        (self.intensities, edges) = np.histogram(self.imgAngles, 
+                                                 bins=nBins, 
+                                                 range=(np.min([lo, hi]),np.max([lo, hi])), 
+                                                 weights=self.imgMasked.astype(np.float32),
+                                                 density=True)
+        
+        # Center the angles on the edges.
         angles = (edges[1:]-edges[:-1])/2 + edges[:-1]
-        #self.accumulator = (image * self.angles)
-        self.accumulator = (image * self.angles)
-        self.accumulator -= np.min(self.accumulator)
-        self.accumulator *= (255.0 / np.max(self.accumulator))
+
+        # Compute the intensity gradient. 
+        n = 1
+        a = np.append(self.intensities[n:], self.intensities[-n]*np.ones(n))
+        b = np.append(self.intensities[n]*np.ones(n), self.intensities[:-n])
+        self.diff = b-a
         
+        # Get the N largest values.
+        dataset = np.abs(self.diff) #self.intensities
         angles_sorted = []
         magnitudes_sorted = []
-        for i in range(self.n_edges_max):
-            iMax         = np.argmax(H)
+        dataset2 = copy.deepcopy(dataset)
+        for i in range(self.params['n_edges_max']):
+            iMax         = np.argmax(dataset2)
             angles_sorted.append(angles[iMax])
-            magnitudes_sorted.append(H[iMax])
-            angles[iMax] = 0
+            magnitudes_sorted.append(dataset2[iMax])
+            dataset2[iMax] = 0
         
-    
         return (angles_sorted, magnitudes_sorted)
         
            
@@ -2773,17 +2806,20 @@ class EdgeDetectorByHoughTransform(object):
 ###############################################################################
 ###############################################################################
 # EdgeTrackerByHoughTransform()
-# Track radial bodypart edges using the Hough transform to find lines through the hinge.  
+# Track radial bodypart edges using the Hough transform to detect lines through the hinge.  
 #
 class EdgeTrackerByHoughTransform(MotionTrackedBodypart):
     def __init__(self, name=None, params={}, color='white', bEqualizeHist=False):
         MotionTrackedBodypart.__init__(self, name, params, color, bEqualizeHist)
         
         self.name       = name
-        self.detector   = EdgeDetectorByHoughTransform()
+        self.detector   = EdgeDetectorByHoughTransform(self.name, params)
         self.state      = MsgState()
         self.windowEdges = ImageWindow(False, self.name+'Edges')
         self.set_params(params)
+
+        # Services, for live intensities plots via live_wing_histograms.py
+        self.service_trackerdata    = rospy.Service('trackerdata_'+self.name, SrvTrackerdata, self.serve_trackerdata_callback)
 
     
     # set_params()
@@ -2809,33 +2845,30 @@ class EdgeTrackerByHoughTransform(MotionTrackedBodypart):
         else:
             self.sense = 1  
 
-        rospy.logwarn((self.mask.xMin, self.mask.yMin))
-        if (self.mask.xMin is not None):
-            ptHinge = (self.params['gui'][self.name]['hinge']['x']-self.mask.xMin, self.params['gui'][self.name]['hinge']['y']-self.mask.yMin)
-            self.detector.set_params(params[self.name]['threshold'], params['n_edges_max'], self.sense, ptHinge)
-            self.windowEdges.set_enable(self.params['gui']['windows'] and self.params['gui'][self.name]['track'])
+        self.windowEdges.set_enable(self.params['gui']['windows'] and self.params['gui'][self.name]['track'])
+        self.bValidDetector = False
         
     
         
     # update_state()
     #
     def update_state(self):
-        imgNow = self.imgRoiFg #Masked
+        imgNow = self.imgRoiFgMasked
         
         if (imgNow is not None):
             # Pixel position and strength of the edges.
-            (angles, magnitudes) = self.detector.find(imgNow)
-            self.windowEdges.set_image(self.detector.accumulator)
-
-            # Put angle into the wing frame.
+            (angles, magnitudes) = self.detector.detect(imgNow)
+            self.windowEdges.set_image(self.detector.imgMasked)
+            
+            # Put angle into the bodypart frame.
             self.state.angles = []
-            self.state.gradients = []
+            self.state.gradients = []         
             for i in range(len(angles)):
                 angle = angles[i]
                 magnitude = magnitudes[i]
                 angle_b = self.params['gui'][self.name]['angle_lo'] + angle
                 angle_p = (self.transform_angle_p_from_b(angle_b) + np.pi) % (2*np.pi) - np.pi
-                self.state.angles.append(angle_p)
+                self.state.angles.append(angle)
                 self.state.gradients.append(magnitude)
                 
 
@@ -2849,10 +2882,19 @@ class EdgeTrackerByHoughTransform(MotionTrackedBodypart):
         MotionTrackedBodypart.update(self, dt, image, bInvertColor)
 
         if (self.params['gui'][self.name]['track']):
-            self.update_state()
-            
-            
+            if (not self.bValidDetector):            
+                if (self.mask.xMin is not None):
+                    
+                    self.detector.set_params(self.name,
+                                             self.params,
+                                             self.sense,
+                                             self.angleBodypart_i,
+                                             self.angleBodypart_b,
+                                             image.shape,
+                                             self.mask)
+                    self.bValidDetector = True
     
+            self.update_state()
     
     # draw()
     # Draw the outline.
@@ -2875,6 +2917,24 @@ class EdgeTrackerByHoughTransform(MotionTrackedBodypart):
                 bgra = tuple(0.5*np.array(bgra))
                 
             self.windowEdges.show()
+
+        
+    def serve_trackerdata_callback(self, request):
+        if (len(self.detector.intensities)>0):
+            diffs = self.detector.diff #np.zeros(len(self.detector.intensities))
+            abscissa = np.linspace(self.params['gui'][self.name]['angle_lo'], self.params['gui'][self.name]['angle_hi'], len(self.detector.intensities))
+            abscissa -= self.angleBodypart_b
+            abscissa *= self.sense
+    
+            markersH = self.state.angles
+            markersV = self.state.gradients#[self.params[self.name]['threshold']]
+            
+                
+            rv = SrvTrackerdataResponse(self.color, abscissa, self.detector.intensities, diffs, markersH, markersV)
+        else:
+            rv = SrvTrackerdataResponse()
+            
+        return rv
         
         
         
@@ -2899,10 +2959,10 @@ class TipDetector(object):
         self.sense = sense
 
 
-    # find()
+    # detect()
     # Get the pixel position in the given image of the bottommost thresholded value.
     #
-    def find(self, image):
+    def detect(self, image):
         #(threshold, img) = cv2.threshold(image, int(self.threshold*255), 255, cv2.THRESH_TOZERO) # BINARY)#
         (threshold, img) = (0, image)
         
@@ -2911,10 +2971,10 @@ class TipDetector(object):
         self.intensities /= (255.0 * img.shape[axis]) # Put into range [0,1]
 
         # Compute the intensity gradient. 
-        n = 5
-        diffRaw = self.intensities[n:] - self.intensities[:-n]
-        diffF = np.abs(diffRaw)
-        self.diff = np.append(diffF, np.zeros(n))
+        n = 2
+        a = np.append(self.intensities[n:], self.intensities[-n]*np.ones(n))
+        b = np.append(self.intensities[n]*np.ones(n), self.intensities[:-n])
+        self.diff = b-a
         
         
         
@@ -2956,7 +3016,7 @@ class TipTracker(MotionTrackedBodypartPolar):
         self.iRadius = 0
 
         # Services, for live intensities plots via live_wing_histograms.py
-        self.service_tipdata    = rospy.Service('tipdata_'+self.name, SrvTipdata, self.serve_tipdata_callback)
+        self.service_tipdata    = rospy.Service('trackerdata_'+self.name, SrvTrackerdata, self.serve_tipdata_callback)
 
     
     # set_params()
@@ -2992,7 +3052,7 @@ class TipTracker(MotionTrackedBodypartPolar):
         # Get the rotation & expansion between images.
         if (imgNow is not None):
             # Pixel position and strength of the edges.
-            (self.iAngle, self.iRadius) = self.detector.find(imgNow)
+            (self.iAngle, self.iRadius) = self.detector.detect(imgNow)
 
             if (self.iAngle is not None) and (self.iRadius is not None):
                 # Convert pixel to angle units, and put angle into the wing frame.
@@ -3060,14 +3120,14 @@ class TipTracker(MotionTrackedBodypartPolar):
         diffs = self.detector.diff
         abscissa = range(len(intensities))
         if (self.iRadius is not None):
-            detectionH = self.iRadius
+            markersH = self.iRadius
         else:
-            detectionH = 0
+            markersH = 0
             
-        detectionV = self.params[self.name]['threshold']
+        markersV = self.params[self.name]['threshold']
         
             
-        return SrvTipdataResponse(self.color, abscissa, intensities, diffs, detectionH, detectionV)
+        return SrvTrackerdataResponse(self.color, abscissa, intensities, diffs, markersH, markersV)
         
         
 # end class TipTracker
@@ -3112,7 +3172,7 @@ class MainWindow:
                     'n_queue_images':2,
                     'use_gui':True,                     # You can turn off the GUI to speed the framerate.
                     'scale_image':1.0,                  # Reducing the image scale will speed the framerate.
-                    'n_edges_max':1,                    # Max number of edges per wing to find, subject to threshold.
+                    'n_edges_max':1,                    # Max number of edges per wing to detect, subject to threshold.
                     'rc_background':1000.0,             # Time constant of the moving average background.
                     'wingbeat_min':180,                 # Bounds for wingbeat frequency measurement.
                     'wingbeat_max':220,
@@ -3960,9 +4020,9 @@ class MainWindow:
                                                                               np.linalg.norm(bodypartSelected.ptHinge_i - ptMouse)))
                 
             # Make angles relative to bodypart origin.
-            angle_lo_b -= bodypartSelected.angleOutward_b
+            angle_lo_b -= bodypartSelected.angleBodypart_b
             angle_lo_b = (angle_lo_b+np.pi) % (2.0*np.pi) - np.pi
-            angle_hi_b -= bodypartSelected.angleOutward_b
+            angle_hi_b -= bodypartSelected.angleBodypart_b
             angle_hi_b = (angle_hi_b+np.pi) % (2.0*np.pi) - np.pi
             
             # Switch to the other handle.
@@ -3974,8 +4034,8 @@ class MainWindow:
             paramsScaled['gui'][partnameSelected]['angle_hi'] = max(angle_lo_b, angle_hi_b)
             
             # Make angles relative to fly origin. 
-            paramsScaled['gui'][partnameSelected]['angle_lo'] += bodypartSelected.angleOutward_b
-            paramsScaled['gui'][partnameSelected]['angle_hi'] += bodypartSelected.angleOutward_b
+            paramsScaled['gui'][partnameSelected]['angle_lo'] += bodypartSelected.angleBodypart_b
+            paramsScaled['gui'][partnameSelected]['angle_hi'] += bodypartSelected.angleBodypart_b
             paramsScaled['gui'][partnameSelected]['angle_lo'] = (paramsScaled['gui'][partnameSelected]['angle_lo']+np.pi) % (2.0*np.pi) - np.pi
             paramsScaled['gui'][partnameSelected]['angle_hi'] = (paramsScaled['gui'][partnameSelected]['angle_hi']+np.pi) % (2.0*np.pi) - np.pi
             
