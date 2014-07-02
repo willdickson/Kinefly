@@ -1306,6 +1306,12 @@ class MotionTrackedBodypart(object):
                 if (self.imgFullBackground is not None) and (self.roi is not None):
                     self.imgRoiBackground = copy.deepcopy(self.imgFullBackground[self.roi[1]:self.roi[3], self.roi[0]:self.roi[2]])
                     
+            if (self.imgRoiBackground is not None):
+                self.imgHeadroom = (255 - self.imgRoiBackground).astype(np.float32) / 255.0
+            else:
+                self.imgHeadroom = None
+                
+            
             self.windowBG.set_image(self.imgRoiBackground)
         
 
@@ -1387,6 +1393,7 @@ class MotionTrackedBodypart(object):
             if (self.imgRoiFg is not None) and (self.mask.img is not None):
                 self.imgRoiFgMasked = cv2.bitwise_and(self.imgRoiFg, self.mask.img) #self.imgRoiFg#
                 #self.imgRoiFgMasked  = cv2.multiply(self.imgRoiFg.astype(np.float32), self.wfnRoi)
+                self.imgRoiFgMasked  = cv2.multiply(self.imgRoiFgMasked.astype(np.float32), self.imgHeadroom)
                 
                 self.imgFinal = self.imgRoiFgMasked 
             else:

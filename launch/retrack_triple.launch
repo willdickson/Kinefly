@@ -7,7 +7,7 @@
     <param name="use_sim_time"                 type="bool" value="true"/>
 
     <arg name="name" default="" />
-    <node name="rosbag"  pkg="rosbag"   type="play" args="--clock --rate=0.25 $(arg name)" required="true" />
+    <node name="rosbag"  pkg="rosbag"   type="play" args="--clock --rate=1.0 $(arg name)" required="true" />
     <node name="republisher1" pkg="image_transport" type="republish" args="compressed raw in:=camera1/image_raw out:=camera1/image_raw" />
     <node name="republisher2" pkg="image_transport" type="republish" args="compressed raw in:=camera2/image_raw out:=camera2/image_raw" />
     <node name="republisher3" pkg="image_transport" type="republish" args="compressed raw in:=camera3/image_raw out:=camera3/image_raw" />
@@ -15,19 +15,19 @@
 
 
     <include file="$(find Kinefly)/launch/params_kinefly_1_pin.launch"                      ns="kinefly1_pin" />
-    <param name="n_queue_images"                          type="int"    value="10"          ns="kinefly1_pin"/>
+    <param name="kinefly1_pin/n_queue_images"                          type="int"    value="10" />
     <node name="flystate2phidgetsanalog"  pkg="Kinefly"   type="flystate2phidgetsanalog.py" ns="kinefly1_pin" />
     <node name="kinefly1_pin"            pkg="Kinefly"   type="kinefly.py"                                    required="true" />
 
 
     <include file="$(find Kinefly)/launch/params_kinefly_2_pin.launch"                      ns="kinefly2_pin" />
-    <param name="n_queue_images"                          type="int"    value="10"          ns="kinefly2_pin"/>
+    <param name="kinefly2_pin/n_queue_images"                          type="int"    value="10" />
     <node name="flystate2phidgetsanalog"  pkg="Kinefly"   type="flystate2phidgetsanalog.py" ns="kinefly2_pin"  />
     <node name="kinefly2_pin"            pkg="Kinefly"   type="kinefly.py"                                    required="true" />
 
 
     <include file="$(find Kinefly)/launch/params_kinefly_3_pin.launch"                      ns="kinefly3_pin" />
-    <param name="n_queue_images"                          type="int"    value="10"          ns="kinefly3_pin"/>
+    <param name="kinefly3_pin/n_queue_images"                          type="int"    value="10" />
     <node name="flystate2phidgetsanalog"  pkg="Kinefly"   type="flystate2phidgetsanalog.py" ns="kinefly3_pin" />
     <node name="kinefly3_pin"            pkg="Kinefly"   type="kinefly.py"                                    required="true"  />
 

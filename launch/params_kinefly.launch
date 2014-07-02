@@ -7,7 +7,7 @@
     <param name="parameterfile"      type="string" value="$(env HOME)/kinefly.yaml" />
     <param name="filenameBackground" type="string" value="$(env HOME)/kinefly.png" />
     
-    <param name="image_topic"        type="string" value="/camera/image_mono" />
+    <param name="image_topic"        type="string" value="/camera/image_raw" />
     <param name="n_queue_images"     type="int"    value="2" />
     <param name="n_edges_max"        type="int"    value="2" />
     <param name="rc_background"      type="double" value="1000" />

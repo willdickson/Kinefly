@@ -1,20 +1,19 @@
 <launch>
 	<!-- ========================================================== -->
-	<!-- Retrack a .bag file with 3 camera image streams and        --> 
-	<!-- stimulus voltage recording.                                -->
+	<!-- Retrack a .bag file      --> 
 	<!-- ========================================================== -->
 
     <param name="use_sim_time"                 type="bool" value="true"/>
 
     <arg name="name" default="" />
-    <node name="rosbag"  pkg="rosbag"   type="play" args="-s 50 -u 120 --clock --rate=1.0 $(arg name)" required="true" />
-    <node name="republisher3" pkg="image_transport" type="republish" args="compressed raw in:=camera3/image_raw out:=camera3/image_raw" />
+    <node name="rosbag"  pkg="rosbag"   type="play" args="-s 45 -u 120 --clock --rate=1.0 $(arg name)" required="true" />
+    <node name="republisher" pkg="image_transport" type="republish" args="compressed raw in:=camera3/image_raw out:=camera/image_raw" />
 
 
 
-    <include file="$(find Kinefly)/launch/params_kinefly_3_pin.launch"                      ns="kinefly3_pin" />
-    <param name="kinefly3_pin/n_queue_images"  type="int"  value="10" />
-    <node name="flystate2phidgetsanalog"  pkg="Kinefly"   type="flystate2phidgetsanalog.py" ns="kinefly3_pin" />
-    <node name="kinefly3_pin"            pkg="Kinefly"    type="kinefly.py"                                    required="true"  />
+    <include file="$(find Kinefly)/launch/params_kinefly.launch"                      ns="kinefly" />
+    <param name="kinefly/n_queue_images"  type="int"  value="10" />
+    <node name="flystate2phidgetsanalog"  pkg="Kinefly"   type="flystate2phidgetsanalog.py" ns="kinefly" />
+    <node name="kinefly"            pkg="Kinefly"    type="kinefly.py"                                    required="true"  />
 
 </launch>
