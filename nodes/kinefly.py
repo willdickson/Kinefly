@@ -2398,10 +2398,9 @@ class AreaTracker(MotionTrackedBodypartPolar):
 # Find the N largest gradients in the horizontal intensity profile of an image.
 #
 class EdgeDetectorByIntensityProfile(object):
-    def __init__(self, threshold=0.0, n_edges_max=1000, sense=1):
+    def __init__(self, threshold=0.0, n_edges_max=100, sense=1):
         self.intensities = []
         self.diff = []
-        self.diffF = []
         self.set_params(threshold, n_edges_max, sense)
 
 
@@ -2427,8 +2426,8 @@ class EdgeDetectorByIntensityProfile(object):
         self.diff = b-a
         
         # Make copies for positive-going and negative-going edges.
-        diffP = copy.copy( self.sense*diffF)
-        diffN = copy.copy(-self.sense*diffF)
+        diffP = copy.copy( self.sense*self.diff)
+        diffN = copy.copy(-self.sense*self.diff)
 
         # Threshold the positive and negative diffs.
         iZero = np.where(diffP < self.threshold)[0] # 4*np.std(diffP))[0] #
@@ -2949,7 +2948,6 @@ class TipDetector(object):
     def __init__(self, threshold=0.0, sense=1):
         self.intensities = []
         self.diff = []
-        self.diffF = []
         self.set_params(threshold, sense)
         self.imgThreshold = None
 
