@@ -1,20 +1,26 @@
 <launch>
 
     <!-- ========================================================== -->
-    <!-- This file launches the hardware rig you are using,         -->
-    <!-- based on the environment variable "RIG".                   -->
+    <!-- This file launches Kinefly for the hardware rig you        -->
+    <!-- are using, based on the environment variable "RIG".        -->
     <!--                                                            -->
-    <!-- If environment var RETRACK is set to 1,                    -->
-    <!-- (i.e. "export RETRACK=1", then don't include the hardware. -->
+    <!-- If environment var RETRACK is set to 1, and BAGFILE is     -->
+    <!-- set to a file (i.e. "export RETRACK=1" and "export         -->
+    <!-- BAGFILE=/path/to/file.bag"), then it uses the .bag         -->
+    <!-- file instead of the camera(s).  To retrack a bunch of      -->
+    <!-- bag files, use the Kinefly/retracker program.              -->
     <!--                                                            -->
-    <!-- Some examples:                                             -->
-    <!-- export RIG=bigtop                                          -->
-    <!-- export RIG=colosseum                                       -->
-    <!-- export RIG=racetrack                                       -->
-    <!-- export RIG=breadpan                                        -->
+    <!-- An example:                                                -->
+    <!-- export RIG=pintether                                       -->
+    <!-- export RETRACK=1                                           -->
+    <!-- export BAGFILE=/home/rancher/bagfiles/12345.bag            -->
+    <!-- roslaunch Kinefly main.launch                              -->
     <!--                                                            -->
     <!-- ========================================================== -->
     
-    <include file="$(find Kinefly)/launch/$(env RIG)/main.launch" unless="$(optenv RETRACK 0)" />
+    <include file="$(find Kinefly)/launch/$(env RIG)/source_camera.launch" unless="$(optenv RETRACK 0)" />
+    <include file="$(find Kinefly)/launch/$(env RIG)/source_bagfile.launch" if="$(optenv RETRACK 0)" />
      
+    <include file="$(find Kinefly)/launch/$(env RIG)/main_.launch" />
+
 </launch>

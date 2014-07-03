@@ -1,12 +1,9 @@
 <launch>
 	<!-- ========================================================== -->
-	<!-- Launch everything needed for Kinefly.                      -->
+	<!-- Launch everything needed for Kinefly, except the           -->
+    <!-- source image streams.                                      -->
 	<!-- ========================================================== -->
 
-
-    <include file="$(find Kinefly)/launch/camera_1394.launch" />
-
-    <include file="$(find Kinefly)/launch/polarization/params_camera1394.launch"   ns="camera" />
 
     <include file="$(find Kinefly)/launch/polarization/params_kinefly.launch" ns="kinefly" />
 

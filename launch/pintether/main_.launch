@@ -1,22 +1,12 @@
 <launch>
 	<!-- ========================================================== -->
-	<!-- Launch everything needed for Kinefly, 3 cameras with the   --> 
-	<!-- pin tether.                                                -->
+	<!-- Launch everything needed for Kinefly, except the           -->
+    <!-- source image streams.                                      -->
 	<!-- ========================================================== -->
-    <param name="use_sim_time"                 type="bool" value="false"/>
 
-
-    <include file="$(find Kinefly)/launch/camera_ethernet_1.launch" />
-    <include file="$(find Kinefly)/launch/camera_ethernet_2.launch" />
-    <include file="$(find Kinefly)/launch/camera_ethernet_3.launch" />
-
-    <include file="$(find Kinefly)/launch/pintether/params_camera_1.launch"                     ns="camera1" />
-    <include file="$(find Kinefly)/launch/pintether/params_camera_2.launch"                     ns="camera2" />
-    <include file="$(find Kinefly)/launch/pintether/params_camera_3.launch"                     ns="camera3" />
-
-    <include file="$(find Kinefly)/launch/pintether/params_kinefly_1.launch"                    ns="kinefly1_pin" />
-    <include file="$(find Kinefly)/launch/pintether/params_kinefly_2.launch"                    ns="kinefly2_pin" />
-    <include file="$(find Kinefly)/launch/pintether/params_kinefly_3.launch"                    ns="kinefly3_pin" />
+    <include file="$(find Kinefly)/launch/$(env RIG)/params_kinefly_1.launch"                    ns="kinefly1_pin" />
+    <include file="$(find Kinefly)/launch/$(env RIG)/params_kinefly_2.launch"                    ns="kinefly2_pin" />
+    <include file="$(find Kinefly)/launch/$(env RIG)/params_kinefly_3.launch"                    ns="kinefly3_pin" />
 
 
     <node name="flystate2phidgetsanalog"  pkg="Kinefly"   type="flystate2phidgetsanalog.py" ns="kinefly1_pin" />
