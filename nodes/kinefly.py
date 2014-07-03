@@ -1390,10 +1390,10 @@ class MotionTrackedBodypart(object):
             self.update_roi(image, bInvertColor)
 
             # Apply the mask.
-            if (self.imgRoiFg is not None) and (self.mask.img is not None):
-                self.imgRoiFgMasked = cv2.bitwise_and(self.imgRoiFg, self.mask.img) #self.imgRoiFg#
-                #self.imgRoiFgMasked  = cv2.multiply(self.imgRoiFg.astype(np.float32), self.wfnRoi)
-                self.imgRoiFgMasked  = cv2.multiply(self.imgRoiFgMasked.astype(np.float32), self.imgHeadroom)
+            if (self.imgRoiFg is not None) and (self.imgHeadroom is not None) and (self.mask.img is not None):
+#                self.imgRoiFg  = cv2.multiply(self.imgRoiFg.astype(np.float32), self.imgHeadroom)
+                self.imgRoiFgMasked = cv2.bitwise_and(self.imgRoiFg.astype(self.mask.img.dtype), self.mask.img)
+                #self.imgRoiFgMasked  = cv2.multiply(self.imgRoiFg.astype(self.wfnRoi.dtype), self.wfnRoi)
                 
                 self.imgFinal = self.imgRoiFgMasked 
             else:
@@ -2286,7 +2286,9 @@ class AreaTracker(MotionTrackedBodypartPolar):
             # take that image as the new origin image.  Thus driving the origin image 
             # toward the midpoint image over time.
             if (self.params[self.name]['autozero']) and (self.iCount>100):
-                # If angle is closer than the mean of (hi,lo), then take a new initial image, and shift the (hi,lo)
+                # If we see a current angle that is closer to the mask midpoint than the ref angle
+                # (defined as the mipoint of the movement range), then take a new comparison image, and 
+                # shift the movement range (so that the ref angle becomes the current angle).
                 angleRef_p = (self.stateHi_p.angles[0] + self.stateLo_p.angles[0])/2.0
 
                 if (angleRef_p < self.state.angles[0] < self.stateOrigin_p.angles[0]) or (self.stateOrigin_p.angles[0] < self.state.angles[0] < angleRef_p):

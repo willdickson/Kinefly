@@ -1,0 +1,18 @@
+<launch>
+  <param name="guid"                 type="string" value="Basler-21287890" />  <!-- Defaults to first camera found. -->
+  
+  <param name="Acquire"              type="bool"   value="true"/>
+  <param name="ExposureAuto"         type="string" value="Off"/>
+  <param name="GainAuto"             type="string" value="Off"/>
+  <param name="ExposureTimeAbs"      type="double" value="10000"/>
+  <param name="Gain"                 type="double" value="1.0"/>
+  <param name="AcquisitionMode"      type="string" value="Continuous"/>
+  <param name="AcquisitionFrameRate" type="double" value="100"/>
+  <param name="TriggerMode"          type="string" value="Off"/>
+  <param name="TriggerSource"        type="string" value="Software"/>
+  <param name="softwaretriggerrate"  type="double" value="100"/>
+  <param name="frame_id"             type="string" value="camera2" />
+  <param name="mtu"                  type="int"    value="9000"/>
+
+
+</launch>
