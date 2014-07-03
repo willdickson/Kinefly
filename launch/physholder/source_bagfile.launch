@@ -10,5 +10,8 @@
     <node name="republisher2" pkg="image_transport" type="republish" args="compressed raw in:=camera2/image_raw out:=camera2/image_raw" />
     <node name="republisher3" pkg="image_transport" type="republish" args="compressed raw in:=camera3/image_raw out:=camera3/image_raw" />
 
+    <param name="kinefly1_phys/n_queue_images"     type="int"    value="20" />
+    <param name="kinefly2_phys/n_queue_images"     type="int"    value="20" />
+    <param name="kinefly3_phys/n_queue_images"     type="int"    value="20" />
 
 </launch>

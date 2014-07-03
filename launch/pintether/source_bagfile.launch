@@ -5,10 +5,14 @@
     <param name="use_sim_time"                 type="bool" value="true"/>
 
     
-    <node name="playbag" pkg="rosbag" type="play" args="--clock --delay=1 --rate=1 $(env BAGFILE)" required="true" />
+    <node name="playbag" pkg="rosbag" type="play" args="-s 45 --clock --delay=1 --rate=1 $(env BAGFILE)" required="true" />
     <node name="republisher1" pkg="image_transport" type="republish" args="compressed raw in:=camera1/image_raw out:=camera1/image_raw" />
     <node name="republisher2" pkg="image_transport" type="republish" args="compressed raw in:=camera2/image_raw out:=camera2/image_raw" />
     <node name="republisher3" pkg="image_transport" type="republish" args="compressed raw in:=camera3/image_raw out:=camera3/image_raw" />
+
+    <param name="kinefly1_pin/n_queue_images"     type="int"    value="20" />
+    <param name="kinefly2_pin/n_queue_images"     type="int"    value="20" />
+    <param name="kinefly3_pin/n_queue_images"     type="int"    value="20" />
 
 
 </launch>

@@ -1311,7 +1311,6 @@ class MotionTrackedBodypart(object):
             else:
                 self.imgHeadroom = None
                 
-            
             self.windowBG.set_image(self.imgRoiBackground)
         
 

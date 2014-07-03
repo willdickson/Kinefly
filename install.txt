@@ -66,16 +66,33 @@ cd PhidgetsPython
 sudo python setup.py install
 
 
-# Get & make the LED Panels ROS node.
+# Get the LED Panels ROS node.
 cd ~/src.git
 git clone https://github.com/ssafarik/ledpanels
-rosmake ledpanels
+
+
+# Get phidgets ROS node.
+cd ~/src.git
+git clone https://github.com/ssafarik/phidgets
 
 
 # Get & make the Kinefly software.
 git clone https://github.com/ssafarik/Kinefly
 sudo cp ~/src.git/Kinefly/udev/99-phidgets.rules /etc/udev/rules.d
 rosmake Kinefly
+
+
+# Think of a name for your rig (e.g. yourrigname), and tell Kinefly about it.
+# See the Kinefly/launch directory for examples, then make another directory 
+# with files for your new rig. 
+cd Kinefly/launch
+ls
+...etc...
+
+# Then:
+echo "export RIG=yourrigname" >> ~/.bashrc
+. ~/.bashrc
+
 
 
 # You're done!
