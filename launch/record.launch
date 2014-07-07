@@ -1,0 +1,15 @@
+<launch>
+
+    <!-- ========================================================== -->
+    <!-- This file writes a .bag file containing the image stream,  -->
+    <!-- etc, for Kinefly on the hardware rig you are using, based  -->
+    <!-- on the environment variable "RIG".                         -->
+    <!--                                                            -->
+    <!-- roslaunch Kinefly record.launch                            -->
+    <!--                                                            -->
+    <!-- ========================================================== -->
+    
+     
+    <include file="$(find Kinefly)/launch/$(env RIG)/_record.launch" />
+
+</launch>
