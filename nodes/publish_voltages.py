@@ -18,9 +18,9 @@ from setdict import SetDict
 ###############################################################################
 # PublishVoltages()
 #
-# Reads the analog input channels on the Phidgets InterfaceKit, and publish
-# the voltages on the topic 'ai'.  The list of channels is specified by the
-# parameter 'channels_ai'.
+# Reads the input channels on the Phidgets InterfaceKit, and publish
+# the voltages & values on the topics 'ai' and 'di'.  The list of channels are 
+# specified by the parameters 'channels_ai', 'channels_di'.
 #
 class PublishVoltages:
 

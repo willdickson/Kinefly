@@ -109,7 +109,6 @@ class MotionTrackedBodypart(object):
                                                    self.params['gui'][self.name]['hinge']['x']-ptBodyaxis_i[0]))
 
         self.angleBodypart_b = self.angleBodypart_i - self.angleBody_i
-        #rospy.logwarn('%s: %0.2f, %0.2f' % (self.name, self.angleBodypart_i, self.angleBodypart_b))
 
         
         cosAngleBodypart_i = np.cos(self.angleBodypart_i)
@@ -287,12 +286,13 @@ class MotionTrackedBodypart(object):
         if (self.roi is not None):
             self.imgRoi = copy.deepcopy(image[self.roi[1]:self.roi[3], self.roi[0]:self.roi[2]])
 
-            # Background Subtraction.
+            # Color inversion.
             if (bInvertColor):
                 self.imgRoiFg = 255-self.imgRoi
             else:
                 self.imgRoiFg = self.imgRoi
 
+            # Background Subtraction.
             if (self.params['gui'][self.name]['subtract_bg']):
                 with self.lockBackground:
                     if (self.imgRoiBackground is not None):
@@ -354,10 +354,12 @@ class MotionTrackedBodypart(object):
             self.update_roi(image, bInvertColor)
 
             # Apply the mask.
-            if (self.imgRoiFg is not None) and (self.imgHeadroom is not None) and (self.mask.img is not None):
-#                self.imgRoiFg  = cv2.multiply(self.imgRoiFg.astype(np.float32), self.imgHeadroom)
+            if (self.imgRoiFg is not None) and (self.mask.img is not None):
                 self.imgRoiFgMasked = cv2.bitwise_and(self.imgRoiFg.astype(self.mask.img.dtype), self.mask.img)
-                #self.imgRoiFgMasked  = cv2.multiply(self.imgRoiFg.astype(self.wfnRoi.dtype), self.wfnRoi)
+                
+                #if (self.imgHeadroom is not None):
+                    #self.imgRoiFg  = cv2.multiply(self.imgRoiFg.astype(np.float32), self.imgHeadroom)
+                    #self.imgRoiFgMasked  = cv2.multiply(self.imgRoiFg.astype(self.wfnRoi.dtype), self.wfnRoi)
                 
                 self.imgFinal = self.imgRoiFgMasked 
             else:

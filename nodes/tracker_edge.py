@@ -282,9 +282,7 @@ class EdgeTrackerByIntensityProfile(MotionTrackedBodypartPolar):
         if (self.params['gui'][self.name]['track']):
             self.update_state()
             
-            
-    
-    
+
     # draw()
     # Draw the outline.
     #
