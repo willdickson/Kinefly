@@ -63,7 +63,8 @@ class MotionTrackedBodypart(object):
         self.imgRoiFg                           = None # Background subtracted.
         self.imgRoiFgMasked                     = None
         self.imgFinal                           = None # The image to use for tracking.
-
+        self.imgHeadroom                        = None
+        
         # Extra windows.
         self.windowBG         = ImageWindow(False, self.name+'BG')
         self.windowFG         = ImageWindow(False, self.name+'FG')
@@ -102,11 +103,11 @@ class MotionTrackedBodypart(object):
                             'left':'right', 
                             'right':'left'}
             self.angleBodypart_i = float(np.arctan2(self.params['gui'][self.name]['hinge']['y']-self.params['gui'][nameRelative[self.name]]['hinge']['y'], 
-                                                   self.params['gui'][self.name]['hinge']['x']-self.params['gui'][nameRelative[self.name]]['hinge']['x']))
+                                                    self.params['gui'][self.name]['hinge']['x']-self.params['gui'][nameRelative[self.name]]['hinge']['x']))
         else:
             ptBodyaxis_i = self.get_projection_onto_bodyaxis(self.ptHinge_i)
             self.angleBodypart_i = float(np.arctan2(self.params['gui'][self.name]['hinge']['y']-ptBodyaxis_i[1], 
-                                                   self.params['gui'][self.name]['hinge']['x']-ptBodyaxis_i[0]))
+                                                    self.params['gui'][self.name]['hinge']['x']-ptBodyaxis_i[0]))
 
         self.angleBodypart_b = self.angleBodypart_i - self.angleBody_i
 
@@ -271,7 +272,7 @@ class MotionTrackedBodypart(object):
                     self.imgRoiBackground = copy.deepcopy(self.imgFullBackground[self.roi[1]:self.roi[3], self.roi[0]:self.roi[2]])
                     
             if (self.imgRoiBackground is not None):
-                self.imgHeadroom = (255 - self.imgRoiBackground).astype(np.float32) / 255.0
+                self.imgHeadroom = (255.0 - self.imgRoiBackground)
             else:
                 self.imgHeadroom = None
                 
@@ -311,7 +312,6 @@ class MotionTrackedBodypart(object):
     
                     self.imgRoiFg *= (255.0/float(max2))
                 
-            self.windowFG.set_image(self.imgRoiFg) 
         
 
             
@@ -350,17 +350,15 @@ class MotionTrackedBodypart(object):
                 self.create_mask(image.shape)
                 self.bValidMask = True
                 
-            self.update_background()
+            if (self.params['gui'][self.name]['subtract_bg']):
+                self.update_background()
+                
             self.update_roi(image, bInvertColor)
+            self.windowFG.set_image(self.imgRoiFg) 
 
             # Apply the mask.
             if (self.imgRoiFg is not None) and (self.mask.img is not None):
                 self.imgRoiFgMasked = cv2.bitwise_and(self.imgRoiFg.astype(self.mask.img.dtype), self.mask.img)
-                
-                #if (self.imgHeadroom is not None):
-                    #self.imgRoiFg  = cv2.multiply(self.imgRoiFg.astype(np.float32), self.imgHeadroom)
-                    #self.imgRoiFgMasked  = cv2.multiply(self.imgRoiFg.astype(self.wfnRoi.dtype), self.wfnRoi)
-                
                 self.imgFinal = self.imgRoiFgMasked 
             else:
                 self.imgFinal = None
@@ -472,7 +470,8 @@ class MotionTrackedBodypartPolar(MotionTrackedBodypart):
         self.imgRoiFgMaskedPolarCropped         = None
         self.imgRoiFgMaskedPolarCroppedWindowed = None
         self.imgFinal                           = None # The image to use for tracking.
-
+        self.imgHeadroomPolar                   = None
+        
         self.windowPolar                        = ImageWindow(False, self.name+'Polar')
         
         
@@ -537,6 +536,8 @@ class MotionTrackedBodypartPolar(MotionTrackedBodypart):
                 rClip3 = 1.0 - (float(roiClipped[3])/float(r_outer-r_inner))#i_n-self.i_0))
     
             self.rClip = np.min([rClip0, rClip1, rClip2, rClip3])
+            
+        # End create_mask()
 
         
     def update_polarimage(self):
@@ -547,7 +548,8 @@ class MotionTrackedBodypartPolar(MotionTrackedBodypart):
             radius_mid = (self.params['gui'][self.name]['radius_outer'] + self.params['gui'][self.name]['radius_inner'])/2.0
             dr         = (self.params['gui'][self.name]['radius_outer'] - self.params['gui'][self.name]['radius_inner'])/2.0
 
-            self.imgRoiFgMaskedPolar  = self.polartransforms.transform_polar_elliptical(self.imgRoiFgMasked, 
+            self.imgRoiFgMasked[self.imgRoiFgMasked==255] = 254 # Make room the for +1, next.
+            self.imgRoiFgMaskedPolar  = self.polartransforms.transform_polar_elliptical(self.imgRoiFgMasked+1, # +1 so we find cropped pixels, next, rather than merely black pixels. 
                                                      self.i_0, 
                                                      self.j_0, 
                                                      raxial=radius_mid, 
@@ -559,6 +561,7 @@ class MotionTrackedBodypartPolar(MotionTrackedBodypart):
                                                      theta_0 = min(theta_0a,theta_1a), 
                                                      theta_1 = max(theta_0a,theta_1a),
                                                      amplifyTheta = 1.0)
+
                 
             # Find the y value where the black band should be cropped out (but leave at least one raster if image is all-black).
             sumY = np.sum(self.imgRoiFgMaskedPolar,1)
@@ -568,9 +571,33 @@ class MotionTrackedBodypartPolar(MotionTrackedBodypart):
             else:
                 iMinY = self.imgRoiFgMaskedPolar.shape[0]
 
+
+            # Crop the bottom of the images.
             self.imgRoiFgMaskedPolarCropped = self.imgRoiFgMaskedPolar[0:iMinY]
-    
-             
+
+            
+            # Push each pixel toward the column mean, depending on the amount of headroom.
+            if (self.imgHeadroom is not None) and (self.params['gui'][self.name]['subtract_bg']) and (self.params[self.name]['saturation_correction']):
+                self.imgHeadroomPolar  = self.polartransforms.transform_polar_elliptical(self.imgHeadroom, 
+                                                         self.i_0, 
+                                                         self.j_0, 
+                                                         raxial=radius_mid, 
+                                                         rortho=radius_mid,
+                                                         dradiusStrip=int(dr),
+                                                         amplifyRho = 1.0,
+                                                         rClip = self.rClip,
+                                                         angleEllipse=self.angleBodypart_i,
+                                                         theta_0 = min(theta_0a,theta_1a), 
+                                                         theta_1 = max(theta_0a,theta_1a),
+                                                         amplifyTheta = 1.0)
+                self.imgHeadroomPolarCropped = self.imgHeadroomPolar[0:iMinY]
+            
+                H = self.imgHeadroomPolarCropped / 255.0
+                M = np.mean(self.imgRoiFgMaskedPolarCropped, 0).astype(np.float32)
+                F = self.imgRoiFgMaskedPolarCropped.astype(np.float32) - M
+                self.imgRoiFgMaskedPolarCropped  = M + cv2.multiply(H, F)
+            
+            
             if (self.bValidMask):
                 if (self.wfnRoiMaskedPolarCropped is None) or (self.imgRoiFgMaskedPolarCropped.shape != self.wfnRoiMaskedPolarCropped.shape):
                     self.wfnRoiMaskedPolarCropped = self.create_wfn(self.imgRoiFgMaskedPolarCropped.shape)
@@ -582,6 +609,8 @@ class MotionTrackedBodypartPolar(MotionTrackedBodypart):
         img = self.imgRoiFgMaskedPolarCroppedWindowed
         #img = self.imgRoiFgMaskedPolarCropped
         self.windowPolar.set_image(img)
+        
+    # End update_polarimage()
         
 
     def update(self, dt, image, bInvertColor):

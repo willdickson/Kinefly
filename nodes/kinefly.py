@@ -79,17 +79,22 @@ class MainWindow:
                     'wingbeat_max':220,
                     'head':   {'tracker':'area',
                                'autozero':True,         # Automatically figure out where is the center of motion.
-                               'threshold':0.0},        
+                               'threshold':0.0,
+                               'saturation_correction':False},        
                     'abdomen':{'tracker':'area',
                                'autozero':True,
-                               'threshold':0.0},
+                               'threshold':0.0,
+                               'saturation_correction':False},
                     'left':   {'tracker':'edge',
                                'autozero':True,
-                               'threshold':0.0},
+                               'threshold':0.0,
+                               'saturation_correction':False},
                     'right':  {'tracker':'edge',
                                'autozero':True,
-                               'threshold':0.0},
-                    'aux':    {'tracker':'intensity'},
+                               'threshold':0.0,
+                               'saturation_correction':False},
+                    'aux':    {'tracker':'intensity',
+                               'saturation_correction':False},
                     'gui': {'windows':True,                     # Show the helpful extra windows.
                             'symmetric':True,                   # Forces the UI to remain symmetric.
                             'axis':   {'track':False,            # To track, or not to track.
@@ -464,6 +469,10 @@ class MainWindow:
                 self.bufferImages[self.iImgLoading] = rosimg
                 self.iImgLoading = iImgLoadingNext
                 self.iImgWorking = iImgWorkingNext
+            
+#                 if ('kinefly2' in self.nodename):
+#                     n = (self.iImgLoading - self.iImgWorking) %  len(self.bufferImages)
+#                     rospy.logwarn('%s: %d' % (self.nodename, n))
 
 #            # Warn if the camera is delaying.
 #            if (self.stampRosimagePrev is not None):
@@ -615,6 +624,9 @@ class MainWindow:
                         
                     if (self.iDroppedFrame>0):
                         s += '    Dropped Frames: %d' % self.iDroppedFrame
+                        
+#                         if ('kinefly2' in self.nodename):
+#                             rospy.logwarn(s)
 
                     cv2.putText(imgOutput, s, (x, y), self.fontface, self.scaleText, ui.bgra_dict['dark_red'] )
                     

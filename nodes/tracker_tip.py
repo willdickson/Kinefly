@@ -42,7 +42,7 @@ class TipDetector(object):
         self.intensities /= (255.0 * img.shape[axis]) # Put into range [0,1]
 
         # Compute the intensity gradient. 
-        n = 2
+        n = np.min([2, len(self.intensities)-1])
         a = np.append(self.intensities[n:], self.intensities[-n]*np.ones(n))
         b = np.append(self.intensities[n]*np.ones(n), self.intensities[:-n])
         self.diff = b-a
