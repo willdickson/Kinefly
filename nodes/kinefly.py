@@ -6,7 +6,7 @@ import rospy
 import rosparam
 
 import copy
-#import cProfile
+import cProfile
 import cv
 import cv2
 import numpy as np
@@ -235,108 +235,107 @@ class MainWindow:
         
     # Create the button bar, with overflow onto more than one line if needed to fit on the image.        
     def create_buttons(self, shape):
-        if (self.buttons is None) or (shape != self.shapeToolbar):
-            self.shapeToolbar = shape
-            
-            # UI button specs.
-            self.buttons = []
-            x = 1
-            y = 1
-            btn = ui.Button(pt=[x,y], scale=self.scale, type='pushbutton', name='exit', text='exit')
-            self.wrap_button(btn, shape)
-            self.buttons.append(btn)
-            
-            x = btn.right+1
-            y = btn.top+1
-            btn = ui.Button(pt=[x,y], scale=self.scale, type='pushbutton', name='save_bg', text='saveBG')
-            self.wrap_button(btn, shape)
-            self.buttons.append(btn)
-            
-            x = btn.right+1
-            y = btn.top+1
-            btn = ui.Button(pt=[x,y], scale=self.scale, type='static', name='track', text='track:', sides=ui.SIDE_LEFT|ui.SIDE_TOP|ui.SIDE_BOTTOM)
-            self.wrap_button(btn, shape)
-            self.buttons.append(btn)
-            
-            x = btn.right+1
-            y = btn.top+1
-            btn = ui.Button(pt=[x,y], scale=self.scale, type='checkbox', name='head', text='H', state=self.params['gui']['head']['track'], sides=ui.SIDE_TOP|ui.SIDE_BOTTOM)
-            self.wrap_button(btn, shape)
-            self.buttons.append(btn)
-            
-            x = btn.right+1
-            y = btn.top+1
-            btn = ui.Button(pt=[x,y], scale=self.scale, type='checkbox', name='abdomen', text='A', state=self.params['gui']['abdomen']['track'], sides=ui.SIDE_TOP|ui.SIDE_BOTTOM)
-            self.wrap_button(btn, shape)
-            self.buttons.append(btn)
-            
-            x = btn.right+1
-            y = btn.top+1
-            btn = ui.Button(pt=[x,y], scale=self.scale, type='checkbox', name='left', text='L', state=self.params['gui']['left']['track'], sides=ui.SIDE_TOP|ui.SIDE_BOTTOM)
-            self.wrap_button(btn, shape)
-            self.buttons.append(btn)
-            
-            x = btn.right+1
-            y = btn.top+1
-            btn = ui.Button(pt=[x,y], scale=self.scale, type='checkbox', name='right', text='R', state=self.params['gui']['right']['track'], sides=ui.SIDE_TOP|ui.SIDE_BOTTOM)
-            self.wrap_button(btn, shape)
-            self.buttons.append(btn)
-            
-            x = btn.right+1
-            y = btn.top+1
-            btn = ui.Button(pt=[x,y], scale=self.scale, type='checkbox', name='aux', text='X', state=self.params['gui']['aux']['track'], sides=ui.SIDE_TOP|ui.SIDE_BOTTOM|ui.SIDE_RIGHT)
-            self.wrap_button(btn, shape)
-            self.buttons.append(btn)
-            
-            x = btn.right+1
-            y = btn.top+1
-            btn = ui.Button(pt=[x,y], scale=self.scale, type='static', name='subtract', text='subtract:', sides=ui.SIDE_LEFT|ui.SIDE_TOP|ui.SIDE_BOTTOM)
-            self.wrap_button(btn, shape)
-            self.buttons.append(btn)
-            
-            x = btn.right+1
-            y = btn.top+1
-            btn = ui.Button(pt=[x,y], scale=self.scale, type='checkbox', name='subtract_head', text='H', state=self.params['gui']['head']['subtract_bg'], sides=ui.SIDE_TOP|ui.SIDE_BOTTOM)
-            self.wrap_button(btn, shape)
-            self.buttons.append(btn)
-            
-            x = btn.right+1
-            y = btn.top+1
-            btn = ui.Button(pt=[x,y], scale=self.scale, type='checkbox', name='subtract_abdomen', text='A', state=self.params['gui']['abdomen']['subtract_bg'], sides=ui.SIDE_TOP|ui.SIDE_BOTTOM)
-            self.wrap_button(btn, shape)
-            self.buttons.append(btn)
-            
-            x = btn.right+1
-            y = btn.top+1
-            btn = ui.Button(pt=[x,y], scale=self.scale, type='checkbox', name='subtract_lr', text='LR', state=self.params['gui']['right']['subtract_bg'], sides=ui.SIDE_TOP|ui.SIDE_BOTTOM)
-            self.wrap_button(btn, shape)
-            self.buttons.append(btn)
-            
-            x = btn.right+1
-            y = btn.top+1
-            btn = ui.Button(pt=[x,y], scale=self.scale, type='checkbox', name='subtract_aux', text='X', state=self.params['gui']['aux']['subtract_bg'], sides=ui.SIDE_TOP|ui.SIDE_BOTTOM|ui.SIDE_RIGHT)
-            self.wrap_button(btn, shape)
-            self.buttons.append(btn)
-            
-            x = btn.right+1
-            y = btn.top+1
-            btn = ui.Button(pt=[x,y], scale=self.scale, type='checkbox', name='stabilize', text='stabilize', state=self.params['gui']['head']['stabilize'])
-            self.wrap_button(btn, shape)
-            self.buttons.append(btn)
-            
-            x = btn.right+1
-            y = btn.top+1
-            btn = ui.Button(pt=[x,y], scale=self.scale, type='checkbox', name='symmetry', text='symmetric', state=self.params['gui']['symmetric'])
-            self.wrap_button(btn, shape)
-            self.buttons.append(btn)
-            
-            x = btn.right+1
-            y = btn.top+1
-            btn = ui.Button(pt=[x,y], scale=self.scale, type='checkbox', name='windows', text='windows', state=self.params['gui']['windows'])
-            self.wrap_button(btn, shape)
-            self.buttons.append(btn)
-            
-            self.yToolbar = btn.bottom + 1
+        self.shapeToolbar = shape
+        
+        # UI button specs.
+        self.buttons = []
+        x = 1
+        y = 1
+        btn = ui.Button(pt=[x,y], scale=self.scale, type='pushbutton', name='exit', text='exit')
+        self.wrap_button(btn, shape)
+        self.buttons.append(btn)
+        
+        x = btn.right+1
+        y = btn.top+1
+        btn = ui.Button(pt=[x,y], scale=self.scale, type='pushbutton', name='save_bg', text='saveBG')
+        self.wrap_button(btn, shape)
+        self.buttons.append(btn)
+        
+        x = btn.right+1
+        y = btn.top+1
+        btn = ui.Button(pt=[x,y], scale=self.scale, type='static', name='track', text='track:', sides=ui.SIDE_LEFT|ui.SIDE_TOP|ui.SIDE_BOTTOM)
+        self.wrap_button(btn, shape)
+        self.buttons.append(btn)
+        
+        x = btn.right+1
+        y = btn.top+1
+        btn = ui.Button(pt=[x,y], scale=self.scale, type='checkbox', name='head', text='H', state=self.params['gui']['head']['track'], sides=ui.SIDE_TOP|ui.SIDE_BOTTOM)
+        self.wrap_button(btn, shape)
+        self.buttons.append(btn)
+        
+        x = btn.right+1
+        y = btn.top+1
+        btn = ui.Button(pt=[x,y], scale=self.scale, type='checkbox', name='abdomen', text='A', state=self.params['gui']['abdomen']['track'], sides=ui.SIDE_TOP|ui.SIDE_BOTTOM)
+        self.wrap_button(btn, shape)
+        self.buttons.append(btn)
+        
+        x = btn.right+1
+        y = btn.top+1
+        btn = ui.Button(pt=[x,y], scale=self.scale, type='checkbox', name='left', text='L', state=self.params['gui']['left']['track'], sides=ui.SIDE_TOP|ui.SIDE_BOTTOM)
+        self.wrap_button(btn, shape)
+        self.buttons.append(btn)
+        
+        x = btn.right+1
+        y = btn.top+1
+        btn = ui.Button(pt=[x,y], scale=self.scale, type='checkbox', name='right', text='R', state=self.params['gui']['right']['track'], sides=ui.SIDE_TOP|ui.SIDE_BOTTOM)
+        self.wrap_button(btn, shape)
+        self.buttons.append(btn)
+        
+        x = btn.right+1
+        y = btn.top+1
+        btn = ui.Button(pt=[x,y], scale=self.scale, type='checkbox', name='aux', text='X', state=self.params['gui']['aux']['track'], sides=ui.SIDE_TOP|ui.SIDE_BOTTOM|ui.SIDE_RIGHT)
+        self.wrap_button(btn, shape)
+        self.buttons.append(btn)
+        
+        x = btn.right+1
+        y = btn.top+1
+        btn = ui.Button(pt=[x,y], scale=self.scale, type='static', name='subtract', text='subtract:', sides=ui.SIDE_LEFT|ui.SIDE_TOP|ui.SIDE_BOTTOM)
+        self.wrap_button(btn, shape)
+        self.buttons.append(btn)
+        
+        x = btn.right+1
+        y = btn.top+1
+        btn = ui.Button(pt=[x,y], scale=self.scale, type='checkbox', name='subtract_head', text='H', state=self.params['gui']['head']['subtract_bg'], sides=ui.SIDE_TOP|ui.SIDE_BOTTOM)
+        self.wrap_button(btn, shape)
+        self.buttons.append(btn)
+        
+        x = btn.right+1
+        y = btn.top+1
+        btn = ui.Button(pt=[x,y], scale=self.scale, type='checkbox', name='subtract_abdomen', text='A', state=self.params['gui']['abdomen']['subtract_bg'], sides=ui.SIDE_TOP|ui.SIDE_BOTTOM)
+        self.wrap_button(btn, shape)
+        self.buttons.append(btn)
+        
+        x = btn.right+1
+        y = btn.top+1
+        btn = ui.Button(pt=[x,y], scale=self.scale, type='checkbox', name='subtract_lr', text='LR', state=self.params['gui']['right']['subtract_bg'], sides=ui.SIDE_TOP|ui.SIDE_BOTTOM)
+        self.wrap_button(btn, shape)
+        self.buttons.append(btn)
+        
+        x = btn.right+1
+        y = btn.top+1
+        btn = ui.Button(pt=[x,y], scale=self.scale, type='checkbox', name='subtract_aux', text='X', state=self.params['gui']['aux']['subtract_bg'], sides=ui.SIDE_TOP|ui.SIDE_BOTTOM|ui.SIDE_RIGHT)
+        self.wrap_button(btn, shape)
+        self.buttons.append(btn)
+        
+        x = btn.right+1
+        y = btn.top+1
+        btn = ui.Button(pt=[x,y], scale=self.scale, type='checkbox', name='stabilize', text='stabilize', state=self.params['gui']['head']['stabilize'])
+        self.wrap_button(btn, shape)
+        self.buttons.append(btn)
+        
+        x = btn.right+1
+        y = btn.top+1
+        btn = ui.Button(pt=[x,y], scale=self.scale, type='checkbox', name='symmetry', text='symmetric', state=self.params['gui']['symmetric'])
+        self.wrap_button(btn, shape)
+        self.buttons.append(btn)
+        
+        x = btn.right+1
+        y = btn.top+1
+        btn = ui.Button(pt=[x,y], scale=self.scale, type='checkbox', name='windows', text='windows', state=self.params['gui']['windows'])
+        self.wrap_button(btn, shape)
+        self.buttons.append(btn)
+        
+        self.yToolbar = btn.bottom + 1
 
 
     # legalizeParams()
@@ -461,10 +460,16 @@ class MainWindow:
                     iImgLoadingNext = (self.iImgLoading+1) % len(self.bufferImages)
                     iImgWorkingNext = self.iImgWorking
                     self.iDroppedFrame = 0
+# 
+#                     if ('kinefly2' in self.nodename):
+#                         rospy.logwarn('Loaded                       %d' % self.iImgLoading)
                 else:                                               # The buffer is full; we'll overwrite the oldest entry.
                     iImgLoadingNext = (self.iImgLoading+1) % len(self.bufferImages)
                     iImgWorkingNext = (self.iImgWorking+1) % len(self.bufferImages)
                     self.iDroppedFrame += 1
+# 
+#                     if ('kinefly2' in self.nodename):
+#                         rospy.logwarn('Loaded        dropped %d     %d' % (self.iImgWorking, self.iImgLoading))
     
                 self.bufferImages[self.iImgLoading] = rosimg
                 self.iImgLoading = iImgLoadingNext
@@ -472,7 +477,9 @@ class MainWindow:
             
 #                 if ('kinefly2' in self.nodename):
 #                     n = (self.iImgLoading - self.iImgWorking) %  len(self.bufferImages)
-#                     rospy.logwarn('%s: %d' % (self.nodename, n))
+#                     if (n==0) and (self.bufferImages[self.iImgLoading] is not None):
+#                         n += len(self.bufferImages)
+#                     rospy.logwarn('nQueue %d' % n)
 
 #            # Warn if the camera is delaying.
 #            if (self.stampRosimagePrev is not None):
@@ -510,8 +517,12 @@ class MainWindow:
                 # Mark this buffer entry as available for loading.
                 self.bufferImages[self.iImgWorking] = None
     
+#                 if ('kinefly2' in self.nodename):
+#                     rospy.logwarn('Processed             %d' % self.iImgWorking)
+
                 # Go to the next image.
                 self.iImgWorking = (self.iImgWorking+1) % len(self.bufferImages)
+                
         
 
 
@@ -564,7 +575,8 @@ class MainWindow:
             self.shapeImage = self.imgScaled.shape # (height,width)
             
             # Create the button bar if needed.    
-            self.create_buttons(self.imgScaled.shape)
+            if (self.buttons is None) or (self.imgScaled.shape != self.shapeToolbar):
+                self.create_buttons(self.imgScaled.shape)
         
             if (not self.bMousing) and (self.bValidImage):
                 # Update the fly internals.
@@ -624,7 +636,7 @@ class MainWindow:
                         
                     if (self.iDroppedFrame>0):
                         s += '    Dropped Frames: %d' % self.iDroppedFrame
-                        
+#                          
 #                         if ('kinefly2' in self.nodename):
 #                             rospy.logwarn(s)
 
@@ -726,23 +738,10 @@ class MainWindow:
             self.stampMax = max(self.stampMax, self.stampDiff)
             if (self.iCount % 100)==0:
                 self.stampMax = rospy.Duration(0)
-        else:
-            if (self.hzAvailable != 0.0):
-                rospy.sleep(1/self.hzAvailable) # Pretend we spent time processing.
+#         else:
+#             if (self.hzAvailable != 0.0):
+#                 rospy.sleep(1/self.hzAvailable) # Pretend we spent time processing.
         
-#            if ('kinefly3' in self.nodename):
-#                rospy.logwarn('Buffer is empty: %0.6f' % stamp0.to_sec())
-#
-#                if (self.stampPrev is not None):
-#                    s1 = 'prev=%0.6f: dt=%0.6f' % (self.stampPrev.to_sec(), self.dtCamera)
-#                    if (self.iDroppedFrame>0):
-#                        s1 += '    Dropped Frames: %d' % self.iDroppedFrame
-#                    rospy.logwarn(s1)
-#
-#                    s2 = 'prev0=%0.6f, now=%0.6f: 0-prev=%0.6f' % (self.stampPrevAlt.to_sec(), stamp0.to_sec(), stamp0.to_sec()-self.stampPrevAlt.to_sec())
-#                    if (self.iDroppedFrame>0):
-#                        s2 += '    Dropped Frames: %d' % self.iDroppedFrame
-#                    rospy.logwarn(s2)
         cv2.waitKey(1)
 
     # End process_image()
@@ -1203,8 +1202,20 @@ class MainWindow:
         if (self.params['gui']['aux']['track']):
             self.fly.aux.wingbeat.warn()
         
+        bFailed = False
         while (not rospy.is_shutdown()):
             self.process_image()
+#             # Profile the cause of dropped frames.  Profile up to the point we get a bunch of drops, and keep that result.
+#             if ('kinefly2' in rospy.get_name().rstrip('/')):
+#                 if not bFailed:
+#                     cProfile.runctx('self.process_image()', globals(), locals(), filename='/home/ssafarik/profile.pstats')
+#                 else:
+#                     self.process_image()
+#                 if (self.iDroppedFrame>20) and (self.iCount>100):
+#                     bFailed = True
+#                     rospy.logwarn('self.iDroppedFrame: %d' % self.iDroppedFrame)
+#             else:
+#                 self.process_image()
 
         cv2.destroyAllWindows()
 
@@ -1220,8 +1231,10 @@ if __name__ == '__main__':
     rospy.logwarn('')
 
     main.run()
-
-    #cProfile.run('main.run()', '/home/ssafarik/profile.pstats')
+#     if ('kinefly2' in rospy.get_name().rstrip('/')):
+#         cProfile.run('main.run()', '/home/ssafarik/profile.pstats')
+#     else:
+#         main.run()
     # Note to do profiling:
     # $ sudo apt-get install graphviz
     # $ git clone https://code.google.com/p/jrfonseca.gprof2dot/ gprof2dot
