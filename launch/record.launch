@@ -8,7 +8,8 @@
     <!-- roslaunch Kinefly record.launch                            -->
     <!--                                                            -->
     <!-- ========================================================== -->
-    
+
+    <arg name="prefix" default="" />
      
     <include file="$(find Kinefly)/launch/$(env RIG)/_record.launch" />
 
