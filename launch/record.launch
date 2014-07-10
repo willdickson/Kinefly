@@ -11,6 +11,8 @@
 
     <arg name="prefix" default="" />
      
-    <include file="$(find Kinefly)/launch/$(env RIG)/_record.launch" />
+    <include file="$(find Kinefly)/launch/$(env RIG)/_record.launch" >
+        <arg name="prefix" value="$(arg prefix)" />
+    </include>
 
 </launch>
