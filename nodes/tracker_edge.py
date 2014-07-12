@@ -41,8 +41,8 @@ class EdgeDetectorByIntensityProfile(object):
         
         # Compute the intensity gradient. 
         n = 2
-        a = np.append(self.intensities[n:], self.intensities[-n]*np.ones(n))
-        b = np.append(self.intensities[n]*np.ones(n), self.intensities[:-n])
+        a = np.append(self.intensities[n:], self.intensities[-1]*np.ones(n))
+        b = np.append(self.intensities[0]*np.ones(n), self.intensities[:-n])
         self.diff = b-a
         
         # Make copies for positive-going and negative-going edges.
@@ -307,6 +307,8 @@ class EdgeTrackerByIntensityProfile(MotionTrackedBodypartPolar):
         
         
     def serve_trackerdata_callback(self, request):
+        title1      = 'Intensities'
+        title2      = 'Diffs'
         abscissa = np.linspace(self.params['gui'][self.name]['angle_lo'], self.params['gui'][self.name]['angle_hi'], len(self.detector.intensities))
         
             
@@ -319,7 +321,7 @@ class EdgeTrackerByIntensityProfile(MotionTrackedBodypartPolar):
             angles.append(angle_b)
             gradients.append(gradient)
 
-        return SrvTrackerdataResponse(self.color, abscissa, self.detector.intensities, self.detector.diff, angles, gradients)
+        return SrvTrackerdataResponse(self.color, title1, title2, abscissa, self.detector.intensities, self.detector.diff, angles, gradients)
         
         
 # end class EdgeTrackerByIntensityProfile
@@ -398,8 +400,8 @@ class EdgeDetectorByHoughTransform(object):
 
         # Compute the intensity gradient. 
         n = 1
-        a = np.append(self.intensities[n:], self.intensities[-n]*np.ones(n))
-        b = np.append(self.intensities[n]*np.ones(n), self.intensities[:-n])
+        a = np.append(self.intensities[n:], self.intensities[-1]*np.ones(n))
+        b = np.append(self.intensities[0]*np.ones(n), self.intensities[:-n])
         self.diff = b-a
         
         # Get the N largest values.
@@ -538,6 +540,8 @@ class EdgeTrackerByHoughTransform(MotionTrackedBodypart):
         
     def serve_trackerdata_callback(self, request):
         if (len(self.detector.intensities)>0):
+            title1      = 'Intensities'
+            title2      = 'Diffs'
             diffs = self.detector.diff #np.zeros(len(self.detector.intensities))
             abscissa = np.linspace(self.params['gui'][self.name]['angle_lo'], self.params['gui'][self.name]['angle_hi'], len(self.detector.intensities))
             abscissa -= self.angleBodypart_b
@@ -547,7 +551,7 @@ class EdgeTrackerByHoughTransform(MotionTrackedBodypart):
             markersV = self.state.gradients#[self.params[self.name]['threshold']]
             
                 
-            rv = SrvTrackerdataResponse(self.color, abscissa, self.detector.intensities, diffs, markersH, markersV)
+            rv = SrvTrackerdataResponse(self.color, title1, title2, abscissa, self.detector.intensities, diffs, markersH, markersV)
         else:
             rv = SrvTrackerdataResponse()
             

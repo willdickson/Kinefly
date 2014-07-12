@@ -20,9 +20,8 @@ import ui
 class TipDetector(object):
     def __init__(self, threshold=0.0, sense=1):
         self.intensities = []
-        self.diff = []
+        self.diffs = []
         self.set_params(threshold, sense)
-        self.imgThreshold = None
 
 
     def set_params(self, threshold, sense):
@@ -37,30 +36,38 @@ class TipDetector(object):
         #(threshold, img) = cv2.threshold(image, int(self.threshold*255), 255, cv2.THRESH_TOZERO) # BINARY)#
         (threshold, img) = (0, image)
         
+        # Sum across the rows, and normalize to [0,1].
         axis = 1
         self.intensities = np.sum(img, axis).astype(np.float32)
         self.intensities /= (255.0 * img.shape[axis]) # Put into range [0,1]
 
-        # Compute the intensity gradient. 
+        # Compute the gradient of row intensities.
         n = np.min([2, len(self.intensities)-1])
-        a = np.append(self.intensities[n:], self.intensities[-n]*np.ones(n))
-        b = np.append(self.intensities[n]*np.ones(n), self.intensities[:-n])
-        self.diff = b-a
+        a = np.append(self.intensities[n:], self.intensities[-1]*np.ones(n))
+        b = np.append(self.intensities[0]*np.ones(n), self.intensities[:-n])
+        self.diffs = b-a
         
         
-        
-        i = np.where(self.diff > self.threshold)[0]
-        if (len(i)>0):
-            yTip = i[-1]
+        # Find the rows with a significant gradient.
+        iSigIntensities = np.where(np.abs(self.intensities) > self.threshold)[0]
+        iSigDiffs       = np.where(np.abs(self.diffs) > self.threshold)[0]
+       
+        # The tip row is the last significant row.
+        if (len(iSigDiffs)>0):
+            yTip = iSigDiffs[-1]
         else:
             yTip = None
         
+        # Find the brightest pixel on the row.
         if (yTip is not None):
-            line = img[yTip,:]
-            xTip = line.argmax()
+            xTip = img[yTip,:].argmax()
         else:
             xTip = None
         
+        # Draw debugging marks.
+        #image[iSigDiffs,int(image.shape[1]/2)] = 255
+        #image[yTip,xTip] = 255
+
         return (xTip, yTip)
         
            
@@ -120,7 +127,6 @@ class TipTracker(MotionTrackedBodypartPolar):
     def update_state(self):
         imgNow = self.imgRoiFgMaskedPolarCropped
         
-        # Get the rotation & expansion between images.
         if (imgNow is not None):
             # Pixel position and strength of the edges.
             (self.iAngle, self.iRadius) = self.detector.detect(imgNow)
@@ -131,7 +137,7 @@ class TipTracker(MotionTrackedBodypartPolar):
                 angle_b = self.params['gui'][self.name]['angle_lo'] + self.iAngle * anglePerPixel
                 angle_p = (self.transform_angle_p_from_b(angle_b) + np.pi) % (2*np.pi) - np.pi
                 self.state.angles = [angle_p]
-                self.state.gradients = self.detector.diff
+                self.state.gradients = self.detector.diffs
                 
                 radius = self.params['gui'][self.name]['radius_inner'] + self.iRadius
                 self.state.radii = [radius]
@@ -139,7 +145,7 @@ class TipTracker(MotionTrackedBodypartPolar):
             else:
                 self.state.angles = []
                 self.state.radii = []
-                self.state.gradients = self.detector.diff
+                self.state.gradients = self.detector.diffs
                 self.state.intensity = np.mean(imgNow)/255.0
                 
 
@@ -152,7 +158,7 @@ class TipTracker(MotionTrackedBodypartPolar):
 
         if (self.params['gui'][self.name]['track']):
             self.update_state()
-            self.windowTip.set_image(self.detector.imgThreshold)
+            self.windowTip.set_image(self.imgRoiFgMaskedPolarCropped)
             
             
     
@@ -187,18 +193,15 @@ class TipTracker(MotionTrackedBodypartPolar):
         
         
     def serve_tipdata_callback(self, request):
-        intensities = self.detector.intensities
-        diffs = self.detector.diff
-        abscissa = range(len(intensities))
-        if (self.iRadius is not None):
-            markersH = self.iRadius
-        else:
-            markersH = 0
-            
-        markersV = self.params[self.name]['threshold']
+        title1      = 'Intensities'
+        title2      = 'Diffs'
+        intensities = list(self.detector.intensities)
+        diffs       = list(np.abs(self.detector.diffs))
+        abscissa    = range(len(intensities)) #range(self.params['gui'][self.name]['radius_inner'], self.params['gui'][self.name]['radius_inner'] + len(intensities))
+        markersH    = [self.iRadius] #self.state.radii
+        markersV    = [self.params[self.name]['threshold']]
         
-            
-        return SrvTrackerdataResponse(self.color, abscissa, intensities, diffs, markersH, markersV)
+        return SrvTrackerdataResponse(self.color, title1, title2, abscissa, intensities, diffs, markersH, markersV)
         
         
 # end class TipTracker

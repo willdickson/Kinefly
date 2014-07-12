@@ -1,6 +1,8 @@
 bool query
 ---
 string color
+string title1
+string title2
 float32[] abscissa
 float32[] intensities
 float32[] diffs
