@@ -160,24 +160,10 @@ class Flystate2PhidgetsAnalog:
 
             for i in range(4):
                 if (self.enable[i]):
-#                    rospy.logwarn(self.analog.getEnabled(i))
                     try:
                         self.analog.setVoltage(i, voltages[i])
-                        #if (i==2):
-                        #    rospy.logwarn('% 4.1f' % voltages[i])
                     except Phidgets.PhidgetException.PhidgetException:
                         pass
-        else:
-            #rospy.logwarn('Waiting for PhidgetsAnalog device...')
-            try:
-                self.analog.waitForAttach(10) # 10ms
-            except Phidgets.PhidgetException.PhidgetException:
-                pass
-            
-            if (self.analog.isAttached()):
-                self.bAttached = True
-        
-        
             
     
     

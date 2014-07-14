@@ -1,4 +1,26 @@
 #!/usr/bin/env python
+
+
+##############################################################################
+# plot_tracker
+#    For assistance with correctly setting bodypart tracking parameters, run this 
+#    node alongside Kinefly to show various internal signals related to the 
+#    tracking.  This may help you in setting parameters such as 'threshold'.
+#
+#    Each Kinefly tracker makes its data available via a service name such
+#    as 'trackerdata_head', 'trackerdata_left', 'trackerdata_right', or
+#    'trackerdata_abdomen'.  
+#
+#    Prior to running this, set the 'trackerdata_name' parameter to the 
+#    signal of interest.  For example:
+#
+#    rosparam set trackername trackerdata_abdomen
+#    rosrun Kinefly plot_tracker.py
+#
+#
+##############################################################################
+
+
 import roslib; roslib.load_manifest('Kinefly')
 import rospy
 
@@ -11,16 +33,18 @@ import numpy as np
 
 from Kinefly.srv import SrvTrackerdata
 
-class TrackerPlotter:
+class PlotTracker:
     
     def __init__(self):
         
-        rospy.init_node('trackerplotter', anonymous=True)
+        rospy.init_node('plottracker')
         
         # Attach to services.
-        service_name = 'trackerdata_abdomen'
+        service_name = rospy.get_param('trackername','YOU_NEED_TO_SET_THIS_VIA_ROSPARAM')
+        rospy.logwarn('Waiting for Kinefly service: %s' % service_name)
         rospy.wait_for_service(service_name)
         self.get_trackerdata = rospy.ServiceProxy(service_name, SrvTrackerdata)
+        rospy.logwarn('Connected to Kinefly.')
         rospy.sleep(1)
         trackerdata = self.get_trackerdata(0)
         
@@ -29,11 +53,12 @@ class TrackerPlotter:
         self.diffs_hi = -np.inf
         self.diffs_lo = np.inf
                 
-        # Open a figure window with subplots.  top:intensity, bottom:diff
+        # Open a figure window with subplots.
         self.fig = plt.figure(service_name)
-        self.sub1 = plt.subplot(2,1,1)
-        self.sub2 = plt.subplot(2,1,2)
-        #rospy.logwarn(trackerdata)
+
+        self.sub1 = self.fig.add_subplot(2,1,1)
+        self.sub2 = self.fig.add_subplot(2,1,2)
+
         self.sub1.set_xlim(np.min(trackerdata.abscissa), np.max(trackerdata.abscissa))
         self.sub2.set_xlim(np.min(trackerdata.abscissa), np.max(trackerdata.abscissa))
         self.sub1.set_title('plot1')
@@ -43,7 +68,6 @@ class TrackerPlotter:
         self.sub1.plot(trackerdata.abscissa, np.zeros(len(trackerdata.abscissa)), '.', color=trackerdata.color)
         self.sub1.hold(True)
 
-        #self.plot1_markers = []
         for marker in trackerdata.markersH:
             self.sub1.plot([marker, marker], [0,1], color=trackerdata.color,   linewidth=1)
         for marker in trackerdata.markersV:
@@ -57,16 +81,23 @@ class TrackerPlotter:
         for marker in trackerdata.markersV:
             self.sub2.plot([0,1], [marker, marker], color='red',   linewidth=1)
 
+        self.cid = self.fig.canvas.mpl_connect('close_event', self.onClose)
         self.fig.show()
         #self.image_animation = animation.FuncAnimation(self.fig, self.update_plots, init_func=self.init_plot, interval=50, blit=True)
         
+
+    def onClose(self, guiEvent=None):
+        self.fig.canvas.mpl_disconnect(self.cid)
+        self.fig.clear()
+        rospy.signal_shutdown('User requested exit.')
+
         
     def update_plots(self):
         # Get the trackerdata.
         try:
             trackerdata = self.get_trackerdata(0)
         except rospy.ServiceException:
-            pass
+            self.onClose()
         else:
             decay = 1.0#0.97
             intensities = np.array([trackerdata.intensities])
@@ -105,8 +136,9 @@ class TrackerPlotter:
                     self.sub1.plot(self.sub1.get_xlim(), [marker, marker])
                     self.sub2.plot(self.sub2.get_xlim(), [marker, marker])
     
-            self.fig.canvas.draw()
-
+        plt.draw()
+            
+            
         
         
     def init_plot(self): # required to start with clean slate
@@ -117,13 +149,17 @@ class TrackerPlotter:
 
     def run(self):
         rosrate = rospy.Rate(20)
-        while (not rospy.is_shutdown()):
-            self.update_plots()
-            rosrate.sleep()
+        try:
+            while (not rospy.is_shutdown()):
+                self.fig.canvas.flush_events()
+                self.update_plots()
+                rosrate.sleep()
+        except rospy.exceptions.ROSInterruptException:
+            pass
         
         
 
 if __name__ == '__main__':
-    main = TrackerPlotter()
+    main = PlotTracker()
     main.run()
     

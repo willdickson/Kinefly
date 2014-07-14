@@ -523,7 +523,6 @@ class MainWindow:
                 # Go to the next image.
                 self.iImgWorking = (self.iImgWorking+1) % len(self.bufferImages)
                 
-        
 
 
         if (rosimg is not None):            
@@ -583,7 +582,9 @@ class MainWindow:
                 self.fly.update(rosimg.header, self.imgScaled)
     
                 # Publish the outputs.
+                self.start()
                 self.fly.publish()
+                self.stop()
                 
             
             if (self.params['use_gui']):
@@ -1197,14 +1198,32 @@ class MainWindow:
     # End onMouse()
 
             
+    def start(self):
+        self.t0 = rospy.Time.now().to_sec()
+                
+    def stop(self):
+        self.t1 = rospy.Time.now().to_sec()
                 
     def run(self):
         if (self.params['gui']['aux']['track']):
             self.fly.aux.wingbeat.warn()
         
+        tMin = np.Inf
+        tMax = -np.Inf
+        i = 0
+        
         bFailed = False
         while (not rospy.is_shutdown()):
             self.process_image()
+
+#             # Report results from use of self.start() & self.stop()
+#             i += 1
+#             if (i>1000):
+#                 tMin = np.min([tMin, self.t1-self.t0])
+#                 tMax = np.max([tMax, self.t1-self.t0])
+#                 rospy.logwarn('tMin=%0.6f, t=%0.6f, tMax=%0.6f' % (tMin, self.t1-self.t0, tMax))
+
+                
 #             # Profile the cause of dropped frames.  Profile up to the point we get a bunch of drops, and keep that result.
 #             if ('kinefly2' in rospy.get_name().rstrip('/')):
 #                 if not bFailed:

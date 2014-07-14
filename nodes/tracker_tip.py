@@ -94,7 +94,7 @@ class TipTracker(MotionTrackedBodypartPolar):
         self.iRadius = 0
 
         # Services, for live intensities plots via live_wing_histograms.py
-        self.service_tipdata    = rospy.Service('trackerdata_'+self.name, SrvTrackerdata, self.serve_tipdata_callback)
+        self.service_trackerdata    = rospy.Service('trackerdata_'+self.name, SrvTrackerdata, self.serve_trackerdata_callback)
 
     
     # set_params()
@@ -192,7 +192,7 @@ class TipTracker(MotionTrackedBodypartPolar):
             self.windowTip.show()
         
         
-    def serve_tipdata_callback(self, request):
+    def serve_trackerdata_callback(self, request):
         title1      = 'Intensities'
         title2      = 'Diffs'
         intensities = list(self.detector.intensities)
