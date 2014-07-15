@@ -592,10 +592,11 @@ class MotionTrackedBodypartPolar(MotionTrackedBodypart):
                                                          amplifyTheta = 1.0)
                 self.imgHeadroomPolarCropped = self.imgHeadroomPolar[0:iMinY]
             
-                H = self.imgHeadroomPolarCropped / 255.0
+                # Perform the correction.
+                TH = self.imgHeadroomPolarCropped / 255.0
                 M = np.mean(self.imgRoiFgMaskedPolarCropped, 0).astype(np.float32)
-                F = self.imgRoiFgMaskedPolarCropped.astype(np.float32) - M
-                self.imgRoiFgMaskedPolarCropped  = M + cv2.multiply(H, F)
+                TF = self.imgRoiFgMaskedPolarCropped.astype(np.float32)
+                self.imgRoiFgMaskedPolarCropped  = M + cv2.multiply(TH, TF-M)
             
             
             if (self.bValidMask):
