@@ -616,8 +616,9 @@ class MotionTrackedBodypartPolar(MotionTrackedBodypart):
 
     def update(self, dt, image, bInvertColor):
         MotionTrackedBodypart.update(self, dt, image, bInvertColor)
-        self.update_polarimage()
-        self.imgFinal = self.imgRoiFgMaskedPolarCroppedWindowed
+        if (self.params['gui'][self.name]['track']):
+            self.update_polarimage()
+            self.imgFinal = self.imgRoiFgMaskedPolarCroppedWindowed
         
 
         

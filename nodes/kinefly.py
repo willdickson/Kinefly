@@ -38,9 +38,6 @@ class Struct:
 ###############################################################################
 class MainWindow:
     def __init__(self):
-        self.stampPrev = None
-        self.stampPrevAlt = None
-        self.stampRosimagePrev = None
         self.lockParams = threading.Lock()
         self.lockBuffer = threading.Lock()
         
@@ -178,14 +175,18 @@ class MainWindow:
         self.uiSelected     = None
         self.stateSelected  = None
         self.fly.update_handle_points()
-        self.stampDiff      = rospy.Duration(0)
+        self.stampCameraPrev= rospy.Time(0)
+        self.stampCameraDiff= rospy.Duration(0)
+        self.stampROSPrev   = rospy.Time(0)
+        self.stampROSDiff   = rospy.Duration(0)
         self.stampMax       = rospy.Duration(0)
         self.dtCamera       = np.inf
-        self.hzActual       = 0.0
-        self.hzActualSum    = 0.0
-        self.hzAvailable    = 0.0
-        self.hzAvailableSum = 0.0
-        self.iCount         = 0
+        self.hzCameraF      = 0.0
+        self.hzCameraSum    = 0.0
+        self.hzROSF         = 0.0
+        self.hzROSSum       = 0.0
+        self.iCountCamera   = 0
+        self.iCountROS      = 0
         self.iDroppedFrame  = 0
 
         self.bufferImages   = [None]*self.params['n_queue_images'] # Circular buffer for incoming images.
@@ -460,16 +461,10 @@ class MainWindow:
                     iImgLoadingNext = (self.iImgLoading+1) % len(self.bufferImages)
                     iImgWorkingNext = self.iImgWorking
                     self.iDroppedFrame = 0
-# 
-#                     if ('kinefly2' in self.nodename):
-#                         rospy.logwarn('Loaded                       %d' % self.iImgLoading)
                 else:                                               # The buffer is full; we'll overwrite the oldest entry.
                     iImgLoadingNext = (self.iImgLoading+1) % len(self.bufferImages)
                     iImgWorkingNext = (self.iImgWorking+1) % len(self.bufferImages)
                     self.iDroppedFrame += 1
-# 
-#                     if ('kinefly2' in self.nodename):
-#                         rospy.logwarn('Loaded        dropped %d     %d' % (self.iImgWorking, self.iImgLoading))
     
                 self.bufferImages[self.iImgLoading] = rosimg
                 self.iImgLoading = iImgLoadingNext
@@ -482,11 +477,11 @@ class MainWindow:
 #                     rospy.logwarn('nQueue %d' % n)
 
 #            # Warn if the camera is delaying.
-#            if (self.stampRosimagePrev is not None):
-#                if (rosimg.header.stamp.to_sec() - self.stampRosimagePrev.to_sec() > 1):
-#                    rospy.logwarn('%s: %d, %d %0.6f' % (self.nodename, rosimg.header.seq, (rosimg.header.stamp.secs*1e9)+rosimg.header.stamp.nsecs, rosimg.header.stamp.to_sec() - self.stampRosimagePrev.to_sec()))
+#            if (self.stampROSimagePrev is not None):
+#                if (self.stampCamera.to_sec() - self.stampROSimagePrev.to_sec() > 1):
+#                    rospy.logwarn('%s: %d, %d %0.6f' % (self.nodename, rosimg.header.seq, (self.stampCamera.secs*1e9)+self.stampCamera.nsecs, self.stampCamera.to_sec() - self.stampROSimagePrev.to_sec()))
 #
-#            self.stampRosimagePrev = rosimg.header.stamp
+#            self.stampROSimagePrev = self.stampCamera
 
             self.bValidImage = True
 
@@ -504,12 +499,8 @@ class MainWindow:
                 
                 
     def process_image(self):
-        stamp0 = rospy.Time.now()
         rosimg = None
         
-#        if ('kinefly3' in self.nodename) and (self.stampPrev is not None):
-#            rospy.logwarn('Checking %d: %0.6f' % (self.iImgWorking, self.stampPrev.to_sec()))
-
         with self.lockBuffer:
             if (self.bufferImages[self.iImgWorking] is not None):
                 rosimg = self.bufferImages[self.iImgWorking]
@@ -517,45 +508,66 @@ class MainWindow:
                 # Mark this buffer entry as available for loading.
                 self.bufferImages[self.iImgWorking] = None
     
-#                 if ('kinefly2' in self.nodename):
-#                     rospy.logwarn('Processed             %d' % self.iImgWorking)
-
                 # Go to the next image.
                 self.iImgWorking = (self.iImgWorking+1) % len(self.bufferImages)
                 
 
+        # Compute processing times.
+        self.stampROS        = rospy.Time.now()
+        self.stampROSDiff    = (self.stampROS - self.stampROSPrev)
+        self.stampROSPrev    = self.stampROS
+        self.dtROS           = max(0, self.stampROSDiff.to_sec())
 
-        if (rosimg is not None):            
-            if (self.stampPrev is not None):
-                self.dtCamera = max(0, (rosimg.header.stamp - self.stampPrev).to_sec())
-                
-                # If the camera is not giving good timestamps, then use our own clock.
-                if (self.dtCamera == 0.0):
-                    self.dtCamera = max(0, (stamp0 - self.stampPrevAlt).to_sec())
-                    
-                # If time wrapped, then just assume a value.
-                if (self.dtCamera == 0.0):
-                    self.dtCamera = 1.0
-                    
-#                if ('kinefly3' in self.nodename):
-#                    rospy.logwarn('********************')
-#                    s1 = 'prev=%0.6f, img=%0.6f: img-prev=%0.6f, dt=%0.6f' % (self.stampPrev.to_sec(), rosimg.header.stamp.to_sec(), rosimg.header.stamp.to_sec()-self.stampPrev.to_sec(), self.dtCamera)
-#                    if (self.iDroppedFrame>0):
-#                        s1 += '    Dropped Frames: %d' % self.iDroppedFrame
-#                    rospy.logwarn(s1)
-#
-#                    s2 = 'prev0=%0.6f, 0=%0.6f: 0-prev0=%0.6f' % (self.stampPrevAlt.to_sec(), stamp0.to_sec(), stamp0.to_sec()-self.stampPrevAlt.to_sec())
-#                    if (self.iDroppedFrame>0):
-#                        s2 += '    Dropped Frames: %d' % self.iDroppedFrame
-#                    rospy.logwarn(s2)
+        # If time wrapped, then just assume a value.
+        if (self.dtROS == 0.0):
+            self.dtROS = 1.0
 
+        # Compute system freq.
+        hzROS = 1/self.dtROS
+        self.iCountROS += 1
+        if (self.iCountROS > 100):                     
+            a= 0.04 # Filter the framerate.
+            self.hzROSF = (1-a)*self.hzROSF + a*hzROS 
+        else:                                       
+            if (self.iCountROS>20):             # Get past the transient response.       
+                self.hzROSSum += hzROS                 
             else:
-                self.dtCamera = np.inf
-
+                self.hzROSSum = hzROS * self.iCountROS     
                 
-            self.stampPrev = rosimg.header.stamp
-            self.stampPrevAlt = stamp0
+            self.hzROSF = self.hzROSSum / self.iCountROS
+                        
+            
+        if (rosimg is not None):            
+            # Compute processing times.
+            self.stampCamera     = rosimg.header.stamp
+            self.stampCameraDiff = (self.stampCamera - self.stampCameraPrev)
+            self.stampCameraPrev = self.stampCamera
+            self.dtCamera        = max(0, self.stampCameraDiff.to_sec())
 
+            # If the camera is not giving good timestamps, then use our own clock.
+            if (self.dtCamera == 0.0):
+                self.dtCamera = self.dtROS
+                
+            # If time wrapped, then just assume a value.
+            if (self.dtCamera == 0.0):
+                self.dtCamera = 1.0
+                    
+            # Compute processing freq.
+            hzCamera = 1/self.dtCamera
+            self.iCountCamera += 1
+            if (self.iCountCamera > 100):                     
+                a= 0.01 # Filter the framerate.
+                self.hzCameraF = (1-a)*self.hzCameraF + a*hzCamera 
+            else:                                       
+                if (self.iCountCamera>20):             # Get past the transient response.       
+                    self.hzCameraSum += hzCamera                 
+                else:
+                    self.hzCameraSum = hzCamera * self.iCountCamera     
+                    
+                self.hzCameraF = self.hzCameraSum / self.iCountCamera
+                        
+
+            # Convert the image.
             try:
                 img = np.uint8(cv.GetMat(self.cvbridge.imgmsg_to_cv(rosimg, 'passthrough')))
                 
@@ -604,45 +616,10 @@ class MainWindow:
                 if (not self.bMousing):
 
                     # Output the framerate.
-                    hzNow = 1/self.dtCamera
-                    self.iCount += 1
-                    if (self.iCount > 100):                     
-                        a= 0.01 # Filter the framerate.
-                        self.hzActual = (1-a)*self.hzActual + a*hzNow 
-                    else:                                       
-                        if (self.iCount>20):             # Get past the transient response.       
-                            self.hzActualSum += hzNow                 
-                        else:
-                            self.hzActualSum = hzNow * self.iCount     
-                            
-                        self.hzActual = self.hzActualSum / self.iCount
-                        
-                    dtAvailable = self.stampDiff.to_sec()
-                    if (dtAvailable != 0.0):
-                        hzAvailableNow = 1/dtAvailable
-                        if (self.iCount > 100):                     
-                            a= 0.04 # Filter the framerate.
-                            self.hzAvailable = (1-a)*self.hzAvailable + a*hzAvailableNow 
-                        else:                                       
-                            if (self.iCount>20):             # Get past the transient response.       
-                                self.hzAvailableSum += hzAvailableNow                 
-                            else:
-                                self.hzAvailableSum = hzAvailableNow * self.iCount     
-                                
-                            self.hzAvailable = self.hzAvailableSum / self.iCount
-                        
-                    
-                    
-                    s = '%5.1fHz (%5.1fHz avail)' % (self.hzActual, self.hzAvailable)
-                        
+                    s = '%5.1fHz (%5.1fHz avail)' % (self.hzCameraF, self.hzROSF)
                     if (self.iDroppedFrame>0):
                         s += '    Dropped Frames: %d' % self.iDroppedFrame
-#                          
-#                         if ('kinefly2' in self.nodename):
-#                             rospy.logwarn(s)
-
                     cv2.putText(imgOutput, s, (x, y), self.fontface, self.scaleText, ui.bgra_dict['dark_red'] )
-                    
                     h_text = int(h * self.scale)
                     y -= h_text+self.h_gap
                 
@@ -733,15 +710,9 @@ class MainWindow:
                 # Display the image.
                 cv2.imshow(self.window_name, imgOutput)
 
-            # Compute processing time.
-            stamp1 = rospy.Time.now()
-            self.stampDiff = (stamp1 - stamp0)
-            self.stampMax = max(self.stampMax, self.stampDiff)
-            if (self.iCount % 100)==0:
-                self.stampMax = rospy.Duration(0)
 #         else:
-#             if (self.hzAvailable != 0.0):
-#                 rospy.sleep(1/self.hzAvailable) # Pretend we spent time processing.
+#             if (self.hzROSF != 0.0):
+#                 rospy.sleep(1/self.hzROSF) # Pretend we spent time processing.
         
         cv2.waitKey(1)
 
@@ -1230,7 +1201,7 @@ class MainWindow:
 #                     cProfile.runctx('self.process_image()', globals(), locals(), filename='/home/ssafarik/profile.pstats')
 #                 else:
 #                     self.process_image()
-#                 if (self.iDroppedFrame>20) and (self.iCount>100):
+#                 if (self.iDroppedFrame>20) and (self.iCountCamera>100):
 #                     bFailed = True
 #                     rospy.logwarn('self.iDroppedFrame: %d' % self.iDroppedFrame)
 #             else:

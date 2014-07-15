@@ -40,7 +40,7 @@ class PlotTracker:
         rospy.init_node('plottracker')
         
         # Attach to services.
-        service_name = rospy.get_param('trackername','YOU_NEED_TO_SET_THIS_VIA_ROSPARAM')
+        service_name = rospy.get_param('trackername','YOU_NEED_TO_SET_TRACKERNAME_VIA_ROSPARAM')
         rospy.logwarn('Waiting for Kinefly service: %s' % service_name)
         rospy.wait_for_service(service_name)
         self.get_trackerdata = rospy.ServiceProxy(service_name, SrvTrackerdata)
