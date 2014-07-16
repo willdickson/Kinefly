@@ -490,7 +490,11 @@ class MainWindow:
                     dnQueue = nQueue - self.nQueuePrev
 
                 a = 0.001
-                self.dnQueueF = (1-a)*self.dnQueueF + a*dnQueue
+                if (self.iDroppedFrame>0) and (self.dnQueueF<0.0):
+                    self.dnQueueF = 0.0
+                else:  
+                    self.dnQueueF = (1-a)*self.dnQueueF + a*dnQueue
+                
                 self.aQueue = float(nQueue)/float(len(self.bufferImages))
                 self.nQueuePrev = nQueue
                     
