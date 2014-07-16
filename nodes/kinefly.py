@@ -489,10 +489,11 @@ class MainWindow:
                 else:
                     dnQueue = nQueue - self.nQueuePrev
 
-                a = 0.001
+                # Bring the bar back to red, if it's green and we dropped a frame.
                 if (self.iDroppedFrame>0) and (self.dnQueueF<0.0):
-                    self.dnQueueF = 0.0
+                    self.dnQueueF = 0.1
                 else:  
+                    a = 0.001
                     self.dnQueueF = (1-a)*self.dnQueueF + a*dnQueue
                 
                 self.aQueue = float(nQueue)/float(len(self.bufferImages))
