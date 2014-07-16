@@ -189,7 +189,10 @@ class MainWindow:
         self.iCountCamera   = 0
         self.iCountROS      = 0
         self.iDroppedFrame  = 0
-
+        
+        self.nQueuePrev     = 0     # Length of the image queue.
+        self.dnQueueF       = 0.0   # Rate of change of the image queue length.
+        
         self.bufferImages   = [None]*self.params['n_queue_images'] # Circular buffer for incoming images.
         self.iImgLoading    = 0  # Index of the next slot to load.
         self.iImgWorking    = 0  # Index of the slot to process, i.e. the oldest image in the buffer.
@@ -218,8 +221,8 @@ class MainWindow:
         self.reconfigure = dynamic_reconfigure.server.Server(kineflyConfig, self.reconfigure_callback)
         
         # Preload a "Waiting..." image.
-        h=int(480 * self.scale)
-        w=int(640 * self.scale)
+        h=int(480)
+        w=int(640)
         imgInitial = np.zeros((h,w), dtype=np.uint8)
         for i in range(20):
             color = cv.Scalar(int(255*np.random.random()), int(255*np.random.random()), int(255*np.random.random()), 0)
@@ -458,6 +461,7 @@ class MainWindow:
         # Receive the image:
         if (not self.bQuitting):
             with self.lockBuffer:
+                # Check for dropped frame.
                 if (self.bufferImages[self.iImgLoading] is None):   # There's an empty slot in the buffer.
                     iImgLoadingNext = (self.iImgLoading+1) % len(self.bufferImages)
                     iImgWorkingNext = self.iImgWorking
@@ -467,16 +471,31 @@ class MainWindow:
                     iImgWorkingNext = (self.iImgWorking+1) % len(self.bufferImages)
                     self.iDroppedFrame += 1
     
+                # Put the image into the queue.
                 self.bufferImages[self.iImgLoading] = rosimg
                 self.iImgLoading = iImgLoadingNext
                 self.iImgWorking = iImgWorkingNext
             
-                # Print the queue length.
+                # The image queue length.
+                nQueue = (self.iImgLoading - self.iImgWorking) %  len(self.bufferImages)
+                if (nQueue==0) and (self.bufferImages[self.iImgLoading] is not None):
+                    nQueue += len(self.bufferImages)
+                    
+                # Rate of change of the image queue length.
+                if (nQueue == len(self.bufferImages)):
+                    dnQueue = 1.0
+                elif (nQueue <= 1):
+                    dnQueue = -1.0
+                else:
+                    dnQueue = nQueue - self.nQueuePrev
+
+                a = 0.001
+                self.dnQueueF = (1-a)*self.dnQueueF + a*dnQueue
+                self.aQueue = float(nQueue)/float(len(self.bufferImages))
+                self.nQueuePrev = nQueue
+                    
                 if False:#('kinefly2' in self.nodename):
-                    n = (self.iImgLoading - self.iImgWorking) %  len(self.bufferImages)
-                    if (n==0) and (self.bufferImages[self.iImgLoading] is not None):
-                        n += len(self.bufferImages)
-                    rospy.logwarn('nQueue %d' % n)
+                    rospy.logwarn('nQueue %3d, dnQueue %3d, dnQueueF %0.3f' % (nQueue, dnQueue, self.dnQueueF))
 
 #            # Warn if the camera is delaying.
 #            if (self.stampROSimagePrev is not None):
@@ -618,52 +637,65 @@ class MainWindow:
                 if (not self.bMousing):
 
                     # Output the framerate.
-                    s = '%5.1fHz (%5.1fHz avail)' % (self.hzCameraF, self.hzROSF)
+                    s = '%5.1fHz [queue:          ]' % (self.hzCameraF)
                     if (self.iDroppedFrame>0):
                         s += '    Dropped Frames: %d' % self.iDroppedFrame
                     cv2.putText(imgOutput, s, (x, y), self.fontface, self.scaleText, ui.bgra_dict['dark_red'] )
                     h_text = int(h * self.scale)
-                    y -= h_text+self.h_gap
+                    
+                    # Draw the gauge bar for the image queue length.
+                    nBar = int(50*self.scale) # pixels max.
+                    xBar = int(x+110*self.scale)
+                    yBar = y-int(h_text/2)+1
+                    ptBar0 = (xBar,                       yBar)
+                    ptBar1 = (xBar+int(self.aQueue*nBar), yBar)
+                    if (self.dnQueueF>0):
+                        bgra = ui.bgra_dict['dark_red']
+                    else:
+                        bgra = ui.bgra_dict['dark_green']
+                        
+                    cv2.line(imgOutput, ptBar0, ptBar1, bgra, max(1,int(4*self.scale)))
                 
     
                     # Output the aux state.
                     if (self.params['gui']['aux']['track']):
+                        y -= h_text+self.h_gap
                         s = 'AUX: (%0.3f)' % (self.fly.aux.state.intensity)
                         cv2.putText(imgOutput, s, (x, y), self.fontface, self.scaleText, self.fly.aux.bgra)
                         h_text = int(h * self.scale)
-                        y -= h_text+self.h_gap
                     
+                        y -= h_text+self.h_gap
                         s = 'WB Freq: '
                         if (self.fly.aux.state.freq != 0.0):
                             s += '%0.0fhz' % (self.fly.aux.state.freq)
                         cv2.putText(imgOutput, s, (x, y), self.fontface, self.scaleText, self.fly.aux.bgra)
                         h_text = int(h * self.scale)
-                        y -= h_text+self.h_gap
                     
     
                     # Output the wings state.
                     if (self.params['gui']['left']['track']) and (self.params['gui']['right']['track']):
                         # L+R
+                        y -= h_text+self.h_gap
                         s = 'L+R:'
                         if (len(self.fly.left.state.angles)>0) and (len(self.fly.right.state.angles)>0):
                             leftplusright = self.fly.left.state.angles[0] + self.fly.right.state.angles[0]
                             s += '% 7.4f' % leftplusright
                         cv2.putText(imgOutput, s, (x, y), self.fontface, self.scaleText, ui.bgra_dict['blue'])
                         h_text = int(h * self.scale)
-                        y -= h_text+self.h_gap
         
                             
                         # L-R
+                        y -= h_text+self.h_gap
                         s = 'L-R:'
                         if (len(self.fly.left.state.angles)>0) and (len(self.fly.right.state.angles)>0):
                             leftminusright = self.fly.left.state.angles[0] - self.fly.right.state.angles[0]
                             s += '% 7.4f' % leftminusright
                         cv2.putText(imgOutput, s, (x, y), self.fontface, self.scaleText, ui.bgra_dict['blue'])
                         h_text = int(h * self.scale)
-                        y -= h_text+self.h_gap
         
                     if (self.params['gui']['right']['track']):
                         # Right
+                        y -= h_text+self.h_gap
                         s = 'R:'
                         if (len(self.fly.right.state.angles)>0):
                             s += '% 7.4f' % self.fly.right.state.angles[0]
@@ -671,10 +703,10 @@ class MainWindow:
                             #    s += ', % 7.4f' % self.fly.right.state.angles[i]
                         cv2.putText(imgOutput, s, (x, y), self.fontface, self.scaleText, self.fly.right.bgra)
                         h_text = int(h * self.scale)
-                        y -= h_text+self.h_gap
             
                     if (self.params['gui']['left']['track']):
                         # Left
+                        y -= h_text+self.h_gap
                         s = 'L:'
                         if (len(self.fly.left.state.angles)>0):
                             s += '% 7.4f' % self.fly.left.state.angles[0]
@@ -682,31 +714,30 @@ class MainWindow:
                             #    s += ', % 7.4f' % self.fly.left.state.angles[i]
                         cv2.putText(imgOutput, s, (x, y), self.fontface, self.scaleText, self.fly.left.bgra)
                         h_text = int(h * self.scale)
-                        y -= h_text+self.h_gap
                         
                             
     
     
                     # Output the abdomen state.
                     if (self.params['gui']['abdomen']['track']):
+                        y -= h_text+self.h_gap
                         s = 'ABDOMEN:'
                         if (len(self.fly.abdomen.state.angles)>0):
                             s += '% 7.4f' % (self.fly.abdomen.state.angles[0])
 
                         cv2.putText(imgOutput, s, (x, y), self.fontface, self.scaleText, self.fly.abdomen.bgra)
                         h_text = int(h * self.scale)
-                        y -= h_text+self.h_gap
                     
     
                     # Output the head state.
                     if (self.params['gui']['head']['track']):
+                        y -= h_text+self.h_gap
                         s = 'HEAD:'
                         if (len(self.fly.head.state.angles)>0):
                             s+= '% 7.4f' % (self.fly.head.state.angles[0])
 
                         cv2.putText(imgOutput, s, (x, y), self.fontface, self.scaleText, self.fly.head.bgra)
                         h_text = int(h * self.scale)
-                        y -= h_text+self.h_gap
                 
 
                 # Display the image.
