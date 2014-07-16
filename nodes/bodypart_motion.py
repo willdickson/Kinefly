@@ -105,7 +105,7 @@ class MotionTrackedBodypart(object):
             self.angleBodypart_i = float(np.arctan2(self.params['gui'][self.name]['hinge']['y']-self.params['gui'][nameRelative[self.name]]['hinge']['y'], 
                                                     self.params['gui'][self.name]['hinge']['x']-self.params['gui'][nameRelative[self.name]]['hinge']['x']))
         else:
-            ptBodyaxis_i = self.get_projection_onto_bodyaxis(self.ptHinge_i)
+            ptBodyaxis_i = imageprocessing.get_projection_onto_axis(self.ptHinge_i, (self.ptHingeAbdomen_i, self.ptHingeHead_i))
             self.angleBodypart_i = float(np.arctan2(self.params['gui'][self.name]['hinge']['y']-ptBodyaxis_i[1], 
                                                     self.params['gui'][self.name]['hinge']['x']-ptBodyaxis_i[0]))
 
@@ -128,18 +128,6 @@ class MotionTrackedBodypart(object):
         self.update_handle_points()
 
 
-    # get_projection_onto_bodyaxis()
-    # Project the given point onto the body axis.
-    #
-    def get_projection_onto_bodyaxis(self, ptAnywhere):
-        # Project the point onto the body axis.
-        ptB = self.ptHingeHead_i - self.ptHingeAbdomen_i
-        ptM = ptAnywhere - self.ptHingeAbdomen_i
-        ptAxis = np.dot(ptB,ptM) / np.dot(ptB,ptB) * ptB + self.ptHingeAbdomen_i
-            
-        return ptAxis
-        
-                
     # transform_angle_b_from_p()
     # Transform an angle from the bodypart frame to the fly body frame.
     #
@@ -549,19 +537,21 @@ class MotionTrackedBodypartPolar(MotionTrackedBodypart):
             dr         = (self.params['gui'][self.name]['radius_outer'] - self.params['gui'][self.name]['radius_inner'])/2.0
 
             self.imgRoiFgMasked[self.imgRoiFgMasked==255] = 254 # Make room the for +1, next.
-            self.imgRoiFgMaskedPolar  = self.polartransforms.transform_polar_elliptical(self.imgRoiFgMasked+1, # +1 so we find cropped pixels, next, rather than merely black pixels. 
-                                                     self.i_0, 
-                                                     self.j_0, 
-                                                     raxial=radius_mid, 
-                                                     rortho=radius_mid,
-                                                     dradiusStrip=int(dr),
-                                                     amplifyRho = 1.0,
-                                                     rClip = self.rClip,
-                                                     angleEllipse=self.angleBodypart_i,
-                                                     theta_0 = min(theta_0a,theta_1a), 
-                                                     theta_1 = max(theta_0a,theta_1a),
-                                                     amplifyTheta = 1.0)
-
+            try:
+                self.imgRoiFgMaskedPolar  = self.polartransforms.transform_polar_elliptical(self.imgRoiFgMasked+1, # +1 so we find cropped pixels, next, rather than merely black pixels. 
+                                                         self.i_0, 
+                                                         self.j_0, 
+                                                         raxial=radius_mid, 
+                                                         rortho=radius_mid,
+                                                         dradiusStrip=int(dr),
+                                                         amplifyRho = 1.0,
+                                                         rClip = self.rClip,
+                                                         angleEllipse=self.angleBodypart_i,
+                                                         theta_0 = min(theta_0a,theta_1a), 
+                                                         theta_1 = max(theta_0a,theta_1a),
+                                                         amplifyTheta = 1.0)
+            except imageprocessing.TransformException:
+                rospy.logwarn('%s: Mask is outside the image, no points transformed.' % self.name)
                 
             # Find the y value where the black band should be cropped out (but leave at least one raster if image is all-black).
             sumY = np.sum(self.imgRoiFgMaskedPolar,1)

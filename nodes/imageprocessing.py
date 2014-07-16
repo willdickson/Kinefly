@@ -7,6 +7,10 @@ import cv2
 import numpy as np
 
 
+class TransformException(Exception):
+    pass
+
+
 def get_angle_from_points_i(pt1, pt2):
     x = pt2[0] - pt1[0]
     y = pt2[1] - pt1[1]
@@ -38,6 +42,25 @@ def get_intersection(pt1a, pt1b, pt2a, pt2b):
     return np.array([x,y])
             
             
+# get_projection_onto_axis()
+# Project the given point onto the axis.
+#
+def get_projection_onto_axis(ptAnywhere, (ptAxisBase, ptAxisHead)):
+    # Project the point onto the body axis.
+    ptB = ptAxisHead - ptAxisBase
+    ptM = ptAnywhere - ptAxisBase
+    ptAxis = np.dot(ptB,ptM) / np.dot(ptB,ptB) * ptB + ptAxisBase
+        
+    return ptAxis
+    
+            
+def get_reflection_across_axis(ptAnywhere, (ptAxisBase, ptAxisHead)):
+    ptAxis = get_projection_onto_axis(ptAnywhere, (ptAxisBase, ptAxisHead))
+    ptReflected = ptAnywhere + 2*(ptAxis-ptAnywhere)
+    
+    return ptReflected
+
+    
 def filter_median(data, q=1): # q is the 'radius' of the filter window.  q==1 is a window of 3.  q==2 is a window of 5.
     data2 = copy.copy(data)
     for i in range(q,len(data)-q):
@@ -319,7 +342,8 @@ class PolarTransforms(object):
         if (len(pt[0])>0):
             imgTransformed[pt] = image[ij]
         else:
-            rospy.logwarn('No points transformed.')
+            # No points transformed.
+            raise TransformException()
         
         return imgTransformed
 

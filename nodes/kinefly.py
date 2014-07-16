@@ -25,6 +25,7 @@ from std_msgs.msg import Float32, Header, String
 from Kinefly.srv import SrvTrackerdata, SrvTrackerdataResponse
 from Kinefly.msg import MsgFlystate, MsgState
 from Kinefly.cfg import kineflyConfig
+import imageprocessing
 
 # gImageTime = 0.0
 gbShowMasks = False
@@ -779,25 +780,6 @@ class MainWindow:
         return name
     
 
-    # get_projection_onto_bodyaxis()
-    # Project the given point onto the body axis.
-    #
-    def get_projection_onto_bodyaxis(self, ptAnywhere):
-        # Project the point onto the body axis.
-        ptB = self.fly.head.ptHinge_i - self.fly.abdomen.ptHinge_i
-        ptM = ptAnywhere - self.fly.abdomen.ptHinge_i
-        ptAxis = np.dot(ptB,ptM) / np.dot(ptB,ptB) * ptB + self.fly.abdomen.ptHinge_i
-            
-        return ptAxis
-        
-                
-    def get_reflection_across_bodyaxis(self, ptAnywhere):
-        ptAxis = self.get_projection_onto_bodyaxis(ptAnywhere)
-        ptReflected = ptAnywhere + 2*(ptAxis-ptAnywhere)
-        
-        return ptReflected
-
-    
     def bodypart_from_partname(self, partname):
         if (partname=='left'):
             bodypart = self.fly.left
@@ -884,7 +866,7 @@ class MainWindow:
                 bodypartSelected.bValidMask = False
 
                 if (paramsScaled['gui']['symmetric']):
-                    ptSlave = self.get_reflection_across_bodyaxis(ptMouse)
+                    ptSlave = imageprocessing.get_reflection_across_axis(ptMouse, (self.fly.abdomen.ptHinge_i, self.fly.head.ptHinge_i))
                     paramsScaled['gui'][partnameSlave]['hinge']['x'] = float(ptSlave[0])
                     paramsScaled['gui'][partnameSlave]['hinge']['y'] = float(ptSlave[1])
                     bodypartSlave.bValidMask = False
