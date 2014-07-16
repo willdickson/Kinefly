@@ -476,32 +476,6 @@ class MainWindow:
                 self.iImgLoading = iImgLoadingNext
                 self.iImgWorking = iImgWorkingNext
             
-                # The image queue length.
-                nQueue = (self.iImgLoading - self.iImgWorking) %  len(self.bufferImages)
-                if (nQueue==0) and (self.bufferImages[self.iImgLoading] is not None):
-                    nQueue += len(self.bufferImages)
-                    
-                # Rate of change of the image queue length.
-                if (nQueue == len(self.bufferImages)):
-                    dnQueue = 1.0
-                elif (nQueue <= 1):
-                    dnQueue = -1.0
-                else:
-                    dnQueue = nQueue - self.nQueuePrev
-
-                # Bring the bar back to red, if it's green and we dropped a frame.
-                if (self.iDroppedFrame>0) and (self.dnQueueF<0.0):
-                    self.dnQueueF = 0.1
-                else:  
-                    a = 0.001
-                    self.dnQueueF = (1-a)*self.dnQueueF + a*dnQueue
-                
-                self.aQueue = float(nQueue)/float(len(self.bufferImages))
-                self.nQueuePrev = nQueue
-                    
-                if False:#('kinefly2' in self.nodename):
-                    rospy.logwarn('nQueue %3d, dnQueue %3d, dnQueueF %0.3f' % (nQueue, dnQueue, self.dnQueueF))
-
 #            # Warn if the camera is delaying.
 #            if (self.stampROSimagePrev is not None):
 #                if (self.stampCamera.to_sec() - self.stampROSimagePrev.to_sec() > 1):
@@ -528,6 +502,31 @@ class MainWindow:
         rosimg = None
         
         with self.lockBuffer:
+            # The image queue length.
+            nQueue = (self.iImgLoading - self.iImgWorking) %  len(self.bufferImages)
+            if (nQueue==0) and (self.bufferImages[self.iImgLoading] is not None):
+                nQueue += len(self.bufferImages)
+                        
+            # Rate of change of the queue length.
+            if (nQueue == len(self.bufferImages)):
+                dnQueue = 1.0
+            elif (nQueue <= 1):
+                dnQueue = -1.0
+            else:
+                dnQueue = nQueue - self.nQueuePrev
+    
+            # Bring the bar back to red, if it's green and we dropped a frame.
+            if (self.iDroppedFrame>0) and (self.dnQueueF<0.0):
+                self.dnQueueF = 0.1
+            else:  
+                a = 0.001
+                self.dnQueueF = (1-a)*self.dnQueueF + a*dnQueue
+            
+            self.aQueue = float(nQueue)/float(len(self.bufferImages))
+            self.nQueuePrev = nQueue
+                    
+                    
+            # Pull the image from the queue.
             if (self.bufferImages[self.iImgWorking] is not None):
                 rosimg = self.bufferImages[self.iImgWorking]
                 
@@ -537,6 +536,10 @@ class MainWindow:
                 # Go to the next image.
                 self.iImgWorking = (self.iImgWorking+1) % len(self.bufferImages)
                 
+
+            if False:#('kinefly2' in self.nodename):
+                rospy.logwarn('nQueue %3d, dnQueue %3d, dnQueueF %0.3f' % (nQueue, dnQueue, self.dnQueueF))
+
 
         # Compute processing times.
         self.stampROS        = rospy.Time.now()
