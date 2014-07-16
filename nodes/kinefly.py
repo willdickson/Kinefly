@@ -471,11 +471,12 @@ class MainWindow:
                 self.iImgLoading = iImgLoadingNext
                 self.iImgWorking = iImgWorkingNext
             
-#                 if ('kinefly2' in self.nodename):
-#                     n = (self.iImgLoading - self.iImgWorking) %  len(self.bufferImages)
-#                     if (n==0) and (self.bufferImages[self.iImgLoading] is not None):
-#                         n += len(self.bufferImages)
-#                     rospy.logwarn('nQueue %d' % n)
+                # Print the queue length.
+                if False:#('kinefly2' in self.nodename):
+                    n = (self.iImgLoading - self.iImgWorking) %  len(self.bufferImages)
+                    if (n==0) and (self.bufferImages[self.iImgLoading] is not None):
+                        n += len(self.bufferImages)
+                    rospy.logwarn('nQueue %d' % n)
 
 #            # Warn if the camera is delaying.
 #            if (self.stampROSimagePrev is not None):
