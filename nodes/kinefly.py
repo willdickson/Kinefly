@@ -659,7 +659,7 @@ class MainWindow:
                     else:
                         bgra = ui.bgra_dict['dark_green']
                         
-                    cv2.line(imgOutput, ptBar0, ptBar1, bgra, max(1,int(4*self.scale)))
+                    cv2.line(imgOutput, ptBar0, ptBar1, bgra, max(1,int(2*self.scale)))
                 
     
                     # Output the aux state.
