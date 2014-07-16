@@ -568,18 +568,22 @@ class MotionTrackedBodypartPolar(MotionTrackedBodypart):
             
             # Push each pixel toward the column mean, depending on the amount of headroom.
             if (self.imgHeadroom is not None) and (self.params['gui'][self.name]['subtract_bg']) and (self.params[self.name]['saturation_correction']):
-                self.imgHeadroomPolar  = self.polartransforms.transform_polar_elliptical(self.imgHeadroom, 
-                                                         self.i_0, 
-                                                         self.j_0, 
-                                                         raxial=radius_mid, 
-                                                         rortho=radius_mid,
-                                                         dradiusStrip=int(dr),
-                                                         amplifyRho = 1.0,
-                                                         rClip = self.rClip,
-                                                         angleEllipse=self.angleBodypart_i,
-                                                         theta_0 = min(theta_0a,theta_1a), 
-                                                         theta_1 = max(theta_0a,theta_1a),
-                                                         amplifyTheta = 1.0)
+                try:
+                    self.imgHeadroomPolar  = self.polartransforms.transform_polar_elliptical(self.imgHeadroom, 
+                                                             self.i_0, 
+                                                             self.j_0, 
+                                                             raxial=radius_mid, 
+                                                             rortho=radius_mid,
+                                                             dradiusStrip=int(dr),
+                                                             amplifyRho = 1.0,
+                                                             rClip = self.rClip,
+                                                             angleEllipse=self.angleBodypart_i,
+                                                             theta_0 = min(theta_0a,theta_1a), 
+                                                             theta_1 = max(theta_0a,theta_1a),
+                                                             amplifyTheta = 1.0)
+                except imageprocessing.TransformException:
+                    pass
+                
                 self.imgHeadroomPolarCropped = self.imgHeadroomPolar[0:iMinY]
             
                 # Perform the correction.
