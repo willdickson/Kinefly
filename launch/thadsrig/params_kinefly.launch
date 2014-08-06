@@ -3,6 +3,21 @@
 	<!-- Configuration of the Kinefly                               -->
 	<!-- ========================================================== -->
 
+    <!--voltage map for channel *
+    v*0 - constant offset
+    v*ha - head angle
+    v*hr - head radius
+    v*aa - abdominal angle
+    v*ar - abdominal radius
+    v*l1 - left wing front edge angle
+    v*l2 - left wing second edge angle
+    v*lr - left wing radius
+    v*r1 - right wing front edge angle
+    v*r2 - right wing second edge angle
+    v*rr - right wing radius
+    v*xi - aux intensity
+    -->
+
 
     <param name="parameterfile"     type="string" value="$(env HOME)/kinefly.yaml" />
     <param name="filenameBackground" type="string" value="$(env HOME)/kinefly.png" />
@@ -132,7 +147,7 @@
     <param name="flystate2phidgetsanalog/v3r1"        type="double" value="0.0" />
     <param name="flystate2phidgetsanalog/v3r2"        type="double" value="0.0" />
     <param name="flystate2phidgetsanalog/v3rr"        type="double" value="0.0" />
-    <param name="flystate2phidgetsanalog/v3xi"        type="double" value="5.0" />
+    <param name="flystate2phidgetsanalog/v3xi"        type="double" value="10.0" />
     
     <param name="flystate2phidgetsanalog/autorange"   type="bool"   value="false" />
     <param name="flystate2phidgetsanalog/serial"      type="int"    value="0" /> <!-- 0==any -->
