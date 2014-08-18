@@ -171,6 +171,8 @@ Background Subtraction
 ---------------------------
 Background subtraction can be turned on/off for each bodypart individually.  The background is initialized with the kinefly.png image on disk, and updates as a moving average with the time constant (in seconds) parameter rc_background. 
 
+Saturation of the background image can cause problems with tracking, due to limited foreground headroom.  Kinefly contains a "saturation correction" algorithm to reduce or eliminate this effect, however the feature is turned off by default due to the computational cost and reduced framerate.  You may turn it on/off for each bodypart separately via the parameter "saturation_correction".  The feature works by reducing the importance of pixels the closer they are to saturated.      
+
 
 ROS Commands
 ---------------------------
@@ -205,6 +207,8 @@ General Parameters:
                                 may help with some cameras that provide
                                 bayer encoded images.
                                 (default: /camera/image_raw)
+    n_queue_images:             Length of the circular buffer for incoming
+                                images. (default: 2)
     n_edges_max:                Max number of wing edges to find. (default: 1)
     rc_background:              Time constant of the moving average background
                                 image. (default: 1000.0)
@@ -212,7 +216,7 @@ General Parameters:
                                 values give better framerate. (default: 1.0)
     use_gui:                    Turn on/off the graphical user interface to
                                 speed the framerate. (default: true)
-    yamlfile:                   Location of the YAML file for keeping track
+    parameterfile:              Location of the .yaml file for keeping track
                                 of GUI handle positions & checkboxes. 
                                 (default: ~/kinefly.yaml)
   
@@ -220,7 +224,9 @@ Head/Abdomen/Left/Right Parameters:
     tracker:                    Which feature to track.  Options are 'area',
                                 'edge', and 'tip'. 
                                 (default: area/area/edge/edge)
-
+    saturation_correction:      Correct for bright pixels in the background
+                                image to improve tracking. (default: false)
+                                
 Parameters that apply to Area tracking:
     autozero:                   Automatically (true) determine the zero 
                                 angle based on center of motion, or (false)

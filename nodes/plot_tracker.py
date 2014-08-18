@@ -120,8 +120,8 @@ class PlotTracker:
                 self.sub1.hold(False)
                 self.sub2.hold(False)
 
-                self.sub1.plot(trackerdata.abscissa, trackerdata.intensities)
-                self.sub2.plot(trackerdata.abscissa, trackerdata.diffs)
+                self.sub1.plot(trackerdata.abscissa, trackerdata.intensities, color=trackerdata.color)
+                self.sub2.plot(trackerdata.abscissa, trackerdata.diffs, color=trackerdata.color)
 
                 self.sub1.hold(True)
                 self.sub2.hold(True)
@@ -130,11 +130,11 @@ class PlotTracker:
                 self.sub2.set_title(trackerdata.title2)
 
                 for marker in trackerdata.markersH:
-                    self.sub2.plot([marker, marker], self.sub2.get_ylim())
-                    self.sub1.plot([marker, marker], self.sub1.get_ylim())
+                    self.sub2.plot([marker, marker], self.sub2.get_ylim(), color=trackerdata.color)
+                    self.sub1.plot([marker, marker], self.sub1.get_ylim(), color=trackerdata.color)
                 for marker in trackerdata.markersV:
-                    self.sub1.plot(self.sub1.get_xlim(), [marker, marker])
-                    self.sub2.plot(self.sub2.get_xlim(), [marker, marker])
+                    self.sub1.plot(self.sub1.get_xlim(), [marker, marker], color=trackerdata.color)
+                    self.sub2.plot(self.sub2.get_xlim(), [marker, marker], color=trackerdata.color)
     
         plt.draw()
             
