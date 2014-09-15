@@ -80,7 +80,7 @@ class Fly(object):
         self.aux    = IntensityTracker(name='aux',    params=params, color='yellow',    bEqualizeHist=False)
              
 
-        self.windowInvertColorArea      = ImageWindow(True, 'InvertColorArea')
+        self.windowInvertColorArea      = ImageWindow(False, 'InvertColorArea')
         
         self.bgra_body = ui.bgra_dict['light_gray']
         self.ptBodyIndicator1 = None
