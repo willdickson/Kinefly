@@ -1,0 +1,16 @@
+<launch>
+	<!-- ========================================================== -->
+	<!-- Configuration of PhidgetsAnalog                            -->
+	<!-- ========================================================== -->
+
+
+        
+    <!-- Voltage Channel 0 -->
+    <param name="phidgetsanalog/v0/topics"                  type="string" value="['kinefly/flystate','kinefly/flystate']" />
+    <param name="phidgetsanalog/v0/keys"                    type="string" value="['left/angles[0]','right/angles[0]']" />
+    <param name="phidgetsanalog/v0/coeffs"                  type="string" value="[1, -1]" />
+
+    <param name="phidgetsanalog/autorange"   type="bool"   value="false" />
+
+    
+</launch>

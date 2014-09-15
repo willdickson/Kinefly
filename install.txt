@@ -83,11 +83,20 @@ rosmake Kinefly
 
 
 # Think of a name for your rig (e.g. yourrigname), and tell Kinefly about it.
-# See the Kinefly/launch directory for examples, then make another directory 
-# with files for your new rig. 
+# See the Kinefly/launch directory for examples, and you can copy one of those
+# directories. 
 cd Kinefly/launch
 ls
+cp -R thadsrig yourrigname
+
+
+# Edit the new files as per your needs (ethernet or firewire camera, camera exposure, tracking parameters, etc). 
+cd yourrigname
+gedit source_camera.launch
+gedit params_camera.launch
+gedit params_kinefly.launch
 ...etc...
+
 
 # Then:
 echo "export RIG=yourrigname" >> ~/.bashrc
