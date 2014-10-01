@@ -755,7 +755,15 @@ class MainWindow:
                         cv2.putText(imgOutput, s, (x, y), self.fontface, self.scaleText, self.fly.head.bgra)
                         h_text = int(h * self.scale)
 
-                self.pubImage.publish(imgOutput)
+
+                # Publish the output image.
+                #if (0 < self.pubImage.get_num_connections()):
+                rosimgOutput = self.cvbridge.cv_to_imgmsg(cv.fromarray(imgOutput), 'passthrough')
+                rosimgOutput.header = rosimg.header
+                rosimgOutput.encoding = 'bgr8'
+                self.pubImage.publish(rosimgOutput)
+
+
                 self.buttons[self.ibtnInvertColor].state = self.fly.bInvertColor # Set the button state to reflect the fly's bInvertColor flag. 
                 self.draw_buttons(imgOutput)
 
