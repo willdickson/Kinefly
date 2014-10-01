@@ -5,9 +5,9 @@
     <param name="use_sim_time"                 type="bool" value="false"/>
 
 
-    <include file="$(find Kinefly)/launch/thadsrig/camera_ethernet.launch" />
+    <include file="$(find Kinefly)/launch/$(env RIG)/camera_ethernet.launch" />
 
-    <include file="$(find Kinefly)/launch/thadsrig/params_camera.launch"                     ns="camera" />
+    <include file="$(find Kinefly)/launch/$(env RIG)/params_camera.launch"                     ns="camera" />
 
 
 

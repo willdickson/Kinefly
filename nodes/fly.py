@@ -86,6 +86,7 @@ class Fly(object):
         self.ptBodyIndicator1 = None
         self.ptBodyIndicator2 = None
         self.bInvertColor = False
+        self.bInvertColorAuto = True
         self.iCount  = 0
         self.stampPrev = None
         self.stampPrevAlt = None
@@ -207,7 +208,7 @@ class Fly(object):
         if (image is not None):
             self.header = header
             
-            if (not self.bInvertColorValid):
+            if (not self.bInvertColorValid) and (self.bInvertColorAuto):
                 self.bInvertColor = self.get_invertcolor(image)
                 self.bInvertColorValid = True
 

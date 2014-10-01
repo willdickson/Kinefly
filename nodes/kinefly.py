@@ -322,6 +322,14 @@ class MainWindow:
         self.wrap_button(btn, shape)
         self.buttons.append(btn)
         
+        # A button to allow the user to override the automatic invertcolor detector.  A better autodetect algorithm might eliminate the need for this.
+        x = btn.right+1
+        y = btn.top+1
+        btn = ui.Button(pt=[x,y], scale=self.scale, type='checkbox', name='invertcolor', text='invertcolor', state=self.fly.bInvertColor)
+        self.wrap_button(btn, shape)
+        self.buttons.append(btn)
+        self.ibtnInvertColor = len(self.buttons)-1
+        
         x = btn.right+1
         y = btn.top+1
         btn = ui.Button(pt=[x,y], scale=self.scale, type='checkbox', name='stabilize', text='stabilize', state=self.params['gui']['head']['stabilize'])
@@ -632,6 +640,7 @@ class MainWindow:
         
                 imgOutput = cv2.cvtColor(self.imgScaled, cv2.COLOR_GRAY2RGB)
                 self.fly.draw(imgOutput)
+                self.buttons[self.ibtnInvertColor].state = self.fly.bInvertColor # Set the button state to reflect the fly's bInvertColor flag. 
                 self.draw_buttons(imgOutput)
             
                 x_left   = int(10 * self.scale)
@@ -1150,6 +1159,11 @@ class MainWindow:
                     if (self.params['gui']['aux']['track']):
                         self.fly.aux.wingbeat.warn()
                     
+                # A button to allow the user to override the automatic invertcolor detector.  A better autodetect algorithm might eliminate the need for this.
+                elif (self.nameSelected == self.nameSelectedNow == 'invertcolor'):
+                    self.fly.bInvertColor      = self.buttons[iButtonSelected].state
+                    self.fly.bInvertColorValid = True
+                    self.fly.bInvertColorAuto  = False # If the user clicked this button, then switch to manual mode.
 
                 elif (self.nameSelected == self.nameSelectedNow == 'stabilize'):
                     self.params['gui']['head']['stabilize']    = self.buttons[iButtonSelected].state

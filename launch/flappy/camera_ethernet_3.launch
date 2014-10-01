@@ -1,0 +1,15 @@
+<launch>
+
+    <!-- ========================================================== -->
+    <!-- Launch the camera.                                         -->
+    <!-- ========================================================== -->
+
+    <param name="camera3/image_raw/compressed/format"       type="string" value="jpeg" />
+    <param name="camera3/image_raw/compressed/jpeg_quality" type="int"    value="50" />
+
+    <node name="camera3"        pkg="camera_aravis"  type="camnode" />
+<!--
+    <node name="image_proc3"    pkg="image_proc"     type="image_proc" ns="camera3" />
+-->
+  
+</launch>

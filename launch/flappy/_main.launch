@@ -1,0 +1,35 @@
+<launch>
+	<!-- ========================================================== -->
+	<!-- Launch everything needed for Kinefly, except the           -->
+    <!-- source image streams.                                      -->
+	<!-- ========================================================== -->
+
+    <include file="$(find Kinefly)/launch/$(env RIG)/params_kinefly_1.launch"                 ns="kinefly1_flappy" />
+    <include file="$(find Kinefly)/launch/$(env RIG)/params_ledpanels_1.launch"               ns="kinefly1_flappy" />
+    <include file="$(find Kinefly)/launch/$(env RIG)/params_phidgetsanalog_1.launch"          ns="kinefly1_flappy" />
+    <node name="kinefly1_flappy"            pkg="Kinefly"   type="kinefly.py"                                      required="true" />
+    <node name="flystate2phidgetsanalog"    pkg="Kinefly"   type="flystate2phidgetsanalog.py" ns="kinefly1_flappy" />
+
+
+<!--
+    <include file="$(find Kinefly)/launch/$(env RIG)/params_kinefly_2.launch"                 ns="kinefly2_flappy" />
+    <include file="$(find Kinefly)/launch/$(env RIG)/params_ledpanels_2.launch"               ns="kinefly2_flappy" />
+    <include file="$(find Kinefly)/launch/$(env RIG)/params_phidgetsanalog_2.launch"          ns="kinefly2_flappy" />
+    <node name="kinefly2_flappy"            pkg="Kinefly"   type="kinefly.py"                                      required="true" />
+    <node name="flystate2phidgetsanalog"    pkg="Kinefly"   type="flystate2phidgetsanalog.py" ns="kinefly2_flappy"  />
+
+    <include file="$(find Kinefly)/launch/$(env RIG)/params_kinefly_3.launch"                 ns="kinefly3_flappy" />
+    <include file="$(find Kinefly)/launch/$(env RIG)/params_ledpanels_3.launch"               ns="kinefly3_flappy" />
+    <include file="$(find Kinefly)/launch/$(env RIG)/params_phidgetsanalog_3.launch"          ns="kinefly3_flappy" />
+    <node name="kinefly3_flappy"            pkg="Kinefly"   type="kinefly.py"                                      required="true" />
+    <node name="flystate2phidgetsanalog"    pkg="Kinefly"   type="flystate2phidgetsanalog.py" ns="kinefly3_flappy"  />
+
+
+    <include file="$(find Kinefly)/launch/$(env RIG)/params_stimulus.launch" />
+    <node name="interfacekit"               pkg="phidgets"  type="phidgets_interfacekit.py"   ns="stimulus"        required="true" />
+    <node name="publish_voltages"           pkg="Kinefly"   type="publish_voltages.py"        ns="stimulus"        required="true" />
+-->
+    
+
+
+</launch>

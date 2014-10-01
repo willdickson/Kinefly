@@ -2,16 +2,50 @@ Kinefly
 ----------------
 Kinefly extracts kinematics variables from the camera image of a tethered winged insect.
 
-You may track the movement of each bodypart:  head, abdomen, leftwing, rightwing.  Several tracking techniques are available to choose from (area tracking, edge finding, tip tracking).
-             
-An auxillary elliptical region may also be monitored (intended to capture leg motion or wingbeat frequency). 
+You may track the movement of each bodypart:  head, abdomen, leftwing, rightwing.  Several tracking techniques are available to choose from (area tracking, edge finding, tip tracking).  An auxillary elliptical region may also be monitored (intended to capture leg motion or wingbeat frequency). 
 
 The software runs on ROS, the Robot Operating System, and can use any camera or other source that provides a ROS image stream, e.g. /camera/image_raw.
 
 
+
+Contents:
+---------------------------
+Installation
+Running
+Main Window
+Handle Positioning
+Output Variables
+Units
+Bodypart Trackers
+ - Area Tracking
+ - Edge Tracking
+ - Tip Tracking
+ - Intensity Tracking and Wingbeat Frequency
+Frame Rate
+White on Black
+Background Subtraction
+Parameters
+Voltage Output
+Record Video for Later
+Retrack Prerecorded Video
+LED Panels
+ROS Commands
+Plot Tracker (auxillary program to view tracking performance)
+
+
+
 Installation:
 ---------------------------
-You need ROS, a camera to supply a ROS image stream, and Kinefly.  If you want to control voltages, then you'll need the PhidgetsAnalog hardware w/ Phidgets API.  If you want to control LED panels, then you'll need panels, see below.  There might be more stuff, but that's the basic setup.
+You need:
+* ROS
+* camera to supply a ROS image stream
+* Kinefly (at github.com/ssafarik/Kinefly)
+* ledpanels (at github.com/ssafarik/ledpanels)
+* phidgets (at github.com/ssafarik/phidgets)  
+
+The Kinefly code is independent of the specific hardware and settings that you're using.  This is accomplished by using parameters that are specific to your hardware (i.e. RIG).  The parameters are set in a subdirectory of the Kinefly/launch directory, and each machine sets an environment variable 'RIG' that tells Kinefly which set of parameters to use.
+ 
+If you want to output voltages (e.g. voltages to indicate wing angles, etc), then you'll need the PhidgetsAnalog hardware w/ Phidgets API.  If you want to have the Kinefly measurements control LED panels, then you'll need panels hardware, see below.  There might be more stuff, but that's the basic setup.
 
 Refer to the file 'install.txt' for detailed instructions.
 
@@ -21,7 +55,7 @@ Running:
 To run Kinefly, you first need to ensure that roscore is running.  In a terminal window (note below that the $ is the command prompt, not typed by you):
 $ roscore
 
-Next, depending on if you have an ethernet or firewire or USB camera, edit the main.launch file as appropriate (found in Kinefly/launch).  The default is set up for a firewire (i.e. 1394) camera.  You may also need to edit the parameters .launch file for your camera to set exposure, framerate, etc.  
+Next, depending on if you have an ethernet or firewire or USB camera, edit the Kinefly/launch/RIG/source_camera.launch file as appropriate (where 'RIG' is the name of your rig).  You may also need to edit the 'params_camera.launch' or 'params_kinefly.launch' files to set exposure, framerate, tracking params, etc.  
 
 Then in another terminal window use the roslaunch command to launch Kinefly:
 $ roslaunch Kinefly main.launch
@@ -63,7 +97,7 @@ Each of the head/abdomen/left/right body parts has a set of control points that 
 
 First, for best tracking, each of the head/abdomen/left/right body parts should have the 'hinge' handle placed at the center of rotation, which for example in the case of the abdomen is not the center of the abdomen, but rather is the point where the abdomen connects to the rest of the body, and rotates about.
 
-For the head and abdomen, set the inner and outer radii to cover just a narrow strip that encloses unique features of the bodypart as the bodypart rotates, and set the angles to cover all of the bodypart motion.    
+For the head and abdomen, set the inner and outer radii to cover just a narrow strip that encloses unique features of the bodypart as the bodypart rotates, and set the angles to cover all of the bodypart motion.  Reliable head rotation seems to be the most dependent on proper handle positions.  
 
 For the wings, the angles and radii should be positioned to indicate a region of interest such that legs and other non-wing moving things do not encroach into the region of interest.
 
@@ -132,6 +166,8 @@ The trackers available are as follows, and are specified via the 'tracker' param
 'edge'      Finds radial edges, ordered by decreasing edge strength.
 'tip'       Finds the point where the bodypart is farthest from
             the rotation center.  
+'intensity' Monitor the pixel intensity, and the frequency of periodic 
+            intensity, of an elliptical area
 
 
 Area Tracking:
@@ -152,7 +188,7 @@ Tip Tracking:
 When the 'tip' tracker is set for a bodypart, We locate the bodypart point farthest from the point of rotation.  The parameter 'threshold' is compared to the radial gradient to find the bodypart, and should be set to approx 0.01. 
 
 
-Wingbeat Frequency:
+Intensity Tracking and Wingbeat Frequency:
 ---------------------------
 We make an attempt to measure the wingbeat frequency using the frequency spectrum of the aux intensity.  For this to work, several criteria must be met.  First, you must set the valid range of wingbeat frequencies in the params_kinefly.launch file.  Upon the next launch, Kinefly will print out the compatible camera framerate needed (the lowest typically being slightly higher than twice the wingbeat passband width).  Next, set the camera to that framerate.  If the camera framerate can be maintained within the valid range, then Kinefly will compute the wingbeat frequency.  Since the framerate is typically much less than the Nyquist frequency needed to cover the highest wingbeat frequency, we use an undersampling technique to sample just the passband, and look at a baseband alias of the passband frequencies.  Proper camera framerate is critical to the functioning of this feature, and the computer must be fast enough to process the frames in the allowed time, with no camera framerate variation outside of the allowed range.  If you have trouble maintaining the framerate, consider using the parameter 'scale_image'.      
 
@@ -166,26 +202,14 @@ White On Black
 ---------------------------
 Kinefly works best internally if the image is white-on-black.  The camera image may be either black-on-white or white-on-black, and whether to invert the color or not is decided automatically based on the pixel intensity of a region centered on the intersection of the lines head/abdomen hinges and left/right hinges.  If the mean pixel value of this region is darker than the mean pixel value of the overall image, then we invert the colors.
 
+The user can override the autodetect and set the behavior manually via the checkbox on the toolbar.  When Kinefly launches it starts in autodetect mode, but once the checkbox is clicked, then the manual setting is used until the next launch of Kinefly.  The setting is not saved across launches.
+
 
 Background Subtraction
 ---------------------------
 Background subtraction can be turned on/off for each bodypart individually.  The background is initialized with the kinefly.png image on disk, and updates as a moving average with the time constant (in seconds) parameter rc_background. 
 
-
-ROS Commands
----------------------------
-The kinefly/command ROS topic accepts the following string commands:
-  help                 Shows this message.
-  gui_on               Turn on the graphical user interface.
-  gui_off              Turn off the graphical user interface.
-  exit                 Exit the program.
-
-You can send the above commands at the shell prompt, for example:
-rostopic pub -1 kinefly/command Kinefly/MsgCommand commandtext help
-rostopic pub -1 kinefly/command Kinefly/MsgCommand commandtext gui_on
-rostopic pub -1 kinefly/command Kinefly/MsgCommand commandtext gui_off
-rostopic pub -1 kinefly/command Kinefly/MsgCommand commandtext exit
-
+Saturation of the background image can cause problems with tracking, due to limited foreground headroom.  Kinefly contains a "saturation correction" algorithm to reduce or eliminate this effect, however the feature is turned off by default due to the computational cost and reduced framerate.  You may turn it on/off for each bodypart separately via the parameter "saturation_correction".  The feature works by reducing the importance of pixels the closer they are to saturated.      
 
 
 Parameters.
@@ -205,6 +229,8 @@ General Parameters:
                                 may help with some cameras that provide
                                 bayer encoded images.
                                 (default: /camera/image_raw)
+    n_queue_images:             Length of the circular buffer for incoming
+                                images. (default: 2)
     n_edges_max:                Max number of wing edges to find. (default: 1)
     rc_background:              Time constant of the moving average background
                                 image. (default: 1000.0)
@@ -212,7 +238,7 @@ General Parameters:
                                 values give better framerate. (default: 1.0)
     use_gui:                    Turn on/off the graphical user interface to
                                 speed the framerate. (default: true)
-    yamlfile:                   Location of the YAML file for keeping track
+    parameterfile:              Location of the .yaml file for keeping track
                                 of GUI handle positions & checkboxes. 
                                 (default: ~/kinefly.yaml)
   
@@ -220,7 +246,9 @@ Head/Abdomen/Left/Right Parameters:
     tracker:                    Which feature to track.  Options are 'area',
                                 'edge', and 'tip'. 
                                 (default: area/area/edge/edge)
-
+    saturation_correction:      Correct for bright pixels in the background
+                                image to improve tracking. (default: false)
+                                
 Parameters that apply to Area tracking:
     autozero:                   Automatically (true) determine the zero 
                                 angle based on center of motion, or (false)
@@ -272,6 +300,28 @@ Thus for example, a voltage output such as L-R can be generated on v2 by setting
 
 
 
+Record Video:
+---------------------------
+During a Kinefly session, you may record a video to a .bag file, for later analysis, with a timestamped name such as '~/bagfiles/_2014-06-16-14-53-28.bag':
+$ roslaunch Kinefly record.launch
+
+You may also attach a prefix to the filename, such as '~/bagfiles/flynumberone_2014-06-16-14-53-28.bag':
+$ roslaunch Kinefly record.launch prefix:=flynumberone
+
+
+
+Retrack Prerecorded Video:
+---------------------------
+If environment var RETRACK is set to 1, and BAGFILE is set to a file (i.e. "export RETRACK=1" and "export BAGFILE=/path/to/file.bag"), then it uses the given .bag file instead of the camera(s).  An example, to retrack a single .bag file:                                           
+$ export RETRACK=1                                      
+$ export BAGFILE=/home/rancher/bagfiles/12345.bag       
+$ roslaunch Kinefly main.launch                         
+
+To retrack a bunch of bag files, use the Kinefly/retracker program.  An example, to retrack multiple .bag files:                                           
+$ export BAGFILESPEC=/home/rancher/bagfiles/*.bag       
+$ rosrun Kinefly retracker
+
+
 
 LED Panels Control
 ---------------------------
@@ -292,4 +342,30 @@ where fx(t) and fy(t) are the internal panel controller functions that default t
 
 The value Q then applies to either x or y as specified by the 'axis' parameter, and is interpreted as a position or velocity as specified by the 'mode' parameter.
  
+
+ROS Commands
+---------------------------
+The kinefly/command ROS topic accepts the following string commands:
+  help                 Shows this message.
+  gui_on               Turn on the graphical user interface.
+  gui_off              Turn off the graphical user interface.
+  exit                 Exit the program.
+
+You can send the above commands at the shell prompt, for example:
+rostopic pub -1 kinefly/command Kinefly/MsgCommand commandtext help
+rostopic pub -1 kinefly/command Kinefly/MsgCommand commandtext gui_on
+rostopic pub -1 kinefly/command Kinefly/MsgCommand commandtext gui_off
+rostopic pub -1 kinefly/command Kinefly/MsgCommand commandtext exit
+
+
+Plot Tracker (auxillary program to view tracking performance)
+---------------------------
+The program plot_tracker.py will open a plot window that may help in analysing the performance of the kinematics tracking.  The plot shows a live view of internal tracker data, such as intensity profiles and thresholds, and this information may help you in setting various tracker parameters, such as threshold.
+
+Each Kinefly tracker (edge, tip, etc) makes its data available via a service name such as 'trackerdata_head', 'trackerdata_left', 'trackerdata_right', or 'trackerdata_abdomen'.  
+
+Prior to running plot_tracker, set the 'trackerdata_name' parameter to the signal of interest.  For example:
+$ rosparam set trackername trackerdata_left
+$ rosrun Kinefly plot_tracker.py
+
 
