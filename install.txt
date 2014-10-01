@@ -88,6 +88,8 @@ rosmake Kinefly
 cd Kinefly/launch
 ls
 cp -R thadsrig yourrigname
+echo "export RIG=yourrigname" >> ~/.bashrc
+. ~/.bashrc
 
 
 # Edit the new files as per your needs (ethernet or firewire camera, camera exposure, tracking parameters, etc). 
@@ -96,11 +98,6 @@ gedit source_camera.launch
 gedit params_camera.launch
 gedit params_kinefly.launch
 ...etc...
-
-
-# Then:
-echo "export RIG=yourrigname" >> ~/.bashrc
-. ~/.bashrc
 
 
 
