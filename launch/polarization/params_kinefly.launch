@@ -8,10 +8,10 @@
     <param name="filenameBackground" type="string" value="$(env HOME)/kinefly.png" />
     
     <param name="image_topic"        type="string" value="/camera/image_raw" />
-    <param name="n_queue_images"     type="int"    value="2" />
+    <param name="n_queue_images"     type="int"    value="3" />
     <param name="n_edges_max"        type="int"    value="1" />
     <param name="rc_background"      type="double" value="100000" />
-    <param name="scale_image"        type="double" value="1.0" />
+    <param name="scale_image"        type="double" value="0.75" />
     <param name="use_gui"            type="bool"   value="true" />
     <param name="wingbeat_min"       type="double" value="180" />
     <param name="wingbeat_max"       type="double" value="220" />
