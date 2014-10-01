@@ -4,9 +4,6 @@
     <!-- Launch the camera.                                         -->
     <!-- ========================================================== -->
 
-    <param name="camera/image_rect/compressed/format"  type="string" value="png" />
-    
     <node name="camera"           pkg="camera1394"  type="camera1394_node" />
-    <node name="image_proc"       pkg="image_proc"  type="image_proc" ns="camera" />
   
 </launch>
