@@ -60,10 +60,6 @@ Next, depending on if you have an ethernet or firewire or USB camera, edit the K
 Then in another terminal window use the roslaunch command to launch Kinefly:
 $ roslaunch Kinefly main.launch
 
-There is an additional tool that is helpful for setting wing edge detection thresholds, etc, and this can be run via:
-$ rosrun Kinefly plot_wingdata.py
-or 
-$ rosrun Kinefly plot_tipdata.py 
 
 
 Main Window
@@ -169,6 +165,8 @@ The trackers available are as follows, and are specified via the 'tracker' param
 'intensity' Monitor the pixel intensity, and the frequency of periodic 
             intensity, of an elliptical area
 
+There is an auxillary Plot Tracker tool that may be helpful for setting wing edge detection thresholds, etc.  See the Plot Tracker section of this document for details.
+
 
 Area Tracking:
 ---------------------------
@@ -179,8 +177,7 @@ Edge Tracking:
 ---------------------------
 This is the default for left & right wings.  We find multiple edge angles per wing (you can use this feature to track legs etc too, if desired), the number of edges being specified via parameter 'n_edges_max'.  The edge angles are in one list, and their corresponding intensity gradients are in another.  The edges are found by looking at the intensity gradient across the wingstroke, and each list is sorted in descending order of absolute gradient.
 
-The parameter 'threshold' can be used to reduce false detections when no edge is present, and will typically be a low value such as 0.01.  It is set independently for each wing.  You may run the program in plot_wingdata.py for help finding a good value to use, for example:
-$ rosrun Kinefly plot_wingdata.py     
+The parameter 'threshold' can be used to reduce false detections when no edge is present, and will typically be a low value such as 0.01.  It is set independently for each wing.     
 
 
 Tip Tracking:
@@ -260,10 +257,9 @@ Parameters that apply to Edge & Tip tracking:
                                 gradient to detect a bodypart edge or tip.
                                 Typical values will be either 0.0 or something
                                 small such as 0.01.  You may run the program 
-                                in plot_wingdata.py or plot_tipdata.py for 
-                                help setting these thresholds, for example:
-                                rosrun Kinefly plot_wingdata.py
-                                rosrun Kinefly plot_tipdata.py
+                                in plot_tracker.py for help setting these 
+                                thresholds, see the Plot Tracker section of
+                                this document for details.
                                 (default: 0.0)
 
 Parameters that apply only to aux:
@@ -364,7 +360,7 @@ The program plot_tracker.py will open a plot window that may help in analysing t
 
 Each Kinefly tracker (edge, tip, etc) makes its data available via a service name such as 'trackerdata_head', 'trackerdata_left', 'trackerdata_right', or 'trackerdata_abdomen'.  
 
-Prior to running plot_tracker, set the 'trackerdata_name' parameter to the signal of interest.  For example:
+Prior to running plot_tracker, set the parameter 'trackername' to the signal of interest.  For example:
 $ rosparam set trackername trackerdata_left
 $ rosrun Kinefly plot_tracker.py
 

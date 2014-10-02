@@ -5,8 +5,14 @@
     <param name="use_sim_time"                 type="bool" value="false"/>
 
 
+    <param name="kinefly/image_output/compressed/format"  type="string" value="png" />
+    <node name="image_proc"       pkg="image_proc"  type="image_proc"               ns="kinefly" />
+    
+    <param name="camera/image_raw/compressed/format"  type="string" value="png" />
+    <node name="image_proc"       pkg="image_proc"  type="image_proc"               ns="camera" />
+
+    <include file="$(find Kinefly)/launch/$(env RIG)/params_camera1394.launch"      ns="camera" />
     <include file="$(find Kinefly)/launch/$(env RIG)/camera_1394.launch" />
-    <include file="$(find Kinefly)/launch/$(env RIG)/params_camera1394.launch"  ns="camera" />
 
 
 

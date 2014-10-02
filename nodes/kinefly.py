@@ -209,6 +209,7 @@ class MainWindow:
         
         # Publishers.
         self.pubCommand     = rospy.Publisher(self.nodename+'/command', String)
+        self.pubImage       = rospy.Publisher(self.nodename+'/image_output', Image)
 
         # Subscriptions.        
         sizeImage = 128+1024*1024 # Size of header + data.
@@ -640,8 +641,6 @@ class MainWindow:
         
                 imgOutput = cv2.cvtColor(self.imgScaled, cv2.COLOR_GRAY2RGB)
                 self.fly.draw(imgOutput)
-                self.buttons[self.ibtnInvertColor].state = self.fly.bInvertColor # Set the button state to reflect the fly's bInvertColor flag. 
-                self.draw_buttons(imgOutput)
             
                 x_left   = int(10 * self.scale)
                 y_bottom = int(imgOutput.shape[0] - 10 * self.scale)
@@ -755,7 +754,18 @@ class MainWindow:
 
                         cv2.putText(imgOutput, s, (x, y), self.fontface, self.scaleText, self.fly.head.bgra)
                         h_text = int(h * self.scale)
-                
+
+
+                # Publish the output image.
+                #if (0 < self.pubImage.get_num_connections()):
+                rosimgOutput = self.cvbridge.cv_to_imgmsg(cv.fromarray(imgOutput), 'passthrough')
+                rosimgOutput.header = rosimg.header
+                rosimgOutput.encoding = 'bgr8'
+                self.pubImage.publish(rosimgOutput)
+
+
+                self.buttons[self.ibtnInvertColor].state = self.fly.bInvertColor # Set the button state to reflect the fly's bInvertColor flag. 
+                self.draw_buttons(imgOutput)
 
                 # Display the image.
                 cv2.imshow(self.window_name, imgOutput)
