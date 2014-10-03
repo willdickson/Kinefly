@@ -6,7 +6,18 @@
 
     <arg name="prefix" default="" />
     
-    <node name="rosbag"  pkg="rosbag"   type="record" args="-j --buffsize=2048 -o $(env HOME)/bagfiles/$(arg prefix) /camera/image_raw/compressed /kinefly/image_output/compressed /stimulus/ai /stimulus/di" />
+
+    <!-- The list of topics to record are given on the args line below.  
+         You always want:
+         /camera/image_raw/compressed
+         /stimulus/ai 
+         /stimulus/di
+
+         Recording /kinefly/image_output/compressed will cost you some frames per sec.
+    -->
+
+    <!-- <node name="rosbag" pkg="rosbag" type="record" args="-j --buffsize=2048 -o $(env HOME)/bagfiles/$(arg prefix) /camera/image_raw/compressed /kinefly/image_output/compressed /stimulus/ai /stimulus/di" /> -->
+    <node name="rosbag" pkg="rosbag" type="record" args="-j --buffsize=2048 -o $(env HOME)/bagfiles/$(arg prefix) /camera/image_raw/compressed /stimulus/ai /stimulus/di" />
 
 
 </launch>
