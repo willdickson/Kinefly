@@ -25,9 +25,6 @@
     <node name="kinefly2_pin"             pkg="Kinefly"   type="kinefly.py"                                   required="true" />
     <node name="kinefly3_pin"             pkg="Kinefly"   type="kinefly.py"                                   required="true" />
 
-    <include file="$(find Kinefly)/launch/$(env RIG)/params_stimulus.launch" />
-    <node name="interfacekit"             pkg="phidgets"  type="phidgets_interfacekit.py"   ns="stimulus"     required="true" />
-    <node name="publish_voltages"         pkg="Kinefly"   type="publish_voltages.py"        ns="stimulus"     required="true" />
     
 
 

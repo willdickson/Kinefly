@@ -20,7 +20,7 @@
     
      
     <include file="$(find Kinefly)/launch/$(env RIG)/_main.launch" />
-    <include file="$(find Kinefly)/launch/$(env RIG)/source_camera.launch" unless="$(optenv RETRACK 0)" />
+    <include file="$(find Kinefly)/launch/$(env RIG)/source_live.launch" unless="$(optenv RETRACK 0)" />
     <include file="$(find Kinefly)/launch/$(env RIG)/source_bagfile.launch" if="$(optenv RETRACK 0)" />
 
 </launch>

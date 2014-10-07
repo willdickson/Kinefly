@@ -37,6 +37,11 @@ class Struct:
 
 ###############################################################################
 ###############################################################################
+# class MainWindow()
+# 
+# This is the main Kinefly window, where we receive images from the camera,
+# process them using the Fly class, and then output the results.
+# 
 class MainWindow:
     def __init__(self):
         self.lockParams = threading.Lock()
@@ -355,8 +360,8 @@ class MainWindow:
     # legalizeParams()
     # Make sure that all the parameters contain legal values.
     #
-    def legalizeParams(self, params):
-        paramsOut = copy.copy(params)
+    def legalizeParams(self, paramsIn):
+        paramsOut = copy.copy(paramsIn)
         for partname in ['head','abdomen','left','right']:
             if (partname in paramsOut):
                 if ('hinge' in paramsOut['gui'][partname]):
