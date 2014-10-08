@@ -16,19 +16,19 @@ from setdict import SetDict
 
 ###############################################################################
 ###############################################################################
-# PublishVoltages()
+# AcquireVoltages2Msg()
 #
-# Reads the input channels on the Phidgets InterfaceKit, and publish
-# the voltages & values on the topics 'ai' and 'di'.  The list of channels are 
+# Read the input voltages on the Phidgets InterfaceKit, and publish
+# the values on the topics 'ai' and 'di'.  The lists of channels are 
 # specified by the parameters 'channels_ai', 'channels_di'.
 #
-class PublishVoltages:
+class AcquireVoltages2Msg:
 
     def __init__(self):
         self.bInitialized = False
         
         # initialize
-        self.name = 'publish_voltages'
+        self.name = 'acquirevoltages2msg'
         rospy.init_node(self.name, anonymous=False)
         self.nodename = rospy.get_name()
         self.namespace = rospy.get_namespace()
@@ -69,7 +69,7 @@ class PublishVoltages:
 
         if (self.command == 'help'):
             rospy.logwarn('')
-            rospy.logwarn('Reads the input channels on the Phidgets InterfaceKit, and publishes')
+            rospy.logwarn('Reads the input voltages on the Phidgets InterfaceKit, and publishes')
             rospy.logwarn('the values on the topics ''ai'' and ''di''.  The list of channels is specified by the ')
             rospy.logwarn('parameters ''channels_ai'',  ''channels_di''.')
             rospy.logwarn('')
@@ -112,6 +112,6 @@ class PublishVoltages:
 
 if __name__ == '__main__':
 
-    main = PublishVoltages()
+    main = AcquireVoltages2Msg()
     main.run()
 

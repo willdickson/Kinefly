@@ -17,19 +17,19 @@ from setdict import SetDict
 
 ###############################################################################
 ###############################################################################
-# Ai2PhidgetsAnalog()
+# Msg2PhidgetsAnalog()
 #
 # Subscribe to a MsgAnalogIn message topic, and output the values to
 # a PhidgetsAnalog device.
 #
-class Ai2PhidgetsAnalog:
+class Msg2PhidgetsAnalog:
 
     def __init__(self):
         self.bInitialized = False
         self.bAttached = False
         
         # initialize
-        self.name = 'Ai2PhidgetsAnalog'
+        self.name = 'Msg2PhidgetsAnalog'
         rospy.init_node(self.name, anonymous=True)
         self.nodename = rospy.get_name()
         self.namespace = rospy.get_namespace()
@@ -139,6 +139,6 @@ class Ai2PhidgetsAnalog:
 
 if __name__ == '__main__':
 
-    main = Ai2PhidgetsAnalog()
+    main = Msg2PhidgetsAnalog()
     main.run()
 

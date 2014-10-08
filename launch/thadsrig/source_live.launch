@@ -10,9 +10,8 @@
 
 
     <!-- Get and publish the voltage signals from hardware. --> 
-    <include file="$(find Kinefly)/launch/$(env RIG)/params_stimulus.launch" />
     <node name="interfacekit"             pkg="phidgets"  type="phidgets_interfacekit.py"   ns="stimulus"     required="true" />
-    <node name="publish_voltages"         pkg="Kinefly"   type="publish_voltages.py"        ns="stimulus"     required="true" />
+    <node name="acquirevoltages2msg"      pkg="Kinefly"   type="acquirevoltages2msg.py"     ns="stimulus"     required="true" />
 
 
 </launch>

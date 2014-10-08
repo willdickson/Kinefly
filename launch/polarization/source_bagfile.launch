@@ -8,5 +8,8 @@
     <node name="playbag" pkg="rosbag" type="play" args="--clock --delay=1 --rate=1 $(env BAGFILE)" required="true" />
     <node name="republisher" pkg="image_transport" type="republish" args="compressed raw in:=camera/image_raw out:=camera/image_raw" />
 
+    <!-- Emulate the ledpanels controller voltages using the stimulus/ai messages. -->
+    <node name="msg2phidgetsanalog"           pkg="Kinefly"   type="msg2phidgetsanalog.py"        ns="stimulus"        required="true" />
+
 
 </launch>

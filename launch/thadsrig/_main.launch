@@ -4,6 +4,7 @@
     <!-- source image streams.                                      -->
 	<!-- ========================================================== -->
 
+    <include file="$(find Kinefly)/launch/$(env RIG)/params_stimulus.launch" />
 
     <include file="$(find Kinefly)/launch/$(env RIG)/params_kinefly.launch"                 ns="kinefly" />
     <include file="$(find Kinefly)/launch/$(env RIG)/params_ledpanels.launch"               ns="kinefly" />

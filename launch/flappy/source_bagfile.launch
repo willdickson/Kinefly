@@ -14,4 +14,7 @@
     <param name="kinefly2_flappy/n_queue_images"     type="int"    value="20" />
     <param name="kinefly3_flappy/n_queue_images"     type="int"    value="20" />
 
+    <!-- Emulate the ledpanels controller voltages using the stimulus/ai messages. -->
+    <node name="msg2phidgetsanalog"           pkg="Kinefly"   type="msg2phidgetsanalog.py"        ns="stimulus"        required="true" />
+
 </launch>
