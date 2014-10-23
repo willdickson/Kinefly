@@ -170,7 +170,9 @@ There is an auxillary Plot Tracker tool that may be helpful for setting wing edg
 
 Area Tracking:
 ---------------------------
-This is the default for the head & abdomen.  We measure rotation and radial expansion of the bodypart via an image registration technique in polar coordinates on the region of interest.  This state measurement is autozero'ed such that the origin tends to be near the midpoint of the range of motion.  
+This is the default for the head & abdomen.  We measure rotation and radial expansion of the bodypart via an image registration technique in polar coordinates on the region of interest.  This state measurement is autozero'ed such that the origin tends to be near the midpoint of the range of motion.  Autoranging will therefore cause occasional changes of the angle origin, making it seem as though there were a step change in the angle when there wasn't.  Autoranging can be turned off by changing the parameter setting.  
+
+Area tracking is also affected by a "feathering" (i.e. a window function) parameter that smooths the edge pixels of the bodypart.  Setting feathering=0 gives a rectangular window (i.e. a hard edge), and feathering=1 gives a Hanning window (i.e. a very smooth edge).  Tracking of small body parts, such as a fly head, may benefit from setting feathering=0.  The default is 0.25.
 
 
 Edge Tracking:
@@ -251,6 +253,14 @@ Parameters that apply to Area tracking:
                                 angle based on center of motion, or (false)
                                 use the first valid frame as the zero angle.
                                 (default: true)
+    feathering:                 Set the amount of feathering for the edge
+                                pixels of the bodypart image.  Setting 
+                                feathering=0.0 gives a hard edge, and 
+                                feathering=1.0 gives a very smooth edge.
+                                This parameter affects motion tracking when
+                                using area tracking, and small bodyparts may
+                                benefit from setting feathering=0.0.
+                                (default: 0.25)
 
 Parameters that apply to Edge & Tip tracking:
     threshold:                  This is the threshold for the intensity

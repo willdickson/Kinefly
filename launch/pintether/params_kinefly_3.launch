@@ -19,6 +19,7 @@
     <param name="head/autozero"      type="bool"   value="true" />
     <param name="head/threshold"     type="double" value="0.0" />
     <param name="head/tracker"       type="string" value="area" />   <!-- area, edge, or tip -->
+    <param name="head/feathering"    type="double" value="0.0" />
     
     <param name="abdomen/autozero"   type="bool"   value="true" />
     <param name="abdomen/threshold"  type="double" value="0.025" />

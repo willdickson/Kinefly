@@ -429,28 +429,33 @@ class WindowFunctions(object):
     # create_tukey()
     # Create a 2D Tukey window function.
     #
-    def create_tukey(self, shape):
+    # alpha:    # Width of the flat top.  alpha==0 gives rectangular, alpha=1 gives Hann.
+    #
+    def create_tukey(self, shape, alpha=0.25):
         (height,width) = shape
-        alpha = 0.25 # Width of the flat top.  alpha==0 gives rectangular, alpha=1 gives Hann.
         wfn = np.ones(shape, dtype=np.float32)
         if (height>1) and (width>1):
             for i in range(width):
                 for j in range(height):
-                    y = np.pi*(2*j/(alpha*(height-1))-1)
+                    #y = np.pi*(2*j/(alpha*(height-1))-1)
                     
-                    if (0 <= i <= (alpha*(width-1))/2):
-                        x = np.pi*(2*i/(alpha*(width-1))-1)
-                    elif ((alpha*(width-1))/2 < i <= (width-1)*(1-alpha/2)):
+                    if (alpha<=0.0) or (alpha>1.0):
                         x = 0.0
-                    elif ((width-1)*(1-alpha/2) < i <= width-1):
-                        x = np.pi*(2*i/(alpha*(width-1))-2/alpha+1)
-                        
-                    if (0 <= j <= (alpha*(height-1))/2):
-                        y = np.pi*(2*j/(alpha*(height-1)) - 1)
-                    elif ((alpha*(height-1))/2 < j <= (height-1)*(1-alpha/2)):
                         y = 0.0
-                    elif ((height-1)*(1-alpha/2) < j <= height-1):
-                        y = np.pi*(2*j/(alpha*(height-1)) - 2/alpha + 1)
+                    else:
+                        if (0 <= i <= (alpha*(width-1))/2):
+                            x = np.pi*(2*i/(alpha*(width-1))-1)
+                        elif ((alpha*(width-1))/2 < i <= (width-1)*(1-alpha/2)):
+                            x = 0.0
+                        elif ((width-1)*(1-alpha/2) < i <= width-1):
+                            x = np.pi*(2*i/(alpha*(width-1))-2/alpha+1)
+                            
+                        if (0 <= j <= (alpha*(height-1))/2):
+                            y = np.pi*(2*j/(alpha*(height-1)) - 1)
+                        elif ((alpha*(height-1))/2 < j <= (height-1)*(1-alpha/2)):
+                            y = 0.0
+                        elif ((height-1)*(1-alpha/2) < j <= height-1):
+                            y = np.pi*(2*j/(alpha*(height-1)) - 2/alpha + 1)
                     
                     wfnx = 0.5*(1+np.cos(x))
                     wfny = 0.5*(1+np.cos(y))

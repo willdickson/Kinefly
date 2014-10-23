@@ -83,24 +83,28 @@ class MainWindow:
                     'head':   {'tracker':'area',
                                'autozero':True,         # Automatically figure out where is the center of motion.
                                'threshold':0.0,
+                               'feathering':0.0,        # How much to feather the edge pixels for motion tracking by area.
                                'saturation_correction':False},        
-                    'abdomen':{'tracker':'area',
+                    'abdomen':{'tracker':'tip',
                                'autozero':True,
                                'threshold':0.0,
+                               'feathering':0.25,        # How much to feather the edge pixels for motion tracking by area.
                                'saturation_correction':False},
                     'left':   {'tracker':'edge',
                                'autozero':True,
                                'threshold':0.0,
+                               'feathering':0.25,        # How much to feather the edge pixels for motion tracking by area.
                                'saturation_correction':False},
                     'right':  {'tracker':'edge',
                                'autozero':True,
                                'threshold':0.0,
+                               'feathering':0.25,        # How much to feather the edge pixels for motion tracking by area.
                                'saturation_correction':False},
                     'aux':    {'tracker':'intensity',
                                'saturation_correction':False},
-                    'gui': {'windows':True,                     # Show the helpful extra windows.
+                    'gui': {'windows':False,                    # Show the helpful extra windows.
                             'symmetric':True,                   # Forces the UI to remain symmetric.
-                            'axis':   {'track':False,            # To track, or not to track.
+                            'axis':   {'track':False,           # To track, or not to track.
                                        'pt1':{'x':310,
                                               'y':150},
                                        'pt2':{'x':310,
