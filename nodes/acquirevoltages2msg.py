@@ -1,6 +1,5 @@
 #!/usr/bin/env python
 from __future__ import division
-import roslib; roslib.load_manifest('Kinefly')
 import rospy
 import rosparam
 

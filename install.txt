@@ -1,110 +1,117 @@
-# Installation Instructions for Kinefly.
-# --------------------------------------------
-# You need ROS, a camera to supply a ROS image stream, and Kinefly.  If you want to control voltages, then you'll need the PhidgetsAnalog hardware w/ Phidgets API.  If you want to control LED panels, then you'll need panels, see below.  There might be more stuff, but that's the basic setup.
+#### Installation Instructions for Kinefly.
+#### --------------------------------------------
+#### You need ROS, a camera (or a .bag file) to supply a ROS image stream, and Kinefly.  If you want to control voltages, then you'll need the PhidgetsAnalog hardware w/ Phidgets API.  If you want to control LED panels, then you'll need panels, see below.  There might be more stuff, but that's the basic setup.  Note, I haven't extensively tested these instructions, and they'll likely vary depending on which versions of Ubuntu and ROS you're installing, etc.  Also note, you don't type the '$' in the commands below, that's just your prompt.
 
 
-# Install ROS Hydro on Ubuntu.
-# Go to the ros.org website, and follow the installation instructions (hydro works well); OR if you're putting Hydro onto Ubuntu Precise, then copy & paste these commands:
-sudo sh -c 'echo "deb http://packages.ros.org/ros/ubuntu precise main" > /etc/apt/sources.list.d/ros-latest.list'
-wget http://packages.ros.org/ros.key -O - | sudo apt-key add -
-sudo apt-get update
-sudo apt-get install -y ros-hydro-desktop-full
-sudo rosdep init
-rosdep update
-echo "source /opt/ros/hydro/setup.bash" >> ~/.bashrc
-source ~/.bashrc
-sudo apt-get install -y python-rosinstall
-sudo apt-get install -y ros-hydro-cmake-modules
+#### Install ROS on Ubuntu.
+#### Go to the ros.org website, and follow the installation instructions.  I've tested Indigo on Ubuntu 14.04, but newer should work too.  The steps for ROS Indigo on Ubuntu 14.04 are here, but see ros.org for the definitive instructions.
+$  sudo sh -c 'echo "deb http://packages.ros.org/ros/ubuntu $(lsb_release -sc) main" > /etc/apt/sources.list.d/ros-latest.list'
+$  sudo apt-key adv --keyserver hkp://ha.pool.sks-keyservers.net --recv-key 0xB01FA116
+$  sudo apt-get update
+$  sudo apt-get install -y ros-indigo-desktop-full
+$  sudo rosdep init
+$  rosdep update
+$  echo "source /opt/ros/indigo/setup.bash" >> ~/.bashrc
+$  source ~/.bashrc
+$  sudo apt-get install -y python-rosinstall
 
 
-# Get a few additional pieces.
-sudo apt-get install -y python-setuptools
-sudo apt-get install -y python-numpy
-sudo apt-get install -y python-scipy
-sudo apt-get install -y libdc1394-22-dev
-sudo apt-get install -y intltool
-sudo apt-get install -y gobject-introspection
+#### Get a few additional pieces (not sure if these are really needed anymore).
+$  sudo apt-get install -y python-setuptools
+$  sudo apt-get install -y python-scipy
+$  sudo apt-get install -y libdc1394-22-dev
+$  sudo apt-get install -y intltool
+$  sudo apt-get install -y gobject-introspection
 
 
-# Get Aravis camera library.
-# Download the latest release from https://wiki.gnome.org/Aravis, 
-# for example:  http://ftp.acc.umu.se/pub/GNOME/sources/aravis/0.3/aravis-0.3.1.tar.xz 
-tar -xzf aravis-0.3.1.tar.xz   # To extract the files.
-cd aravis-0.3.1
-./configure
-make && sudo make install
+#### If you'll be using a camera (not just replaying a bag file), then get ROS camera drivers if needed.
+#### For an ethernet camera, you may want the Aravis camera library and ROS driver.
+#### Download the latest library release from https://wiki.gnome.org/Aravis, 
+#### for example:  http://ftp.acc.umu.se/pub/GNOME/sources/aravis/0.3/aravis-0.3.1.tar.xz 
+$  tar -xzf aravis-0.3.1.tar.xz   # To extract the files.
+$  cd aravis-0.3.1
+$  ./configure
+$  make && sudo make install
+#### If you're doing Aravis, you'll also want the camera_aravis driver, a few steps below.
 
 
-# Run the following commands (adjust them first if necessary).
-mkdir -p ~/catkin/src
-mkdir ~/src.git
-cd ~/src.git
-echo "source ~/catkin/devel/setup.bash" >> ~/.bashrc
-echo "export ROS_PACKAGE_PATH=~/src.git:~/src.hg:~/catkin:$ROS_PACKAGE_PATH" >> ~/.bashrc    # (Assuming your ROS projects are in these two directories).
+#### Make a catkin workspace.
+$  mkdir -p ~/catkin/src
+$  cd ~/catkin/src
+$  catkin_init_workspace
 
 
-# Reboot the computer.
-# sudo reboot
+#### Run the following commands (adjust them first if necessary).
+$  echo "source ~/catkin/devel/setup.bash" >> ~/.bashrc
+$  echo "export ROS_PACKAGE_PATH=~/src.git:~/catkin:$ROS_PACKAGE_PATH" >> ~/.bashrc    # (Assuming your ROS projects are in these two directories).
 
 
-# Get & make camera_aravis.
-cd ~/catkin/src
-git clone http://github.com/ssafarik/camera_aravis
-cd ~/catkin && catkin_make
+#### Reboot the computer.
+$  sudo reboot
 
 
-# Verify that your camera hardware is configured properly, i.e. ethernet ports & static ip's & dhcp, or firewire stuff.
+#### Get & make camera_aravis.
+$  cd ~/catkin/src
+$  git clone http://github.com/ssafarik/camera_aravis
+$  cd ~/catkin && catkin_make
 
 
-# Get & make both "libphidget" and "PhidgetsPython"
-# Download & extract the file http://www.phidgets.com/downloads/libraries/libphidget.tar.gz
-cd libphidget
-./configure 
-make && sudo make install 
-# Download & extract the file http://www.phidgets.com/downloads/libraries/PhidgetsPython.zip
-cd PhidgetsPython
-sudo python setup.py install
+#### Verify that your camera hardware is configured properly, i.e. ethernet ports & static ip's & dhcp, or firewire stuff.
 
 
-# Get the LED Panels ROS node.
-cd ~/src.git
-git clone https://github.com/ssafarik/ledpanels
+#### Get & make both "libphidget" and "PhidgetsPython"
+#### Download & extract the file http://www.phidgets.com/downloads/libraries/libphidget.tar.gz
+$  cd libphidget
+$  ./configure 
+$  make && sudo make install 
+#### Download & extract the file http://www.phidgets.com/downloads/libraries/PhidgetsPython.zip
+$  cd PhidgetsPython
+$  sudo python setup.py install
 
 
-# Get phidgets ROS node.
-cd ~/src.git
-git clone https://github.com/ssafarik/phidgets
+#### Get the LED Panels ROS node (optional).
+$  mkdir ~/src.git
+$  cd ~/src.git
+$  git clone https://github.com/ssafarik/ledpanels
 
 
-# Get & make the Kinefly software.
-git clone https://github.com/ssafarik/Kinefly
-sudo cp ~/src.git/Kinefly/udev/99-phidgets.rules /etc/udev/rules.d
-rosmake Kinefly
+#### Get phidgets ROS node (optional).
+$  mkdir ~/src.git
+$  cd ~/src.git
+$  git clone https://github.com/ssafarik/phidgets
 
 
-# Think of a name for your rig (e.g. yourrigname), and tell Kinefly about it.
-# See the Kinefly/launch directory for examples, and you can copy one of those
-# directories. 
-cd Kinefly/launch
-ls
-cp -R thadsrig yourrigname
-echo "export RIG=yourrigname" >> ~/.bashrc
-. ~/.bashrc
+#### Get & make the Kinefly software.
+$  cd ~/catkin/src
+$  git clone https://github.com/ssafarik/Kinefly
+$  sudo cp ~/src.git/Kinefly/udev/99-phidgets.rules /etc/udev/rules.d
+$  cd ~/catkin
+$  catkin_make
 
 
-# Edit the new files as per your needs (ethernet or firewire camera, camera exposure, tracking parameters, etc). 
-cd yourrigname
-gedit source_camera.launch
-gedit params_camera.launch
-gedit params_kinefly.launch
+#### Think of a name for your rig (e.g. yourrigname), and tell Kinefly about it (via the RIG variable, see below).
+#### See the Kinefly/launch directory for example rigs.  You can copy one of those
+#### directories, and modify it to be your own, for example: 
+$  cd ~/catkin/src/Kinefly/launch
+$  ls
+$  cp -R thadsrig yourrigname
+$  echo "export RIG=yourrigname" >> ~/.bashrc
+$  . ~/.bashrc
+
+
+#### Edit the new files as per your needs (ethernet or firewire camera, camera exposure, tracking parameters, etc). 
+$  cd ~/catkin/src/Kinefly/launch/yourrigname
+$  gedit source_camera.launch
+$  gedit params_camera.launch
+$  gedit params_kinefly.launch
 ...etc...
 
 
 
-# You're done!
-# Assuming that you got here successfully, then you 
-# should be able to run Kinefly, for example:
-roslaunch Kinefly main.launch  
+#### You're done!
+#### Assuming that you got here successfully, then you 
+#### should be able to run Kinefly, for example:
+$  roslaunch Kinefly main.launch  
 
 
 

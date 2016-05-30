@@ -1,14 +1,10 @@
 #!/usr/bin/env python
 from __future__ import division
-import roslib; roslib.load_manifest('Kinefly')
 import rospy
 import rosparam
-
 import copy
 import numpy as np
-
 from std_msgs.msg import Float32, Header, String
-
 from ledpanels.msg import MsgPanelsCommand
 from Kinefly.msg import MsgFlystate
 from setdict import SetDict

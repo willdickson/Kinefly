@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-
 import rospy
 import cv
 import cv2

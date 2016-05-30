@@ -1,14 +1,10 @@
 #!/usr/bin/env python
-import roslib; roslib.load_manifest('Kinefly')
 import rospy
-
 import time
-
 import matplotlib.pyplot as plt
 import matplotlib.axes as axes
 import matplotlib.animation as animation
 import numpy as np
-
 from Kinefly.srv import SrvTrackerdata
 
 class WingPlotter:

@@ -1,10 +1,8 @@
 #!/usr/bin/env python
 #! coding=latin-1
 from __future__ import division
-import roslib; roslib.load_manifest('Kinefly')
 import rospy
 import rosparam
-
 import copy
 import cProfile
 import cv
@@ -13,15 +11,12 @@ import numpy as np
 import os
 import threading
 import dynamic_reconfigure.server
-
 from setdict import SetDict
 import ui
 from fly import Fly
-
 from cv_bridge import CvBridge, CvBridgeError
 from sensor_msgs.msg import Image
 from std_msgs.msg import Float32, Header, String
-
 from Kinefly.srv import SrvTrackerdata, SrvTrackerdataResponse
 from Kinefly.msg import MsgFlystate, MsgState
 from Kinefly.cfg import kineflyConfig
@@ -217,12 +212,13 @@ class MainWindow:
         self.shapeToolbar   = (0,0)
         
         # Publishers.
-        self.pubCommand     = rospy.Publisher(self.nodename+'/command', String)
-        self.pubImage       = rospy.Publisher(self.nodename+'/image_output', Image)
+        self.pubCommand     = rospy.Publisher(self.nodename+'/command',      String, queue_size=self.params['n_queue_images'])
+        self.pubImage       = rospy.Publisher(self.nodename+'/image_output', Image,  queue_size=self.params['n_queue_images'])
 
         # Subscriptions.        
         sizeImage = 128+1024*1024 # Size of header + data.
-        self.subImage       = rospy.Subscriber(self.params['image_topic'], Image,      self.image_callback,   queue_size=2, buff_size=2*sizeImage, tcp_nodelay=True)
+        self.subImage       = rospy.Subscriber(self.params['image_topic'], Image,  self.image_callback,   queue_size=2, buff_size=2*sizeImage, tcp_nodelay=True)
+        rospy.logwarn('Subscribed to %s' % self.params['image_topic'])
         self.subCommand     = rospy.Subscriber(self.nodename+'/command',   String, self.command_callback, queue_size=1000)
 
         # user callbacks
@@ -237,7 +233,7 @@ class MainWindow:
         for i in range(20):
             color = cv.Scalar(int(255*np.random.random()), int(255*np.random.random()), int(255*np.random.random()), 0)
             cv2.putText(imgInitial, 'Waiting for Camera...', (int(w*0.8*np.random.random()),int(h*np.random.random())), self.fontface, 2*self.scaleText, color)
-        rosimg = self.cvbridge.cv_to_imgmsg(cv.fromarray(imgInitial), 'passthrough')
+        rosimg = self.cvbridge.cv2_to_imgmsg(imgInitial, 'passthrough')
         self.image_callback(rosimg)
         self.bValidImage = False
         
@@ -616,7 +612,7 @@ class MainWindow:
 
             # Convert the image.
             try:
-                img = np.uint8(cv.GetMat(self.cvbridge.imgmsg_to_cv(rosimg, 'passthrough')))
+                img = self.cvbridge.imgmsg_to_cv2(rosimg, 'passthrough')
                 
             except CvBridgeError, e:
                 rospy.logwarn ('Exception converting background image from ROS to opencv:  %s' % e)
@@ -767,7 +763,7 @@ class MainWindow:
 
                 # Publish the output image.
                 #if (0 < self.pubImage.get_num_connections()):
-                rosimgOutput = self.cvbridge.cv_to_imgmsg(cv.fromarray(imgOutput), 'passthrough')
+                rosimgOutput = self.cvbridge.cv2_to_imgmsg(imgOutput, 'passthrough')
                 rosimgOutput.header = rosimg.header
                 rosimgOutput.encoding = 'bgr8'
                 self.pubImage.publish(rosimgOutput)

@@ -1,14 +1,10 @@
 #!/usr/bin/env python
 from __future__ import division
-import roslib; roslib.load_manifest('Kinefly')
 import rospy
 import rosparam
-
 import copy
 import numpy as np
-
 from std_msgs.msg import String
-
 from Kinefly.msg import MsgAnalogIn
 import Phidgets
 import Phidgets.Devices.Analog
