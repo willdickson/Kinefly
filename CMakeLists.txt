@@ -6,6 +6,8 @@ find_package(
     REQUIRED COMPONENTS 
     message_generation 
     std_msgs
+    sensor_msgs
+    geometry_msgs
     dynamic_reconfigure
 )
 
