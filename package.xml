@@ -21,7 +21,6 @@
   <depend>dynamic_reconfigure</depend> 
   <depend>ledpanels</depend> 
   <depend>phidgets</depend> 
-  <depend>driver_base</depend>
   
 
   <!-- The export tag contains other, unspecified, tags -->
