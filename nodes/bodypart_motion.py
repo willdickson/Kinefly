@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 import rospy
 import copy
-import cv
 import cv2
 import numpy as np
 import threading
@@ -185,8 +184,9 @@ class MotionTrackedBodypart(object):
         lo = int(np.floor(np.rad2deg(self.angle_lo_i)))
         
         # Draw the mask.
-        cv2.ellipse(img, (x, y), (r_outer, r_outer), 0, hi, lo, ui.bgra_dict['white'], cv.CV_FILLED)
-        cv2.ellipse(img, (x, y), (r_inner, r_inner), 0, 0, 360, ui.bgra_dict['black'], cv.CV_FILLED)
+        cv_filled = -1
+        cv2.ellipse(img, (x, y), (r_outer, r_outer), 0, hi, lo, ui.bgra_dict['white'], cv_filled)
+        cv2.ellipse(img, (x, y), (r_inner, r_inner), 0, 0, 360, ui.bgra_dict['black'], cv_filled)
         img = cv2.dilate(img, np.ones([3,3])) # Make the mask one pixel bigger to account for pixel aliasing.
         self.windowMask.set_image(img)
         

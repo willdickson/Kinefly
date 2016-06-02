@@ -1,6 +1,5 @@
 #!/usr/bin/env python
 import rospy
-import cv
 import cv2
 import numpy as np
 from std_msgs.msg import Float32, Header, String

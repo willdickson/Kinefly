@@ -1,6 +1,5 @@
 #!/usr/bin/env python
 import rospy
-import cv
 import cv2
 import numpy as np
 import ui

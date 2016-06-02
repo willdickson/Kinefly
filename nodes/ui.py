@@ -1,6 +1,5 @@
 #!/usr/bin/env python
 import rospy
-import cv
 import cv2
 import numpy as np
 
@@ -12,29 +11,29 @@ SIDE_RIGHT = 8
 SIDE_ALL = (SIDE_TOP | SIDE_BOTTOM | SIDE_LEFT | SIDE_RIGHT)
 
 # Colors.
-bgra_dict = {'black'         : cv.Scalar(0,0,0,0),
-             'white'         : cv.Scalar(255,255,255,0),
-             'dark_gray'     : cv.Scalar(64,64,64,0),
-             'gray'          : cv.Scalar(128,128,128,0),
-             'light_gray'    : cv.Scalar(192,192,192,0),
-             'red'           : cv.Scalar(0,0,255,0),
-             'green'         : cv.Scalar(0,255,0,0), 
-             'blue'          : cv.Scalar(255,0,0,0),
-             'cyan'          : cv.Scalar(255,255,0,0),
-             'magenta'       : cv.Scalar(255,0,255,0),
-             'yellow'        : cv.Scalar(0,255,255,0),
-             'dark_red'      : cv.Scalar(0,0,128,0),
-             'dark_green'    : cv.Scalar(0,128,0,0), 
-             'dark_blue'     : cv.Scalar(128,0,0,0),
-             'dark_cyan'     : cv.Scalar(128,128,0,0),
-             'dark_magenta'  : cv.Scalar(128,0,128,0),
-             'dark_yellow'   : cv.Scalar(0,128,128,0),
-             'light_red'     : cv.Scalar(175,175,255,0),
-             'light_green'   : cv.Scalar(175,255,175,0), 
-             'light_blue'    : cv.Scalar(255,175,175,0),
-             'light_cyan'    : cv.Scalar(255,255,175,0),
-             'light_magenta' : cv.Scalar(255,175,255,0),
-             'light_yellow'  : cv.Scalar(175,255,255,0),
+bgra_dict = {'black'         : (0.0, 0.0, 0.0, 0),
+             'white'         : (255.0, 255.0, 255.0, 0),
+             'dark_gray'     : (64.0, 64.0, 64.0, 0),
+             'gray'          : (128.0, 128.0, 128.0, 0),
+             'light_gray'    : (192.0, 192.0, 192.0, 0),
+             'red'           : (0.0, 0.0, 255.0, 0),
+             'green'         : (0.0, 255.0, 0.0, 0). 
+             'blue'          : (255.0, 0.0, 0.0, 0),
+             'cyan'          : (255.0, 255.0, 0.0, 0),
+             'magenta'       : (255.0, 0.0, 255.0, 0),
+             'yellow'        : (0.0, 255.0, 255.0, 0),
+             'dark_red'      : (0.0, 0.0, 128.0, 0),
+             'dark_green'    : (0.0, 128.0, 0.0, 0). 
+             'dark_blue'     : (128.0, 0.0, 0.0, 0),
+             'dark_cyan'     : (128.0, 128.0, 0.0, 0),
+             'dark_magenta'  : (128.0, 0.0, 128.0, 0),
+             'dark_yellow'   : (0.0, 128.0, 128.0, 0),
+             'light_red'     : (175.0, 175.0, 255.0, 0),
+             'light_green'   : (175.0, 255.0, 175.0, 0). 
+             'light_blue'    : (255.0, 175.0, 175.0, 0),
+             'light_cyan'    : (255.0, 255.0, 175.0, 0),
+             'light_magenta' : (255.0, 175.0, 255.0, 0),
+             'light_yellow'  : (175.0, 255.0, 255.0, 0),
              }
 
 
@@ -219,7 +218,8 @@ class Button(object):
             cv2.line(image, self.ptLB2, self.ptRB2, self.colorLolight)
 
         # Draw the fill.
-        cv2.rectangle(image, self.ptLT3, self.ptRB3, self.colorFill, cv.CV_FILLED)
+        cv_filled = -1
+        cv2.rectangle(image, self.ptLT3, self.ptRB3, self.colorFill, cv_filled)
         
         # Draw the checkbox.
         if (self.type=='checkbox'):
@@ -259,7 +259,8 @@ class Handle(object):
     # Draw a handle.
     # 
     def draw(self, image):
-        cv2.circle(image, tuple(self.pt.astype(int)),  self.radiusDraw, self.color, cv.CV_FILLED)
+        cv_filled = -1
+        cv2.circle(image, tuple(self.pt.astype(int)),  self.radiusDraw, self.color, cv_filled)
         
         #ptText = self.pt+np.array([5,5])
         #cv2.putText(image, self.name, tuple(ptText.astype(int)), cv2.FONT_HERSHEY_SIMPLEX, 0.4*self.scale, self.color)

@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 import rospy
 import copy
-import cv
 import cv2
 import numpy as np
 from imagewindow import ImageWindow
@@ -93,7 +92,8 @@ class IntensityTrackedBodypart(object):
         
         # Create the mask.
         img = np.zeros(shape, dtype=np.uint8)
-        cv2.ellipse(img, (x, y), (r1, r2), int(np.rad2deg(angle)), 0, 360, bgra, cv.CV_FILLED)
+        cv_filled = -1
+        cv2.ellipse(img, (x, y), (r1, r2), int(np.rad2deg(angle)), 0, 360, bgra, cv_filled)
         self.windowMask.set_image(img)
         
         # Find the ROI of the mask.

@@ -5,7 +5,6 @@ import rospy
 import rosparam
 import copy
 import cProfile
-import cv
 import cv2
 import numpy as np
 import os
@@ -231,7 +230,7 @@ class MainWindow:
         w=int(640)
         imgInitial = np.zeros((h,w), dtype=np.uint8)
         for i in range(20):
-            color = cv.Scalar(int(255*np.random.random()), int(255*np.random.random()), int(255*np.random.random()), 0)
+            color = (255.0*np.random.random(), 255.0*np.random.random(), 255.0*np.random.random(), 0.0)
             cv2.putText(imgInitial, 'Waiting for Camera...', (int(w*0.8*np.random.random()),int(h*np.random.random())), self.fontface, 2*self.scaleText, color)
         rosimg = self.cvbridge.cv2_to_imgmsg(imgInitial, 'passthrough')
         self.image_callback(rosimg)
