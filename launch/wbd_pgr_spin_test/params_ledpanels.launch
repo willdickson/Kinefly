@@ -1,0 +1,47 @@
+<launch>
+	<!-- ========================================================== -->
+	<!-- Configuration of the LED Panels.                           -->
+	<!-- ========================================================== -->
+
+
+    <!-- LED Panels -->
+    <param name="flystate2ledpanels/axis"                type="string" value="x" />
+    <param name="flystate2ledpanels/method"              type="string" value="voltage" />
+    <param name="flystate2ledpanels/mode"                type="string" value="velocity" />
+    <param name="flystate2ledpanels/pattern_id"          type="int"    value="1" />
+
+
+    <!-- When using voltage method, coefficients adc0-3 and funcx,y determine how the panels controller interprets its input voltage(s). -->
+    <param name="flystate2ledpanels/coeff_voltage/adc0"  type="double" value="1.0" />
+    <param name="flystate2ledpanels/coeff_voltage/adc1"  type="double" value="0.0" />
+    <param name="flystate2ledpanels/coeff_voltage/adc2"  type="double" value="0.0" />
+    <param name="flystate2ledpanels/coeff_voltage/adc3"  type="double" value="0.0" />
+    <param name="flystate2ledpanels/coeff_voltage/funcx" type="double" value="0.0" />
+    <param name="flystate2ledpanels/coeff_voltage/funcy" type="double" value="0.0" />
+
+
+    <!-- When using usb method, coefficients x0,xl1,xl2, ... ,yaa,yar,yxi determine the pos or vel command sent to the controller over USB. -->
+    <param name="flystate2ledpanels/coeff_usb/x0"        type="double" value="0.0" />
+    <param name="flystate2ledpanels/coeff_usb/xha"       type="double" value="0.0" />
+    <param name="flystate2ledpanels/coeff_usb/xhr"       type="double" value="0.0" />
+    <param name="flystate2ledpanels/coeff_usb/xaa"       type="double" value="0.0" />
+    <param name="flystate2ledpanels/coeff_usb/xar"       type="double" value="0.0" />
+    <param name="flystate2ledpanels/coeff_usb/xl1"       type="double" value="1.0" />
+    <param name="flystate2ledpanels/coeff_usb/xl2"       type="double" value="0.0" />
+    <param name="flystate2ledpanels/coeff_usb/xr1"       type="double" value="-1.0" />
+    <param name="flystate2ledpanels/coeff_usb/xr2"       type="double" value="0.0" />
+    <param name="flystate2ledpanels/coeff_usb/xxi"       type="double" value="0.0" />
+    
+    <param name="flystate2ledpanels/coeff_usb/y0"        type="double" value="0.0" />
+    <param name="flystate2ledpanels/coeff_usb/yha"       type="double" value="0.0" />
+    <param name="flystate2ledpanels/coeff_usb/yhr"       type="double" value="0.0" />
+    <param name="flystate2ledpanels/coeff_usb/yaa"       type="double" value="0.0" />
+    <param name="flystate2ledpanels/coeff_usb/yar"       type="double" value="0.0" />
+    <param name="flystate2ledpanels/coeff_usb/yl1"       type="double" value="0.0" />
+    <param name="flystate2ledpanels/coeff_usb/yl2"       type="double" value="0.0" />
+    <param name="flystate2ledpanels/coeff_usb/yr1"       type="double" value="0.0" />
+    <param name="flystate2ledpanels/coeff_usb/yr2"       type="double" value="0.0" />
+    <param name="flystate2ledpanels/coeff_usb/yxi"       type="double" value="0.0" />
+    
+    
+</launch>

@@ -1,0 +1,19 @@
+<launch>
+	<!-- ========================================================== -->
+	<!-- Launch everything needed for Kinefly, except the           -->
+    <!-- source image streams.                                      -->
+	<!-- ========================================================== -->
+
+    <include file="$(find Kinefly)/launch/$(env RIG)/params_stimulus.launch" />
+
+    <include file="$(find Kinefly)/launch/$(env RIG)/params_kinefly.launch"                 ns="kinefly" />
+    <include file="$(find Kinefly)/launch/$(env RIG)/params_ledpanels.launch"               ns="kinefly" />
+    <include file="$(find Kinefly)/launch/$(env RIG)/params_phidgetsanalog.launch"          ns="kinefly" />
+
+
+    <node name="kinefly"                  pkg="Kinefly"   type="kinefly.py"                                   required="true" />
+    <node name="flystate2phidgetsanalog"  pkg="Kinefly"   type="flystate2phidgetsanalog.py" ns="kinefly" />
+    
+
+
+</launch>

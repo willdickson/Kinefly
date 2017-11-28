@@ -1,0 +1,12 @@
+<launch>
+	<!-- ========================================================== -->
+	<!-- Record a .bag file with 1 camera image stream  and         --> 
+	<!-- stimulus voltage recording.                                -->
+	<!-- ========================================================== -->
+
+    <arg name="prefix" default="" />
+    
+    <node name="rosbag"  pkg="rosbag"   type="record" args="-j --buffsize=2048 -o $(env HOME)/bagfiles/$(arg prefix) /camera/image_raw/compressed /stimulus/ai /stimulus/di" />
+
+
+</launch>

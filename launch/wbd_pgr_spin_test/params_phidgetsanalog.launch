@@ -1,0 +1,94 @@
+<launch>
+	<!-- ========================================================== -->
+	<!-- Configuration of the Phidgets Analog.                      -->
+	<!-- ========================================================== -->
+
+
+    <!-- 
+    Description of the voltage coefficients, for channel #, where # is one of {0, 1, 2, 3}
+    
+    v#0  - constant offset
+    v#ha - head angle
+    v#hr - head radius
+    v#aa - abdominal angle
+    v#ar - abdominal radius
+    v#l1 - left wing first edge angle
+    v#l2 - left wing second edge angle
+    v#lr - left wing radius
+    v#r1 - right wing first edge angle
+    v#r2 - right wing second edge angle
+    v#rr - right wing radius
+    v#xi - aux intensity
+    
+    The output voltage for channel # comes from an equation such as:
+    v#out = v#0 + v#ha*headangle + v#hr*headradius + v#aa*abdomenangle + v#ar*abdomenradius + v#l1*leftangle1 + ...
+    -->
+
+
+    <!-- Analog Voltage Output -->
+    <param name="flystate2phidgetsanalog/autorange"   type="bool"   value="false" />
+    <param name="flystate2phidgetsanalog/serial"      type="int"    value="0" /> <!-- 0==any -->
+
+
+    <!-- Voltage Channel 0 -->
+    <param name="flystate2phidgetsanalog/v0enable"    type="bool"   value="true" />
+    <param name="flystate2phidgetsanalog/v00"         type="double" value="0.0" />
+    <param name="flystate2phidgetsanalog/v0ha"        type="double" value="0.0" />
+    <param name="flystate2phidgetsanalog/v0hr"        type="double" value="0.0" />
+    <param name="flystate2phidgetsanalog/v0aa"        type="double" value="0.0" />
+    <param name="flystate2phidgetsanalog/v0ar"        type="double" value="0.0" />
+    <param name="flystate2phidgetsanalog/v0l1"        type="double" value="5.0" />
+    <param name="flystate2phidgetsanalog/v0l2"        type="double" value="0.0" />
+    <param name="flystate2phidgetsanalog/v0lr"        type="double" value="0.0" />
+    <param name="flystate2phidgetsanalog/v0r1"        type="double" value="0.0" />
+    <param name="flystate2phidgetsanalog/v0r2"        type="double" value="0.0" />
+    <param name="flystate2phidgetsanalog/v0rr"        type="double" value="0.0" />
+    <param name="flystate2phidgetsanalog/v0xi"        type="double" value="0.0" />
+
+    <!-- Voltage Channel 1 -->
+    <param name="flystate2phidgetsanalog/v1enable"    type="bool"   value="true" />
+    <param name="flystate2phidgetsanalog/v10"         type="double" value="0.0" />
+    <param name="flystate2phidgetsanalog/v1ha"        type="double" value="0.0" />
+    <param name="flystate2phidgetsanalog/v1hr"        type="double" value="0.0" />
+    <param name="flystate2phidgetsanalog/v1aa"        type="double" value="0.0" />
+    <param name="flystate2phidgetsanalog/v1ar"        type="double" value="0.0" />
+    <param name="flystate2phidgetsanalog/v1l1"        type="double" value="0.0" />
+    <param name="flystate2phidgetsanalog/v1l2"        type="double" value="0.0" />
+    <param name="flystate2phidgetsanalog/v1lr"        type="double" value="0.0" />
+    <param name="flystate2phidgetsanalog/v1r1"        type="double" value="5.0" />
+    <param name="flystate2phidgetsanalog/v1r2"        type="double" value="0.0" />
+    <param name="flystate2phidgetsanalog/v1rr"        type="double" value="0.0" />
+    <param name="flystate2phidgetsanalog/v1xi"        type="double" value="0.0" />
+
+    <!-- Voltage Channel 2 -->
+    <param name="flystate2phidgetsanalog/v2enable"    type="bool"   value="true" />
+    <param name="flystate2phidgetsanalog/v20"         type="double" value="0.0" />
+    <param name="flystate2phidgetsanalog/v2ha"        type="double" value="0.0" />
+    <param name="flystate2phidgetsanalog/v2hr"        type="double" value="0.0" />
+    <param name="flystate2phidgetsanalog/v2aa"        type="double" value="0.0" />
+    <param name="flystate2phidgetsanalog/v2ar"        type="double" value="0.0" />
+    <param name="flystate2phidgetsanalog/v2l1"        type="double" value="5.0" />
+    <param name="flystate2phidgetsanalog/v2l2"        type="double" value="0.0" />
+    <param name="flystate2phidgetsanalog/v2lr"        type="double" value="0.0" />
+    <param name="flystate2phidgetsanalog/v2r1"        type="double" value="-5.0" />
+    <param name="flystate2phidgetsanalog/v2r2"        type="double" value="0.0" />
+    <param name="flystate2phidgetsanalog/v2rr"        type="double" value="0.0" />
+    <param name="flystate2phidgetsanalog/v2xi"        type="double" value="0.0" />
+
+    <!-- Voltage Channel 3 -->
+    <param name="flystate2phidgetsanalog/v3enable"    type="bool"   value="true" />
+    <param name="flystate2phidgetsanalog/v30"         type="double" value="0.0" />
+    <param name="flystate2phidgetsanalog/v3ha"        type="double" value="0.0" />
+    <param name="flystate2phidgetsanalog/v3hr"        type="double" value="0.0" />
+    <param name="flystate2phidgetsanalog/v3aa"        type="double" value="0.0" />
+    <param name="flystate2phidgetsanalog/v3ar"        type="double" value="0.0" />
+    <param name="flystate2phidgetsanalog/v3l1"        type="double" value="0.0" />
+    <param name="flystate2phidgetsanalog/v3l2"        type="double" value="0.0" />
+    <param name="flystate2phidgetsanalog/v3lr"        type="double" value="0.0" />
+    <param name="flystate2phidgetsanalog/v3r1"        type="double" value="0.0" />
+    <param name="flystate2phidgetsanalog/v3r2"        type="double" value="0.0" />
+    <param name="flystate2phidgetsanalog/v3rr"        type="double" value="0.0" />
+    <param name="flystate2phidgetsanalog/v3xi"        type="double" value="10.0" />
+    
+
+</launch>

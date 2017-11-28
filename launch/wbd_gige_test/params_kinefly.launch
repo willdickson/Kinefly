@@ -1,0 +1,41 @@
+<launch>
+	<!-- ========================================================== -->
+	<!-- Configuration of the Kinefly                               -->
+	<!-- ========================================================== -->
+
+
+    <param name="parameterfile"     type="string" value="$(env HOME)/kinefly.yaml" />
+    <param name="filenameBackground" type="string" value="$(env HOME)/kinefly.png" />
+    
+    <param name="image_topic"        type="string" value="/camera/image_raw" />
+    <param name="n_queue_images"     type="int"    value="2" />
+    <param name="n_edges_max"        type="int"    value="1" />
+    <param name="rc_background"      type="double" value="100000" />
+    <param name="scale_image"        type="double" value="1.0" />
+    <param name="use_gui"            type="bool"   value="true" />
+    <param name="wingbeat_min"       type="double" value="180" />
+    <param name="wingbeat_max"       type="double" value="220" />
+    
+    <param name="head/autozero"      type="bool"   value="true" />
+    <param name="head/threshold"     type="double" value="0.0" />
+    <param name="head/tracker"       type="string" value="area" />   <!-- area, edge, or tip -->
+    <param name="head/feathering"    type="double" value="0.0" />
+    
+    <param name="abdomen/autozero"   type="bool"   value="true" />
+    <param name="abdomen/threshold"  type="double" value="0.02" />
+    <param name="abdomen/tracker"    type="string" value="tip" />   <!-- area, edge, or tip -->
+    
+    <param name="left/autozero"      type="bool"   value="true" />
+    <param name="left/threshold"     type="double" value="0.005" />
+    <param name="left/tracker"       type="string" value="edge" />      <!-- area, edge, or tip -->
+    <param name="left/saturation_correction"  type="bool"   value="false" />
+    
+    <param name="right/autozero"     type="bool"   value="true" />
+    <param name="right/threshold"    type="double" value="0.005" />
+    <param name="right/tracker"      type="string" value="edge" />      <!-- area, edge, or tip -->
+    <param name="right/saturation_correction"  type="bool"   value="false" />
+    
+    <param name="aux/tracker"       type="string"  value="intensity" />
+    
+    
+</launch>

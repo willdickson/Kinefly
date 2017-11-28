@@ -3,11 +3,21 @@ from __future__ import division
 import rospy
 import rosparam
 import copy
+import threading
 import numpy as np
 from std_msgs.msg import String
 from Kinefly.msg import MsgFlystate
-import Phidgets
-import Phidgets.Devices.Analog
+
+# WBD
+# ----------------------------------------
+#import Phidgets
+#import Phidgets.Devices.Analog
+# ----------------------------------------
+import Phidget22.Devices.VoltageOutput
+import Phidget22.PhidgetException 
+import Phidget22.Phidget
+# ----------------------------------------
+
 from setdict import SetDict
 
 
@@ -19,6 +29,7 @@ class Flystate2PhidgetsAnalog:
         self.bInitialized = False
         self.iCount = 0
         self.bAttached = False
+        self.lock = threading.Lock()
         
         # initialize
         self.name = 'Flystate2PhidgetsAnalog'
@@ -45,16 +56,28 @@ class Flystate2PhidgetsAnalog:
         
         self.update_coefficients()
         
-        
+        # WBD
+        # -----------------------------------------------------------
         # Connect to the Phidget.
-        self.analog = Phidgets.Devices.Analog.Analog()
-        if (self.params['serial']==0):
-            self.analog.openPhidget()
-        else:
-            self.analog.openPhidget(self.params['serial'])
-            
-        self.analog.setOnAttachHandler(self.attach_callback)
-        self.analog.setOnDetachHandler(self.detach_callback)
+        #self.analog = Phidgets.Devices.Analog.Analog()
+        #if (self.params['serial']==0):
+        #    self.analog.openPhidget()
+        #else:
+        #    self.analog.openPhidget(self.params['serial'])
+
+        #self.analog.setOnAttachHandler(self.attach_callback)
+        #self.analog.setOnDetachHandler(self.detach_callback)
+        # -----------------------------------------------------------
+        with self.lock:
+            self.aout_chan_list = []
+            for i in range(4):
+                aout_chan = Phidget22.Devices.VoltageOutput.VoltageOutput()
+                aout_chan.setOnAttaself.analogHandler(self.attach_callback)
+                aout_chan.setOnDetaself.analogHandler(self.detach_callback))
+                aout_chan.setChannel(i)
+                aout_chan.openWaitForAttachment(5000)
+                self.aout_chan_list.append(aout_chan)
+        # ------------------------------------------------------------
 
         # Subscriptions.        
         self.subFlystate = rospy.Subscriber('%s/flystate' % self.namespace.rstrip('/'), MsgFlystate, self.flystate_callback, queue_size=1000)
@@ -65,20 +88,32 @@ class Flystate2PhidgetsAnalog:
         
         
     def attach_callback(self, phidget):
-        for i in range(4):
-            self.analog.setEnabled(i, self.enable[i])
+        # WBD
+        # --------------------------------------------------------------------------------------------------------
+        #    for i in range(4):
+        #        self.analog.setEnabled(i, self.enable[i])
 
-        self.phidgetserial = self.analog.getSerialNum()
-        self.phidgetname = self.analog.getDeviceName()
+        #    self.phidgetserial = self.analog.getSerialNum()
+        #    self.phidgetname = self.analog.getDeviceName()
+        # ----------------------------------------------------------------------------------------------------------
+        with self.lock:
+            for aout_chan in self.aout_chan_list:
+                aout_chan.setEnabled(True)
+
+            # Get serial number and name - use channel 0 as representaive, assume all chans are on the same device
+            aout_chan_rep = self.aout_chan_list[0]
+            self.phidgetserial = aout_chan_rep.getDeviceSerialNumber()
+            self.phidgetname = aout_chan_rep.getDeviceName()
+            self.bAttached = True
+        # ---------------------------------------------------------------------------------------------------------
         rospy.sleep(1) # Wait so that other nodes can display their banner first.
         rospy.logwarn('%s - %s Attached: serial=%s' % (self.namespace, self.phidgetname, self.phidgetserial))
-        self.bAttached = True
-        
 
+    
     def detach_callback(self, phidget):
         rospy.logwarn ('%s - %s Detached: serial=%s.' % (self.namespace, self.phidgetname, self.phidgetserial))
-        self.bAttached = False
-
+        with self.lock:
+            self.bAttached = False
 
     def update_coefficients(self):
         if (not self.params['autorange']):
@@ -151,17 +186,26 @@ class Flystate2PhidgetsAnalog:
     def flystate_callback(self, flystate):
         self.iCount += 1
         
-        if (self.bAttached):
-            voltages = self.voltages_from_flystate(flystate)
+        with self.lock:
+            if (self.bAttached):
+                voltages = self.voltages_from_flystate(flystate)
 
-            for i in range(4):
-                if (self.enable[i]):
-                    try:
-                        self.analog.setVoltage(i, voltages[i])
-                    except Phidgets.PhidgetException.PhidgetException:
-                        pass
-            
-    
+                # WBD
+                # -----------------------------------------------------------------------------------
+                #for i in range(4):
+                #    if (self.enable[i]):
+                #        try:
+                #            self.analog.setVoltage(i, voltages[i])
+                #        except Phidgets.PhidgetException.PhidgetException:
+                #            pass
+                # -------------------------------------------------------------------------------------
+                for i, aout_chan in enumerate(self.aout_chan_list):
+                    if (self.enable[i]):
+                        try:
+                            aout_chan.setVoltage(voltages[i])
+                        except Phidget22.PhidgetException.PhidgetException:
+                            pass
+                # -------------------------------------------------------------------------------------
     
     # get_voltages()
     #
@@ -246,11 +290,19 @@ class Flystate2PhidgetsAnalog:
     def run(self):
         rospy.spin()
 
-        if (self.analog.isAttached()):
-            for i in range(4):
-                self.analog.setVoltage(i, 0.0)
-        
-        self.analog.closePhidget()
+        # WBD
+        # ------------------------------------------------------------
+        #if (self.analog.isAttached()):
+        #    for i in range(4):
+        #        self.analog.setVoltage(i, 0.0)
+        #self.analog.closePhidget()
+        # ------------------------------------------------------------
+        with self.lock:
+            for aout_chan in self.aout_chan_list:
+                if aout_chan.getAttached():
+                    aout_chan.setVoltage(0.0)
+                aout_chan.close()
+        # ------------------------------------------------------------
 
 
 if __name__ == '__main__':

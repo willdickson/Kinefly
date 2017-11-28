@@ -162,7 +162,8 @@ class MainWindow:
         
         # Background image.
         self.filenameBackground = os.path.expanduser(self.params['filenameBackground'])
-        imgDisk  = cv2.imread(self.filenameBackground, cv2.CV_LOAD_IMAGE_GRAYSCALE)
+        #imgDisk  = cv2.imread(self.filenameBackground, cv2.CV_LOAD_IMAGE_GRAYSCALE)
+        imgDisk  = cv2.imread(self.filenameBackground, cv2.IMREAD_GRAYSCALE)
         if (imgDisk is not None):
             if (self.scale == 1.0):              
                 imgFullBackground = imgDisk

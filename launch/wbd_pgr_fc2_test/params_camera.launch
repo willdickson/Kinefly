@@ -1,0 +1,44 @@
+<launch>
+  <!-- <param name="guid"                 type="string" value="Basler-21140984" />  -->  <!-- Defaults to first camera found. -->
+  
+  <!-- ethernet (aravis)??  parameter names -->
+  <!-- 
+  <param name="Acquire"              type="bool"   value="true"/>
+  <param name="ExposureAuto"         type="string" value="Off"/>
+  <param name="GainAuto"             type="string" value="Off"/>
+  <param name="ExposureTimeAbs"      type="double" value="9000"/>
+  <param name="Gain"                 type="double" value="1.0"/>
+  <param name="AcquisitionMode"      type="string" value="Continuous"/>
+  <param name="AcquisitionFrameRate" type="double" value="100"/>
+  <param name="TriggerMode"          type="string" value="Off"/>
+  <param name="TriggerSource"        type="string" value="Software"/>
+  <param name="softwaretriggerrate"  type="double" value="100"/>
+  <param name="frame_id"             type="string" value="camera1" />
+  <param name="mtu"                  type="int"    value="9000"/>
+  --> 
+
+  <!-- Point Grey FC2 parameter names -->
+  <param name="video_mode"            type="string"   value="format7_mode0" />
+  <param name="frame_rate"            type="double"   value="30.0" />
+  <param name="auto_exposure"         type="bool"     value="false"/>
+  <param name="exposure"              type="double"   value="1.0" /> 
+  <param name="auto_shutter"          type="bool"     value="false"/>
+  <param name="shutter_speed"         type="double"   value="0.010" />
+  <param name="auto_gain"             type="bool"     value="false"/>
+  <param name="gain"                  type="double"   value="0.0" />
+  <param name="brightness"            type="double"   value="0.0" />
+  <param name="auto_sharpness"        type="bool"     value="False" />
+  <param name="saturation"            type="double"   value="0.0" />
+  <param name="gamma"                 type="double"   value="1.0" />
+  <param name="format7_roi_width"     type="int"      value="1280"/>
+  <param name="format7_roi_height"    type="int"      value="1024" />
+  <param name="format7_x_offset"      type="int"      value="0"/>
+  <param name="format7_y_offset"      type="int"      value="0" />
+  <param name="enable_trigger"        type="bool"     value="false" />
+  <param name="trigger_mode"          type="string"   value="mode0" />
+  <param name="trigger_source"        type="string"   value="gpio0" />
+  <param name="trigger_polarity"      type="int"      value="0"  />
+  <param name="enable_trigger_delay"  type="bool"     value="false" />
+  <param name="trigger_delay"         type="double"   value="0.0" />
+
+</launch>

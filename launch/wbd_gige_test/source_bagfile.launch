@@ -1,0 +1,17 @@
+<launch>
+	<!-- ========================================================== -->
+	<!-- Source images for Kinefly.                                 -->
+	<!-- ========================================================== -->
+    <param name="use_sim_time"                 type="bool" value="true"/>
+
+    
+    <node name="playbag" pkg="rosbag" type="play" args="--clock --delay=3 --rate=1 $(env BAGFILE)" required="true" />
+    <node name="republisher" pkg="image_transport" type="republish" args="compressed raw in:=camera/image_raw out:=camera/image_raw" />
+
+    <param name="kinefly/n_queue_images"     type="int"    value="20" />
+
+    <!-- Emulate the ledpanels controller voltages using the stimulus/ai messages. -->
+    <node name="msg2phidgetsanalog"           pkg="Kinefly"   type="msg2phidgetsanalog.py"        ns="stimulus"        required="true" />
+
+
+</launch>
