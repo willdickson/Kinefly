@@ -68,12 +68,12 @@ class Flystate2PhidgetsAnalog:
         #self.analog.setOnAttachHandler(self.attach_callback)
         #self.analog.setOnDetachHandler(self.detach_callback)
         # -----------------------------------------------------------
-        with self.lock:
-            self.aout_chan_list = []
-            for i in range(4):
+        self.aout_chan_list = []
+        for i in range(4):
+            with self.lock:
                 aout_chan = Phidget22.Devices.VoltageOutput.VoltageOutput()
-                aout_chan.setOnAttaself.analogHandler(self.attach_callback)
-                aout_chan.setOnDetaself.analogHandler(self.detach_callback))
+                aout_chan.setOnAttachHandler(self.attach_callback)
+                aout_chan.setOnDetachHandler(self.detach_callback)
                 aout_chan.setChannel(i)
                 aout_chan.openWaitForAttachment(5000)
                 self.aout_chan_list.append(aout_chan)
@@ -96,15 +96,14 @@ class Flystate2PhidgetsAnalog:
         #    self.phidgetserial = self.analog.getSerialNum()
         #    self.phidgetname = self.analog.getDeviceName()
         # ----------------------------------------------------------------------------------------------------------
-        with self.lock:
-            for aout_chan in self.aout_chan_list:
-                aout_chan.setEnabled(True)
+        for aout_chan in self.aout_chan_list:
+            aout_chan.setEnabled(True)
 
-            # Get serial number and name - use channel 0 as representaive, assume all chans are on the same device
-            aout_chan_rep = self.aout_chan_list[0]
-            self.phidgetserial = aout_chan_rep.getDeviceSerialNumber()
-            self.phidgetname = aout_chan_rep.getDeviceName()
-            self.bAttached = True
+        # Get serial number and name - use channel 0 as representaive, assume all chans are on the same device
+        aout_chan_rep = self.aout_chan_list[0]
+        self.phidgetserial = aout_chan_rep.getDeviceSerialNumber()
+        self.phidgetname = aout_chan_rep.getDeviceName()
+        self.bAttached = True
         # ---------------------------------------------------------------------------------------------------------
         rospy.sleep(1) # Wait so that other nodes can display their banner first.
         rospy.logwarn('%s - %s Attached: serial=%s' % (self.namespace, self.phidgetname, self.phidgetserial))
