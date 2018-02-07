@@ -167,7 +167,7 @@ class Fly(object):
         yMin = max(0,self.ptBodyCenter_i[1]-int(0.75*self.rInvertColorArea))
         xMax = min(self.ptBodyCenter_i[0]+int(0.75*self.rInvertColorArea), image.shape[1]-1)
         yMax = min(self.ptBodyCenter_i[1]+int(0.75*self.rInvertColorArea), image.shape[0]-1)
-        imgInvertColorArea = image[yMin:yMax, xMin:xMax]
+        imgInvertColorArea = image[int(yMin):int(yMax), int(xMin):int(xMax)]
         self.windowInvertColorArea.set_image(imgInvertColorArea)
 
         # Midpoint between darkest & lightest colors.
