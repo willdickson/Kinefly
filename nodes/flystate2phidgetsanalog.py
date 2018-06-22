@@ -72,11 +72,11 @@ class Flystate2PhidgetsAnalog:
         for i in range(4):
             with self.lock:
                 aout_chan = Phidget22.Devices.VoltageOutput.VoltageOutput()
+                self.aout_chan_list.append(aout_chan)
                 aout_chan.setOnAttachHandler(self.attach_callback)
                 aout_chan.setOnDetachHandler(self.detach_callback)
                 aout_chan.setChannel(i)
                 aout_chan.openWaitForAttachment(5000)
-                self.aout_chan_list.append(aout_chan)
         # ------------------------------------------------------------
 
         # Subscriptions.        
